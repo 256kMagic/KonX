@@ -186,7 +186,7 @@ Then retry `npm start`. Serial support depends on the optional `serialport` pack
 npm run dist
 ~~~
 
-The build creates `dist/KonX-Setup-0.2.0.exe` and `dist/KonX-0.2.0-portable.exe`. `npm run dist:dir` creates the unpacked Windows application for inspection. Release executables are attached to [GitHub Releases](https://github.com/256kMagic/KonX/releases); they are not checked into the source tree.
+The build creates versioned executables under `dist/`, such as `KonX-Setup-0.2.1.exe` and `KonX-0.2.1-portable.exe` for the current source version. `npm run dist:dir` creates the unpacked Windows application for inspection. Published release executables are attached to [GitHub Releases](https://github.com/256kMagic/KonX/releases); they are not checked into the source tree.
 
 ### Test and try a local device
 
@@ -237,7 +237,7 @@ KonX is an early **0.x** project. The Windows x64 release is the currently teste
 
 Version **0.2.0** adds the packet and SIP workflows and interface fixes described above. It retains the 0.1.2 connection-tab close fix and earlier fixes for SFTP download paths, connection errors and trust prompts, editor save state, remote-edit upload recovery, and loading capture files while a live capture is active.
 
-Changes in development after 0.2.0 are recorded under **Unreleased** in the [changelog](CHANGELOG.md).
+Development and test-build changes after the published 0.2.0 release are recorded in the [changelog](CHANGELOG.md).
 
 For help, start with the [user guide](docs/USER_GUIDE.md). Common first checks:
 

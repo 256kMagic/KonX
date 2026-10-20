@@ -1,6 +1,6 @@
 # KonX User Guide
 
-This guide covers KonX 0.2.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, and network troubleshooting tools in one window.
+This guide covers KonX 0.2.x for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, and network troubleshooting tools in one window.
 
 For downloads, build instructions, and project information, see the [README](../README.md) and [GitHub releases](https://github.com/256kMagic/KonX/releases).
 

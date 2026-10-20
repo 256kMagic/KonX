@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.1 — 2026-10-20 (test build)
 
 ### Fixed
 
@@ -23,6 +23,8 @@
 - Run Electron layout and SIP view checks at fractional display scales while retaining all viewport and control-bounds assertions.
 
 Validation: 279 automated tests pass on Windows, including 53 regression checks added across the local reviews. The real Electron checks cover connection-tab closure, session dialogs, overflowing tabs, the SIP ladder, SDP, source-packet navigation, and both SIP export actions. The earlier local fixes are integrated with the 0.2.0 stream reconstruction and traffic views.
+
+The Windows x64 installer and portable executable were built with publishing disabled. All 53 packaged source files match the working source. The packaged app passed an isolated SIP workflow check with three calls, SDP, split TCP reconstruction, packet navigation, and JSON/PCAPNG round trips. See the [0.2.1 test-build notes](docs/releases/0.2.1.md).
 
 ## 0.2.0 — 2026-10-20
 
