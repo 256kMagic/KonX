@@ -450,6 +450,11 @@ const fakeCrypt = {
   const { runSipReviewRegressionTests } = await import(require('url').pathToFileURL(path.join(__dirname, 'sip-review-regression-tests.mjs')).href);
   await runSipReviewRegressionTests(test);
   await require('./ui-v020-review-regression-tests.cjs').runUiV020ReviewRegressionTests(test);
+  await require('./security-core-tests.cjs').runSecurityCoreTests(test);
+  await require('./security-windows-tests.cjs').runSecurityWindowsTests(test);
+  await require('./security-network-tests.cjs').runSecurityNetworkTests(test);
+  await require('./security-offline-tests.cjs').runSecurityOfflineTests(test);
+  await require('./security-ui-tests.cjs').runSecurityUiTests(test);
 
   const failed = results.filter((r) => !r[0]);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

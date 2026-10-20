@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Security Suite tab with local Windows posture checks and a remote Windows TCP-exposure profile.
+- TLS/certificate, pre-authentication SSH, web-header, and single-host service-exposure assessments.
+- Offline Cisco-style configuration and saved PCAP/PCAPNG security findings with redacted line/frame evidence.
+- Result filters, evidence and recommendations, explicit unknown states and scope limits, local opt-in baselines, and JSON/HTML report exports.
+- Bounded collection and cancellation when stopped or closed, plus unit, loopback-network, synthetic-file, and real Electron workflow regression coverage.
+
+See the [Security Suite guide](docs/SECURITY_SUITE.md). These source changes are not included in the installed 0.2.1 test build or the published 0.2.0 executables.
+
+Validation: 335 automated tests pass, including 56 new security checks using synthetic inputs, loopback services, and an isolated real Electron workflow. A separate local Windows smoke test completed all 14 posture checks at the current user's permission level; inaccessible firmware/encryption checks remained unknown.
+
 ## 0.2.1 — 2026-10-20 (test build)
 
 ### Fixed

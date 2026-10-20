@@ -11,6 +11,7 @@ const { ConnectionManager } = require('./connections');
 const { SftpManager } = require('./sftp');
 const localfs = require('./localfs');
 const nettools = require('./nettools');
+const security = require('./security');
 const importers = require('./importers');
 const serial = require('./serial');
 const { CaptureManager, readCaptureFile } = require('./capture');
@@ -290,6 +291,7 @@ function registerIpc() {
   const jobs = new Map();
   let jobSeq = 0;
   const runners = {
+    security: security.run,
     ping: nettools.pingMonitor,
     sweep: nettools.sweep,
     portscan: nettools.portScan,

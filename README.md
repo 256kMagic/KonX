@@ -53,6 +53,7 @@ See the [release notes](CHANGELOG.md) and [user guide](docs/USER_GUIDE.md) for w
 - **Transfer:** open SFTP from a saved SSH session or an existing SSH tab to work with local and remote files side by side.
 - **Edit:** open Notepad for local documents, remote SFTP files, configuration cleanup, file hashing, or document comparison.
 - **Investigate:** open Packet Capture to record traffic or inspect an existing capture, or choose a network tool from the home screen.
+- **Assess security (development source):** open Security Suite for Windows posture and remote exposure, TLS/SSH, web headers, device configuration, and saved-capture checks. Review evidence, compare local baselines, and export JSON/HTML reports. See the [Security Suite guide](docs/SECURITY_SUITE.md) for scope and workflows; these tools are not included in the published 0.2.0 executables.
 
 The [user guide](docs/USER_GUIDE.md) covers connection settings, credentials, imports, transfers, editing, capture filters, and troubleshooting in detail.
 

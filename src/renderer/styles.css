@@ -48,6 +48,34 @@
 }
 
 * { box-sizing: border-box; }
+
+/* Security assessments share the normal tool lifecycle and theme. */
+.security-view { flex-direction: column; min-height: 0; }
+.security-view .tool-head { gap: 8px; flex: 0 1 auto; min-height: 0; max-height: 60%; overflow: auto; }
+.security-view .notice { margin: 0; }
+.security-inputs, .security-file, .security-actions, .security-counts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.security-inputs { margin-top: 8px; }
+.security-file { min-width: 0; max-width: 100%; }
+.security-file .hint { min-width: 0; overflow-wrap: anywhere; }
+.security-actions .input { width: auto; min-width: 160px; max-width: 100%; }
+.security-inputs .field { flex: 1 1 220px; }
+.security-inputs .field:has(input[type="number"]) { flex: 0 1 100px; }
+.security-view textarea { display: block; flex-shrink: 0; margin-top: 10px; width: 100%; height: 130px; min-height: 100px; resize: vertical; user-select: text; }
+.security-progress { margin-top: 10px; color: var(--muted); }
+.security-results { flex: 1; min-height: 0; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.security-report-heading { color: var(--text-strong); font-weight: 600; overflow-wrap: anywhere; }
+.security-split { display: grid; grid-template-columns: minmax(380px, 1.2fr) minmax(250px, 1fr); min-height: 220px; flex: 1 0 300px; gap: 12px; }
+.security-split .table-wrap { min-height: 220px; }
+.security-detail { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; overflow: auto; user-select: text; overflow-wrap: anywhere; }
+.security-detail h3 { margin-top: 0; }
+.security-evidence { white-space: pre-wrap; }
+.security-badge { display: inline-block; border: 1px solid var(--border); border-radius: 4px; padding: 2px 7px; background: var(--panel-2); }
+.security-badge[data-status="pass"] { color: var(--ok); }
+.security-badge[data-status="fail"] { color: var(--err); }
+.security-badge[data-status="warning"] { color: var(--warn); }
+.security-badge[data-status="unknown"] { color: var(--muted); }
+.security-limitations { color: var(--muted); user-select: text; }
+@media (max-width: 1000px) { .security-split { grid-template-columns: minmax(0, 1fr); } .security-detail { min-height: 170px; } }
 html, body { margin: 0; height: 100%; }
 body {
   background: var(--bg);

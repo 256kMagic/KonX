@@ -18,6 +18,7 @@ For downloads, build instructions, and project information, see the [README](../
 - [Reassembled streams and readable traffic](#reassembled-streams-and-readable-traffic)
 - [SIP calls and signaling ladders](#sip-calls-and-signaling-ladders)
 - [Network tools](#network-tools)
+- [Security Suite development guide](SECURITY_SUITE.md)
 - [Settings](#settings)
 - [Keyboard reference](#keyboard-reference)
 - [Application data and backups](#application-data-and-backups)
