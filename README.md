@@ -12,13 +12,14 @@ Connect to a switch, move files over SFTP, edit its configuration, and investiga
 
 ## Download and install
 
-The current release is **0.1.2**, built and tested for **Windows x64**. Node.js is only needed when running from source.
+The current release is **0.2.0**, built and tested for **Windows x64**. Node.js is only needed when running from source.
 
 | Download | Use it for |
 | --- | --- |
-| [KonX-Setup-0.1.2.exe](https://github.com/256kMagic/KonX/releases/download/v0.1.2/KonX-Setup-0.1.2.exe) | A per-user installation with Start menu and desktop shortcuts, an uninstaller, and a choice of installation folder. |
-| [KonX-0.1.2-portable.exe](https://github.com/256kMagic/KonX/releases/download/v0.1.2/KonX-0.1.2-portable.exe) | Run without installing, including from a USB drive. Application settings are still stored in the Windows user profile. |
-| [SHA256SUMS.txt](https://github.com/256kMagic/KonX/releases/download/v0.1.2/SHA256SUMS.txt) | SHA-256 checksums for the release executables. |
+| [KonX-Setup-0.2.0.exe](https://github.com/256kMagic/KonX/releases/download/v0.2.0/KonX-Setup-0.2.0.exe) | A per-user installation with Start menu and desktop shortcuts, an uninstaller, and a choice of installation folder. |
+| [KonX-0.2.0-portable.exe](https://github.com/256kMagic/KonX/releases/download/v0.2.0/KonX-0.2.0-portable.exe) | Run without installing, including from a USB drive. Application settings are still stored in the Windows user profile. |
+| [SHA256SUMS.txt](https://github.com/256kMagic/KonX/releases/download/v0.2.0/SHA256SUMS.txt) | SHA-256 checksums for the release files. |
+| [SIP sample capture](https://github.com/256kMagic/KonX/releases/download/v0.2.0/sip-demo.pcapng) | Three synthetic calls for trying the ladder, SDP details, and call exports. |
 
 1. Download the installer or portable executable from the release above.
 2. Run it and open KonX. The standard per-user installation does not require administrator rights.
@@ -29,10 +30,22 @@ The current executables are unsigned. Windows SmartScreen may show an unrecogniz
 To calculate a downloaded file's checksum in PowerShell:
 
 ~~~powershell
-Get-FileHash .\KonX-Setup-0.1.2.exe -Algorithm SHA256
+Get-FileHash .\KonX-Setup-0.2.0.exe -Algorithm SHA256
 ~~~
 
 Compare the hash with `SHA256SUMS.txt`. For an update, save your documents and close KonX before running the newer installer. Updates are installed manually; KonX does not currently provide an automatic updater.
+
+## What's new in 0.2.0
+
+- **Packet reassembly and readable traffic:** sequence-aware TCP reconstruction, distinct UDP datagrams, gap and conflicting-overlap warnings, and links back to source packets. The HTTP/1 view pairs requests and responses when supported by the capture, handles chunked and gzip/deflate bodies, formats JSON, and exports complete decoded bodies.
+- **SIP call analysis:** searchable call list, clickable signaling ladder, observed SDP media details, and PCAPNG/JSON call exports. Calls can span proxy legs, and retransmissions, dialog branches, incomplete evidence, and analysis limits stay visible.
+- **Stable dialogs:** switching session panels keeps the header and navigation in place, with long content scrolling inside the dialog.
+- **Accurate Auto-scroll:** scrolling upward or using packet-navigation keys pauses following and clears the checkbox; checking it again resumes following.
+- **Reachable tabs:** overflowing application tabs have arrow controls and a **Show all tabs** menu. Background activity preserves manual tab scrolling.
+- **Clearer toolbar:** the button-bar toggle has a dedicated icon and Show/Hide label, and Quick Connect uses the same dropdown styling as other forms.
+- **Consistent version reporting:** the development app reports the KonX package version in its status bar.
+
+See the [release notes](CHANGELOG.md) and [user guide](docs/USER_GUIDE.md) for workflows and limitations. To try SIP immediately, open the downloadable sample in **Packet Capture** and click **SIP Calls**.
 
 ## Start working
 
@@ -88,12 +101,17 @@ SFTP opened from an active SSH tab shares that tab's connection. Closing or disc
 - Open/save `.pcap` and `.pcapng`, and open supported Windows NDIS `.etl` traces.
 - Protocol decoding across common Ethernet, IP, transport, discovery, routing, management, and application protocols.
 - Packet summaries, a detail tree linked to hex bytes, TCP analysis, and TCP/UDP stream following.
+- Readable HTTP/1 request/response pairs reconstructed across packets, searchable headers and text, formatted JSON, chunked bodies, gzip/deflate decoding, and saving complete decoded bodies.
+- **SIP Calls** lists plaintext SIP calls across captured UDP/TCP conversations, draws signaling ladders, shows observed SDP details, and exports call signaling as PCAPNG or JSON.
+- Explicit missing-byte boundaries and conflicting retransmissions, with source-packet links from reconstructed messages.
 - Conversations, endpoints, protocol hierarchy, throughput, and names learned from captured DNS answers.
 - Insights for conditions such as DHCP conflicts, duplicate IPs, cleartext authentication, retransmissions, failed DNS requests, connection failures, and selected network redundancy problems.
 - CDP/LLDP neighbor cards showing switch, port, VLAN, and management information when those packets are available.
 - Display filters with familiar expressions such as `ip.addr == 10.0.0.1 && tcp.port == 443`, plus shorthand such as `host 10.0.0.1`, `port 443`, and `retrans`.
 
 ![KonX packet capture and decoder](docs/screenshots/capture.png)
+
+The SIP view inspects captured signaling and advertised media settings. It does not decrypt SIP over TLS or SRTP, reconstruct RTP audio, or provide audio playback. Call exports retain original signaling packets; a shared TCP packet can also contain another call's messages. See [SIP calls and signaling ladders](docs/USER_GUIDE.md#sip-calls-and-signaling-ladders) for the workflow and export details.
 
 #### Capture engines and permissions
 
@@ -168,7 +186,7 @@ Then retry `npm start`. Serial support depends on the optional `serialport` pack
 npm run dist
 ~~~
 
-The build creates `dist/KonX-Setup-0.1.2.exe` and `dist/KonX-0.1.2-portable.exe`. `npm run dist:dir` creates the unpacked Windows application for inspection. Release executables are attached to [GitHub Releases](https://github.com/256kMagic/KonX/releases); they are not checked into the source tree.
+The build creates `dist/KonX-Setup-0.2.0.exe` and `dist/KonX-0.2.0-portable.exe`. `npm run dist:dir` creates the unpacked Windows application for inspection. Release executables are attached to [GitHub Releases](https://github.com/256kMagic/KonX/releases); they are not checked into the source tree.
 
 ### Test and try a local device
 
@@ -176,7 +194,18 @@ The build creates `dist/KonX-Setup-0.1.2.exe` and `dist/KonX-0.1.2-portable.exe`
 npm test
 ~~~
 
-The current source suite contains **159 automated tests** covering connections, host-key/authentication handling, SFTP, session storage/imports, network tools, packet decoding/filtering/analysis, capture files, and editor operations. Regression checks also cover download cancellation and original-file preservation, editor reload/save recovery, prompt handling, capture-file isolation, malformed filters/files, large scans, and closing connection tabs. Some live-capture behavior additionally depends on Windows permissions, adapters, and installed drivers.
+The automated suite covers connections, host-key/authentication handling, SFTP, session storage/imports, network tools, packet decoding/filtering/analysis, capture files, and editor operations. Regression checks also cover download cancellation and original-file preservation, editor reload/save recovery, prompt handling, capture-file isolation, malformed filters/files, large scans, and closing connection tabs. Some live-capture behavior additionally depends on Windows permissions, adapters, and installed drivers.
+
+Run `npm run test:traffic` for the focused offline reassembly, HTTP, body export, and traffic-view navigation tests. Run `npm run test:sip` for SIP/SDP parsing, call exports, and capture-snapshot navigation checks. These focused suites do not record network traffic or require a capture driver. The full suite also exercises the Electron interface, including session dialogs, tab overflow, and the SIP ladder.
+
+To try the SIP tools without collecting traffic:
+
+~~~powershell
+npm run sample:sip
+npm start
+~~~
+
+In **Packet Capture**, use the folder button to open `user-data/sip-demo.pcapng`, then click **SIP Calls**. The synthetic sample contains an ended call through a proxy, a busy response, and a call with a split TCP INVITE. It includes SDP and a UDP retransmission. Select an arrow, inspect its SDP or source packets, and try **Export call PCAPNG** or **Export JSON report**. The generator uses documentation addresses and makes no network connections.
 
 For a local SSH/SFTP demo with a simulated switch CLI:
 
@@ -184,7 +213,7 @@ For a local SSH/SFTP demo with a simulated switch CLI:
 npm run test-server
 ~~~
 
-Connect to `127.0.0.1` on port `2222`, username `test`, password `test`. These credentials are only for the included local test server. The sample capture at `test/fixtures/sample.pcapng` provides packet-analysis examples without recording your own traffic.
+Connect to `127.0.0.1` on port `2222`, username `test`, password `test`. These credentials are only for the included local test server. The [branch-office sample](assets/samples/branch-office.pcapng) provides packet-analysis examples without recording your own traffic.
 
 ## Project structure
 
@@ -204,11 +233,11 @@ Connect to `127.0.0.1` on port `2222`, username `test`, password `test`. These c
 
 ## Status, troubleshooting, and contributing
 
-KonX is an early **0.1.x** project. The Windows x64 release is the currently tested distribution. Packet filters implement KonX's supported syntax rather than the complete Wireshark filter language, capture insights are diagnostic aids, and serial/capture support depends on the available hardware and drivers.
+KonX is an early **0.x** project. The Windows x64 release is the currently tested distribution. Packet filters implement KonX's supported syntax rather than the complete Wireshark filter language, capture insights are diagnostic aids, and serial/capture support depends on the available hardware and drivers.
 
-Version **0.1.2** fixes the connection-tab close button so a click closes the tab and disconnects its session. It also includes the earlier fixes for SFTP download paths, connection errors and trust prompts, editor save state, remote-edit upload recovery, and loading capture files while a live capture is active.
+Version **0.2.0** adds the packet and SIP workflows and interface fixes described above. It retains the 0.1.2 connection-tab close fix and earlier fixes for SFTP download paths, connection errors and trust prompts, editor save state, remote-edit upload recovery, and loading capture files while a live capture is active.
 
-Changes in development after 0.1.2 are recorded in the [changelog](docs/CHANGELOG.md).
+Changes in development after 0.2.0 are recorded under **Unreleased** in the [changelog](CHANGELOG.md).
 
 For help, start with the [user guide](docs/USER_GUIDE.md). Common first checks:
 

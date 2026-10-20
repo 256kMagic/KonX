@@ -151,8 +151,8 @@ class App {
   // ------------------------------------------------------------ layout
 
   buildLayout() {
-    this.quickProto = h('select', { style: { border: 0, background: 'transparent', color: 'var(--muted)', outline: 0 } }, [['ssh', 'SSH'], ['telnet', 'Telnet'], ['raw', 'Raw'], ['serial', 'Serial']].map(([v, l]) => h('option', { value: v }, l)));
-    this.quickInput = h('input', { placeholder: 'Quick connect: user@host:port', spellcheck: false });
+    this.quickProto = h('select.input.quick-proto', { 'aria-label': 'Quick connect protocol' }, [['ssh', 'SSH'], ['telnet', 'Telnet'], ['raw', 'Raw'], ['serial', 'Serial']].map(([v, l]) => h('option', { value: v }, l)));
+    this.quickInput = h('input.input.quick-host', { placeholder: 'Quick connect: user@host:port', 'aria-label': 'Quick connect address', spellcheck: false });
     this.quickInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && this.quickInput.value.trim()) {
         const q = parseQuick(this.quickInput.value, this.quickProto.value);
@@ -163,6 +163,7 @@ class App {
       }
     });
     const toolsBtn = h('button.tb-btn', { onclick: (e) => this.toolsMenu(e) }, icon('wifi'), 'Network Tools', icon('chev-down'));
+    this.buttonBarToggle = h('button.tb-btn.icon-only', { 'aria-controls': 'buttonbar', onclick: () => this.toggle('buttonbar') }, icon('button-bar'));
     this.toolbar = h(
       'div#toolbar',
       h('div.brand', h('img.logo', { src: '../../assets/logo.svg', alt: '' }), this.info.name),
@@ -174,7 +175,7 @@ class App {
       h('button.tb-btn', { title: 'Notepad++-style editor', onclick: () => this.openNotepad() }, icon('edit'), 'Notepad'),
       toolsBtn,
       h('div.tb-spacer'),
-      h('button.tb-btn.icon-only', { title: 'Button bar', onclick: () => this.toggle('buttonbar') }, icon('more')),
+      this.buttonBarToggle,
       h('button.tb-btn.icon-only', { title: 'Command window (send to one or all tabs)', onclick: () => this.toggle('cmdwin') }, icon('command')),
       h('button.tb-btn.icon-only', { title: 'Home', onclick: () => this.showHome() }, icon('home')),
       h('button.tb-btn.icon-only', { title: 'Settings', onclick: () => settingsDialog(this) }, icon('settings'))
@@ -189,6 +190,7 @@ class App {
         const w = Math.max(180, Math.min(520, ev.clientX));
         document.documentElement.style.setProperty('--sidebar-w', w + 'px');
         this.settings.sidebarWidth = w;
+        this.scheduleTabLayout(true);
         this.active && this.active.refit && this.active.refit();
       };
       const up = () => {
@@ -202,30 +204,64 @@ class App {
     this.sidebar = h('div#sidebar', this.sideSessions, h('div.side-section', h('div.side-head', h('span.title', 'Network Tools')), toolList), resizer);
 
     this.tabbar = h('div#tabbar');
+    this.tabScrollLeft = h('button.tb-btn.icon-only.tab-nav', { title: 'Scroll tabs left', 'aria-label': 'Scroll tabs left', onclick: () => this.scrollTabs(-1) }, icon('chev-left'));
+    this.tabScrollRight = h('button.tb-btn.icon-only.tab-nav', { title: 'Scroll tabs right', 'aria-label': 'Scroll tabs right', onclick: () => this.scrollTabs(1) }, icon('chev-right'));
+    const allTabs = h('button.tb-btn.icon-only.tab-nav', { title: 'Show all tabs', 'aria-label': 'Show all tabs', 'aria-haspopup': 'menu', onclick: (e) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      contextMenu(rect.left, rect.bottom, this.tabs.map((tab) => ({
+        label: tab.title, icon: tab === this.active ? 'check' : tab.icon,
+        action: () => this.activate(tab),
+      })));
+    } }, icon('chev-down'));
+    this.tabControls = h('div.tab-controls.hidden', this.tabScrollLeft, this.tabScrollRight, allTabs);
+    this.tabstrip = h('div#tabstrip', this.tabbar, this.tabControls);
+    this.tabbar.addEventListener('scroll', () => this.updateTabNavigation(), { passive: true });
+    this.tabbar.addEventListener('wheel', (e) => {
+      if (e.ctrlKey || Math.abs(e.deltaY) <= Math.abs(e.deltaX) || this.tabbar.scrollWidth <= this.tabbar.clientWidth) return;
+      e.preventDefault();
+      const unit = e.deltaMode === 1 ? 24 : e.deltaMode === 2 ? this.tabbar.clientWidth : 1;
+      this.tabbar.scrollLeft += e.deltaY * unit;
+    }, { passive: false });
     this.views = h('div#views');
     this.buttonbar = h('div#buttonbar', { class: this.settings.showButtonBar === false ? 'hidden' : '' });
+    this.updateButtonBarToggle();
     this.renderButtonBar();
     this.cmdInput = h('input', { type: 'text', placeholder: 'Command window — type a command and press Enter to send it', spellcheck: false });
     this.cmdAll = h('input', { type: 'checkbox' });
     this.cmdInput.addEventListener('keydown', (e) => this.onCmdKey(e));
     this.cmdwin = h('div#cmdwin.hidden', icon('command'), this.cmdInput, h('label', this.cmdAll, 'Send to all terminal tabs'));
-    this.main = h('div#main', this.tabbar, this.views, this.buttonbar, this.cmdwin);
+    this.main = h('div#main', this.tabstrip, this.views, this.buttonbar, this.cmdwin);
     this.status = h('div#statusbar');
     this.root = h('div#app', this.toolbar, this.sidebar, this.main, this.status);
     document.body.append(this.root);
+    this.tabResizeObserver = new ResizeObserver(() => this.scheduleTabLayout(true));
+    this.tabResizeObserver.observe(this.tabstrip);
   }
 
   toggleSidebar() {
     this.root.classList.toggle('no-sidebar');
+    this.scheduleTabLayout(true);
     setTimeout(() => this.active && this.active.refit && this.active.refit(), 50);
   }
 
   toggle(which) {
     const el = which === 'buttonbar' ? this.buttonbar : this.cmdwin;
     el.classList.toggle('hidden');
-    if (which === 'buttonbar') api.invoke('settings:set', { showButtonBar: !el.classList.contains('hidden') });
+    if (which === 'buttonbar') {
+      this.settings.showButtonBar = !el.classList.contains('hidden');
+      this.updateButtonBarToggle();
+      api.invoke('settings:set', { showButtonBar: this.settings.showButtonBar });
+    }
     if (which === 'cmdwin' && !el.classList.contains('hidden')) this.cmdInput.focus();
     setTimeout(() => this.active && this.active.refit && this.active.refit(), 30);
+  }
+
+  updateButtonBarToggle() {
+    const shown = !this.buttonbar.classList.contains('hidden');
+    const label = `${shown ? 'Hide' : 'Show'} button bar`;
+    this.buttonBarToggle.title = label;
+    this.buttonBarToggle.setAttribute('aria-label', label);
+    this.buttonBarToggle.setAttribute('aria-pressed', String(shown));
   }
 
   toolsMenu(e) {
@@ -331,7 +367,7 @@ class App {
     tab.activity = false;
     tab.el.classList.add('active');
     tab.show();
-    this.renderTabs();
+    this.renderTabs(true);
     this.updateStatus(tab);
     setTimeout(() => tab.focus && tab.focus(), 0);
   }
@@ -353,10 +389,41 @@ class App {
       if (next) this.activate(next);
       else this.addTab(new WelcomeTab(this));
     }
-    this.renderTabs();
+    this.renderTabs(true);
   }
 
-  renderTabs() {
+  scrollTabs(direction) {
+    this.tabbar.scrollBy({ left: direction * Math.max(120, this.tabbar.clientWidth * 0.7), behavior: 'smooth' });
+  }
+
+  updateTabNavigation() {
+    this.tabScrollLeft.disabled = this.tabbar.scrollLeft <= 1;
+    this.tabScrollRight.disabled = this.tabbar.scrollLeft + this.tabbar.clientWidth >= this.tabbar.scrollWidth - 1;
+  }
+
+  scheduleTabLayout(revealActive = false) {
+    this.tabRevealPending ||= revealActive;
+    if (this.tabLayoutFrame) return;
+    this.tabLayoutFrame = requestAnimationFrame(() => {
+      this.tabLayoutFrame = 0;
+      // Compare with the entire strip so controls disappear once all tabs fit.
+      this.tabControls.classList.toggle('hidden', this.tabbar.scrollWidth <= this.tabstrip.clientWidth + 1);
+      if (this.tabRevealPending) {
+        const selected = this.tabbar.children[this.tabs.indexOf(this.active)];
+        if (selected) {
+          const viewport = this.tabbar.getBoundingClientRect();
+          const tab = selected.getBoundingClientRect();
+          if (tab.left < viewport.left) this.tabbar.scrollLeft += tab.left - viewport.left;
+          else if (tab.right > viewport.right) this.tabbar.scrollLeft += tab.right - viewport.right;
+        }
+      }
+      this.tabRevealPending = false;
+      this.updateTabNavigation();
+    });
+  }
+
+  renderTabs(revealActive = false) {
+    const scrollLeft = this.tabbar.scrollLeft;
     this.tabbar.replaceChildren(
       ...this.tabs.map((t, i) => {
         const dotCls = t.kind === 'terminal' || t.kind === 'sftp' ? t.state : t.state === 'running' ? 'connecting' : '';
@@ -390,11 +457,14 @@ class App {
           if (isNaN(from) || from === i) return;
           const [moved] = this.tabs.splice(from, 1);
           this.tabs.splice(i, 0, moved);
-          this.renderTabs();
+          this.renderTabs(true);
         });
         return el;
       })
     );
+    // Background activity and title updates must not undo manual tab scrolling.
+    this.tabbar.scrollLeft = scrollLeft;
+    this.scheduleTabLayout(revealActive);
   }
 
   tabMenu(x, y, t) {

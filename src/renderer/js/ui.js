@@ -76,6 +76,7 @@ const ICONS = {
   power: '<path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/>',
   network: '<rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="16" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M6 16v-2h12v2"/>',
   'chev-right': '<path d="m9 6 6 6-6 6"/>',
+  'chev-left': '<path d="m15 6-6 6 6 6"/>',
   'chev-down': '<path d="m6 9 6 6 6-6"/>',
   eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   copy: '<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/>',
@@ -84,6 +85,7 @@ const ICONS = {
   log: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
   more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
   sidebar: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>',
+  'button-bar': '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 13h18M7 16.5h2M11 16.5h2M15 16.5h2"/>',
   command: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m7 10 3 2-3 2M12 15h5"/>',
   'file-transfer': '<path d="M7 4v13M3 13l4 4 4-4M17 20V7M13 11l4-4 4 4"/>',
   usb: '<path d="M12 3v14"/><circle cx="12" cy="19" r="2"/><path d="m8 8 4-5 4 5M12 13l-4-2V8M12 11l4-2V7"/>',
@@ -228,7 +230,7 @@ const modalStack = [];
  * Generic modal. buttons: [{label, value, primary, danger}] ; resolves with the value
  * of the clicked button, or null on Escape / close. onEnter picks the primary button.
  */
-export function modal({ title, icon: ic, body, buttons = [{ label: 'OK', value: true, primary: true }], width, footerLeft, onSubmit }) {
+export function modal({ title, icon: ic, body, buttons = [{ label: 'OK', value: true, primary: true }], width, footerLeft, onSubmit, onReady, submitOnEnter = true }) {
   return new Promise((resolve) => {
     const back = h('div.modal-back');
     const box = h('div.modal', { style: width ? { width: `min(${width}px, calc(100vw - 40px))` } : {} });
@@ -281,7 +283,7 @@ export function modal({ title, icon: ic, body, buttons = [{ label: 'OK', value: 
         e.preventDefault();
         e.stopImmediatePropagation();
         close(null);
-      } else if (e.key === 'Enter' && !e.shiftKey && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') {
+      } else if (submitOnEnter && e.key === 'Enter' && !e.shiftKey && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') {
         const p = buttons.find((b) => b.primary);
         if (p) {
           e.preventDefault();
@@ -312,6 +314,7 @@ export function modal({ title, icon: ic, body, buttons = [{ label: 'OK', value: 
     // Keep listeners, promises and focus tidy if a view removes a dialog.
     observer = new MutationObserver(() => { if (!back.isConnected) close(null); });
     observer.observe(document.body, { childList: true });
+    if (onReady) onReady({ close });
   });
 }
 

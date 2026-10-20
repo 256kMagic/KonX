@@ -1,6 +1,6 @@
 # KonX User Guide
 
-This guide covers KonX 0.1.2 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, and network troubleshooting tools in one window.
+This guide covers KonX 0.2.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, and network troubleshooting tools in one window.
 
 For downloads, build instructions, and project information, see the [README](../README.md) and [GitHub releases](https://github.com/256kMagic/KonX/releases).
 
@@ -15,6 +15,8 @@ For downloads, build instructions, and project information, see the [README](../
 - [SFTP file transfer](#sftp-file-transfer)
 - [KonX Notepad](#konx-notepad)
 - [Packet capture and analysis](#packet-capture-and-analysis)
+- [Reassembled streams and readable traffic](#reassembled-streams-and-readable-traffic)
+- [SIP calls and signaling ladders](#sip-calls-and-signaling-ladders)
 - [Network tools](#network-tools)
 - [Settings](#settings)
 - [Keyboard reference](#keyboard-reference)
@@ -30,8 +32,8 @@ Download a Windows x64 executable from [GitHub releases](https://github.com/256k
 
 | Download | Use it when | How to start |
 | --- | --- | --- |
-| `KonX-Setup-0.1.2.exe` | You want an installed application with shortcuts | Run setup, choose an installation folder, finish, and open KonX |
-| `KonX-0.1.2-portable.exe` | You want to run the application without its normal installer | Put the executable in a suitable folder and run it |
+| `KonX-Setup-0.2.0.exe` | You want an installed application with shortcuts | Run setup, choose an installation folder, finish, and open KonX |
+| `KonX-0.2.0-portable.exe` | You want to run the application without its normal installer | Put the executable in a suitable folder and run it |
 
 The portable executable still uses a Windows user profile for settings, saved sessions, and editor recovery. It does **not** automatically place all data beside the executable or make encrypted credentials transferable between computers. See [Application data and backups](#application-data-and-backups).
 
@@ -56,7 +58,7 @@ There is no in-app automatic updater in this version. Npcap is optional for pack
 6. Verify the SSH host fingerprint before accepting it.
 7. Answer the password, key passphrase, or keyboard-interactive prompts presented by the server.
 
-The toolbar's quick-connect field is another way to connect. Press **Alt+Q**, enter `operator@192.0.2.10:22`, and press **Enter**. This opens a connection without creating a saved session.
+The toolbar's quick-connect field is another way to connect. Choose the protocol from the dropdown, press **Alt+Q**, enter `operator@192.0.2.10:22`, and press **Enter**. The protocol selector follows the same dropdown styling as the settings and session forms. This opens a connection without creating a saved session.
 
 ### Verify the server identity
 
@@ -84,6 +86,8 @@ Saved keys are managed under **Settings → Known Hosts**. Removing a key makes 
 
 Saved passwords and passphrases use Electron's Windows-backed encryption when available. If the dialog says encryption is unavailable, KonX does not persist a newly supplied secret. Leaving an existing saved password field blank keeps its current value; clear **Save password** to remove it.
 
+The session dialog stays anchored near the top of the window when you switch panels. Its header and navigation stay in place, while long form content scrolls and the footer actions remain reachable.
+
 Double-click the saved session to connect again. Right-click it for **Edit…**, **Duplicate**, **Connect SFTP**, and related tools. Duplicating a session does not duplicate its saved password or passphrase.
 
 ![KonX terminal workspace](screenshots/terminal.png)
@@ -95,6 +99,8 @@ Double-click the saved session to connect again. Right-click it for **Edit…**,
 - Each terminal, SFTP connection, capture, or network tool has an application tab. Notepad has one application tab with its own document tabs inside it.
 - Right-click an application tab to rename it, close it, close others, or close all. Terminal tabs also offer cloning, reconnecting, disconnecting, and opening SFTP when available.
 - Drag application tabs to rearrange them. **Alt+1** through **Alt+9** selects a tab by position.
+- When tabs fill the window, use the arrow buttons or scroll over the tab strip. **Show all tabs** lists every open tab; selecting one brings it into view.
+- Background activity preserves your position in the tab strip. Selecting a tab or resizing the workspace reveals the active tab as needed.
 - The status bar describes the active view, including connection state and active transfers.
 
 ### Disconnect versus close
@@ -227,7 +233,7 @@ For example, `%S_%Y-%M-%D_%h%m%s.log` makes a timestamped session filename. Term
 
 ### Command buttons and sending to several terminals
 
-Use the toolbar's **Button bar** control to show reusable command buttons. Right-click a button to edit, move, or delete it; **+** creates a button. The **Send** value supports `\r` for Enter, `\n` for newline, `\t` for tab, `\e` for Escape, and `\x03` for Ctrl+C. A button that should execute a command usually ends in `\r`.
+Use the toolbar's window-with-buttons icon, labeled **Show button bar** or **Hide button bar**, to toggle reusable command buttons. Its highlighted state reflects whether the bar is shown. Right-click a button to edit, move, or delete it; **+** creates a button. The **Send** value supports `\r` for Enter, `\n` for newline, `\t` for tab, `\e` for Escape, and `\x03` for Ctrl+C. A button that should execute a command usually ends in `\r`.
 
 A normal click sends to the active terminal. **Ctrl+click** sends to every connected terminal tab.
 
@@ -407,6 +413,8 @@ The save button offers **Save all packets** and, when a filter reduces the list,
 
 Select a packet to view its plain-language explanation, protocol tree, and hex bytes. Click decoded tree fields to inspect the related bytes; right-click fields or packet rows for copying and filters.
 
+Scrolling up during a live capture or navigating packets with the keyboard pauses **Auto-scroll** and clears its checkbox. Check it again to jump to the newest packets and resume following incoming traffic.
+
 The right-side tabs summarize the retained capture:
 
 | Tab | Use |
@@ -419,7 +427,57 @@ The right-side tabs summarize the retained capture:
 
 Insights are heuristic observations from the packets available in this capture. Missing packets, asymmetric capture, offloading, and encrypted payloads can limit interpretation. Verify a suspected problem against device state and the capture location. **Names** displays names learned from capture analysis; it does not make encrypted application payloads readable.
 
-Right-click a TCP/UDP packet and choose **Follow … stream**, or use a conversation row. The follow window shows both directions with distinct colors, a **Hex dump** option, **Copy**, and **Filter this stream**. Its display has a 2 MB budget. It shows captured payload bytes; TLS/SSH encryption is not decrypted by this feature.
+### Reassembled streams and readable traffic
+
+Right-click a TCP/UDP packet and choose **Follow … stream**, or use a conversation row. The window opens a snapshot of the retained packets, using distinct colors for the two directions. Close and reopen it to include packets that arrived later:
+
+- **Readable** reconstructs supported HTTP/1 messages across TCP packets. It shows paired requests and responses when the capture provides sufficient context, headers, trailers, formatted JSON and other text bodies. Search matches start lines, headers, and the retained text previews.
+- **Text** and **Hex** show reconstructed payload bytes for TCP and observed UDP datagrams, grouped by direction in sequence order. Their previews are limited to the first 256 KiB and 200 blocks; a visible notice identifies truncation. Search in these views applies to that preview.
+- **Packet buttons** return to the corresponding original packet and filter its stream. **Filter this stream** applies the filter without selecting a packet.
+- **Save body** opens Save As for a complete, unambiguous decoded HTTP body. Chunk framing is removed, and supported gzip/deflate content is decompressed. Captured HTML remains inert text in the viewer. The suggested filename never chooses the save destination.
+- **Copy visible text** copies the rendered conversation preview, including displayed warnings. Save the original capture separately when you need all packet evidence.
+
+TCP data is ordered by sequence number; out-of-order segments are placed in sequence and repeated bytes are deduplicated. The original packet references remain available, including retransmission evidence. UDP datagrams retain their individual boundaries. Missing TCP bytes appear as separate notices and never become application data. Conflicting retransmissions retain the first observed bytes and are marked ambiguous. HTTP parsing stops at a missing-data boundary, and bodies affected by conflicts, truncation, unsupported encodings or incomplete framing cannot be saved as complete.
+
+The HTTP reader currently supports HTTP/1.0 and HTTP/1.1, not HTTP/2, QUIC, TLS/SSH decryption, or network-layer IP fragment reassembly. Without enough captured request context, responses remain unpaired and their body framing may be provisional. A close-delimited response requires a captured orderly FIN before its body can be treated as complete.
+
+Reconstruction is bounded: up to 50,000 packets and 16 MiB of observed payload per stream, with additional sequence-span and work limits. HTTP parsing retains up to 200 messages, 64 KiB of headers per message, 8 MiB per wire body, and 16 MiB of decoded bodies in total. Text body previews retain up to 128 KiB before formatting. Reaching a limit produces a visible warning and prevents incomplete output from being represented as complete; the original capture remains available.
+
+### SIP calls and signaling ladders
+
+Open **Packet Capture → SIP Calls** after loading a capture or collecting traffic. The view examines a snapshot of all retained packets, including packets hidden by the current display filter. It groups observed SIP signaling across UDP/TCP conversations by Call-ID. Close and reopen it to include packets that arrived later.
+
+1. Search the call list by Call-ID, parties, outcome, or method, then select a call.
+2. Read the signaling ladder from top to bottom. Endpoint lanes and message arrows show the observed request/response sequence. Paging controls expose additional calls, messages, and endpoints.
+3. Select an arrow to inspect the captured SIP headers and body, CSeq, dialog tags, retransmission markings, and warnings. Setup time, duration, and outcome describe the signaling that was captured; missing or ambiguous messages can leave them unknown.
+4. Click a **Source packets** button to return to an original packet. This pauses Auto-scroll and clears the display filter if necessary to reveal that packet.
+
+On a wide window, the ladder and selected message appear side by side. Each pane scrolls independently; narrower windows stack the details beneath the ladder. Tagged dialog branches remain separate, and an authentication challenge such as 401 or 407 does not by itself prove that the call failed. Retransmissions stay visible in the ladder; an incomplete message or uncertain retransmission classification carries a note.
+
+For a complete, unambiguous SIP body with an SDP content type, the message details include the session, connection address, timing, and media sections. Media details show ports, transport, direction, codec declarations, format parameters, and explicit RTCP settings. Connection and direction sources identify media overrides, inherited session values, or the SDP default. Port-zero media is marked disabled; dynamic payload IDs without an `rtpmap` declaration remain unmapped. Raw attributes remain available for inspection.
+
+These SDP details describe what the selected message advertises. They do not establish the negotiated codec, successful media delivery, or audio quality. The view supports **plaintext SIP over UDP and TCP**. SIP over TLS and SRTP remain encrypted; RTP reconstruction, media decryption, and audio playback are not included.
+
+The selected call offers two exports:
+
+- **Export call PCAPNG** saves the original source packets associated with its observed signaling. Packet bytes remain intact: a TCP packet shared by multiple SIP messages may also contain signaling from other calls. This is a signaling export, not an RTP/media export or proof that the entire call was captured.
+- **Export JSON report** saves the retained call analysis, message details, structured SDP, warnings, and source-packet references. Use the original capture or PCAPNG export when packet bytes are needed.
+
+Both exports open a Save As dialog and use the snapshot from when the SIP view opened. New live packets do not silently change an export while you inspect the call. Exports are limited to 64 MiB; a report can reach its serialization budget sooner because it includes structured detail as well as raw message text.
+
+SIP analysis examines at most 200,000 packets, 256 TCP conversations, and 32 MiB of candidate input. It retains at most 2,000 messages across 1,000 call groups, with limits of 4 MiB per TCP stream, 64 KiB per SIP header block, and 256 KiB per body. The view pages 20 calls, 50 messages, and 8 endpoint lanes at a time. Select an arrow whose endpoints are off-page to reveal the relevant lanes. Visible warnings identify partial results; missing packets, conflicting TCP overlaps, malformed signaling, or limits can prevent complete interpretation. The original retained capture remains the source evidence.
+
+### Try the SIP sample
+
+Download [sip-demo.pcapng](https://github.com/256kMagic/KonX/releases/download/v0.2.0/sip-demo.pcapng) from the 0.2.0 release, or generate the same sample from a source checkout with dependencies installed:
+
+~~~powershell
+npm run sample:sip
+~~~
+
+Open the downloaded sample, or the generated `user-data/sip-demo.pcapng`, using Packet Capture's folder button, then choose **SIP Calls**. The sample contains 23 synthetic packets and three calls: an ended call through a proxy, a busy call, and a call with an INVITE split across TCP packets. It also includes SDP and a UDP retransmission. No network capture or live call is made by generating the file.
+
+To check the workflow, select the proxy call, click its **200 OK** response to **INVITE**, and inspect the SDP media port and codec declarations. Export its PCAPNG, reopen that file in another Packet Capture tab, and choose **SIP Calls** again. The JSON export preserves the original snapshot's source-packet numbers; reopening an exported capture assigns that new capture its own packet numbers.
 
 ## Network tools
 
@@ -556,7 +614,7 @@ For an isolated profile, advanced users can launch from PowerShell with a separa
 
 ```powershell
 $env:KONX_USERDATA = Join-Path $env:LOCALAPPDATA 'KonX-TestProfile'
-& '.\KonX-0.1.2-portable.exe'
+& '.\KonX-0.2.0-portable.exe'
 ```
 
 Run this from the folder containing the portable executable. The environment variable applies to that PowerShell process and launches from it; use a normal shortcut or a separate shell for your normal profile. This setting does not make Windows-encrypted credentials portable.
@@ -582,6 +640,11 @@ Run this from the folder containing the portable executable. The environment var
 | **Capture shows no packets** | Select the adapter carrying the traffic, check filter syntax, briefly try no capture filter, and reproduce traffic. For localhost traffic, use Npcap loopback capture. |
 | **Capture filter rejected** | Use BPF for an Npcap device and KonX filter syntax for a built-in device. The display-filter row always uses KonX syntax. |
 | **ETL opens with no captured packets** | Use a supported NDIS trace recorded with packet capture enabled; an arbitrary ETL or pktmon ETL is not accepted. |
+| **Readable traffic has gaps or Save body is disabled** | Inspect the message warnings and source packets. Missing bytes, conflicting retransmissions, incomplete framing, unsupported encodings, or resource limits can prevent complete body recovery. Use Text/Hex and save the original capture to preserve the available evidence. |
+| **No SIP calls appear** | Confirm the capture contains plaintext SIP over UDP or TCP. SIP over TLS cannot be decoded here. Review the analysis-limit warnings; SIP Calls uses all examined packets, so changing the display filter alone does not reveal additional calls. |
+| **A SIP call has unknown timing or incomplete SDP** | Check whether both directions and the beginning/end of the signaling were captured. Inspect source packets and warnings. The tool reports observed messages and advertised SDP, not inferred missing events or negotiated media. |
+| **A SIP export includes another call's message** | Original TCP packets can contain multiple SIP messages. The PCAPNG export retains each selected packet intact; the JSON report isolates the selected call's retained analysis. RTP media is not included. |
+| **SIP Calls is missing after an update** | Close and reopen the updated application. Check that you launched the new installed/portable version or the source checkout you updated; an older installed copy does not pick up source-code changes. |
 | **Insights disagree with another observation** | Check capture placement, missing/dropped packets, offloading, filter exclusions, and whether both directions were captured. Treat analysis as evidence to investigate. |
 | **Sweep misses a known device** | ICMP/TCP probes may be blocked; names/MACs may be unavailable off-link. Verify reachability and service ports directly. |
 | **Wake-on-LAN sends but the machine stays off** | Check firmware/NIC power options, wired connectivity, target MAC, broadcast selection, and router policy. |

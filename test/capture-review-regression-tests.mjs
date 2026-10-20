@@ -113,7 +113,10 @@ export async function runCaptureReviewRegressionTests(test) {
     const frame = (seq, payload = '', flags = 'A') => ({ ts: seq / 100, data: P.frame.tcp('02:00:00:00:00:01', '02:00:00:00:00:02', '192.0.2.1', '192.0.2.2', { sport: 12345, dport: 12346, seq, flags }, P.str(payload)) });
     const { analyzer, packets } = analyzeFrames([frame(100, '', 'S'), frame(111, 'abcdefghij'), frame(116, 'fghijklmno')]);
     const stream = analyzer.followStream(packets, 0, 'TCP');
-    const text = stream.chunks.map((c) => new TextDecoder().decode(P.concat(c.parts))).join('');
-    assert.equal(text, '[10 bytes missing]abcdefghijklmno');
+    const ranges = stream.directions[0].ranges;
+    const text = new TextDecoder().decode(P.concat(ranges.filter((r) => r.kind === 'data').map((r) => r.data)));
+    assert.equal(text, 'abcdefghijklmno');
+    assert.deepEqual(ranges.filter((r) => r.kind === 'gap'), [{ kind: 'gap', start: 0, end: 10, length: 10 }]);
+    assert.equal(stream.directions[0].conflicts.length, 0);
   });
 }
