@@ -1,7 +1,7 @@
 {
   "name": "konx",
   "productName": "KonX",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "SSH / Telnet / Serial terminal, SFTP file manager and network toolkit in one desktop app",
   "main": "src/main/boot.js",
   "author": "KonX",
@@ -10,6 +10,9 @@
   "scripts": {
     "start": "electron .",
     "test": "node test/run-tests.js",
+    "test:traffic": "node test/traffic-tests.mjs",
+    "test:sip": "node test/sip-focused.mjs",
+    "sample:sip": "node scripts/sample-sip.mjs",
     "test-server": "node test/ssh-test-server.js",
     "make-icon": "electron scripts/make-icon.js",
     "dist": "electron-builder --win",

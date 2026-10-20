@@ -5,6 +5,10 @@ import { decode, Node, LINKTYPES } from './capture/decode.mjs';
 import { compileFilter } from './capture/filter.mjs';
 import { Analyzer } from './capture/analyze.mjs';
 import { readCapture, writePcapng } from './capture/pcapfile.mjs';
+import { showTraffic } from './capture/traffic-view.js';
+import { analyzeSipCalls } from './capture/sip.mjs';
+import { showSipCalls } from './capture/sip-view.js';
+import { buildSipCallCapture, buildSipCallReport } from './capture/sip-export.mjs';
 
 const ROW_H = 22;
 const MAX_PACKETS = 1000000;
@@ -88,9 +92,10 @@ export class CaptureTab {
     this.dfilter.addEventListener('input', () => this.validateFilter());
     this.filterBox = h('div.cap-dfilter', icon('search'), this.dfilter, h('button.btn.sm', { onclick: () => this.applyFilter() }, 'Apply'));
     const chips = QUICK.map(([label, f]) => h('button.chip', { onclick: () => this.setFilter(f) }, label));
-    const auto = h('input', { type: 'checkbox', checked: true, onchange: (e) => (this.autoScroll = e.target.checked) });
+    this.autoScrollCheckbox = h('input', { type: 'checkbox', checked: this.autoScroll, onchange: (e) => this.setAutoScroll(e.target.checked) });
     const names = h('input', { type: 'checkbox', checked: true, onchange: (e) => ((this.resolveNames = e.target.checked), this.list.render()) });
-    const frow = h('div.cap-frow', this.filterBox, ...chips, h('label.check', auto, 'Auto-scroll'), h('label.check', names, 'Names'));
+    this.sipButton = h('button.btn.sm', { title: 'Reconstruct SIP calls from all captured packets', onclick: () => this.openSipCalls() }, icon('route'), 'SIP Calls');
+    const frow = h('div.cap-frow', this.filterBox, ...chips, this.sipButton, h('label.check', this.autoScrollCheckbox, 'Auto-scroll'), h('label.check', names, 'Names'));
 
     this.list = new PacketList(this);
     this.notice = h('div.cap-notice.hidden');
@@ -110,6 +115,12 @@ export class CaptureTab {
     this.renderSideTabs();
     this.setupDrop();
     if (params.filter) this.applyFilter();
+  }
+
+  setAutoScroll(enabled) {
+    this.autoScroll = !!enabled;
+    this.autoScrollCheckbox.checked = this.autoScroll;
+    if (this.autoScroll) this.list.scrollToEnd();
   }
 
   dragSplit(splitter) {
@@ -721,45 +732,66 @@ export class CaptureTab {
   }
 
   async follow(streamId, proto = 'TCP') {
-    const r = this.analyzer.followStream(this.packets, streamId, proto);
-    if (!r) return;
-    const { conv, chunks } = r;
-    let hexMode = false;
-    const out = h('div.follow-out');
-    const bytesA = chunks.filter((c) => c.fromA).reduce((n, c) => n + c.parts.reduce((m, p) => m + p.length, 0), 0);
-    const bytesB = chunks.filter((c) => !c.fromA).reduce((n, c) => n + c.parts.reduce((m, p) => m + p.length, 0), 0);
-    const render = () => {
-      let budget = 2 * 1024 * 1024;
-      const blocks = [];
-      for (const c of chunks) {
-        if (budget <= 0) {
-          blocks.push(h('div.follow-more', '… (truncated at 2 MB)'));
-          break;
-        }
-        const data = concat(c.parts);
-        budget -= data.length;
-        const text = hexMode ? hexDump(data) : Array.from(data, (b) => (b === 10 || b === 13 || b === 9 || (b >= 32 && b < 127) ? String.fromCharCode(b) : '.')).join('');
-        blocks.push(h('pre.follow-chunk', { class: c.fromA ? 'fa' : 'fb', title: `Frame ${c.no}` }, text));
+    if (this.followOpen) return;
+    this.followOpen = true;
+    const packets = this.packets;
+    try {
+      const stream = this.analyzer.followStream(packets, streamId, proto);
+      if (!stream) return;
+      const result = await showTraffic(stream);
+      // A different capture may have been loaded while the dialog was open.
+      if (!result || this.disposed || this.packets !== packets) return;
+      if (result.action === 'filter') this.setFilter(`${proto.toLowerCase()}.stream == ${streamId}`);
+      if (result.action === 'packet') {
+        const index = packets.findIndex((p) => p.no === result.frame);
+        if (index < 0) return;
+        this.setFilter(`${proto.toLowerCase()}.stream == ${streamId}`);
+        this.select(index);
+        this.list.ensureVisible(this.view.indexOf(index));
       }
-      out.replaceChildren(...(blocks.length ? blocks : [h('div.hint', 'This stream has no payload data.')]));
-    };
-    render();
-    const toggle = h('label.check', h('input', { type: 'checkbox', onchange: (e) => ((hexMode = e.target.checked), render()) }), 'Hex dump');
-    const res = await modal({
-      title: `Follow ${conv.proto} stream ${conv.id}`,
-      icon: 'route',
-      width: 980,
-      body: [
-        h('div.follow-head', h('span.fa-key', `${conv.a} → ${fmtBytes(bytesA)}`), h('span.fb-key', `${conv.b} → ${fmtBytes(bytesB)}`), toggle),
-        out,
-      ],
-      footerLeft: [h('button.btn.sm', { onclick: () => api.invoke('clipboard:write', out.innerText) }, icon('copy'), 'Copy')],
-      buttons: [
-        { label: 'Filter this stream', value: 'filter' },
-        { label: 'Close', value: null, primary: true },
-      ],
-    });
-    if (res === 'filter') this.setFilter(`${conv.proto.toLowerCase()}.stream == ${conv.id}`);
+    } catch (e) {
+      toast(errMsg(e), 'err');
+    } finally {
+      this.followOpen = false;
+    }
+  }
+
+  async openSipCalls() {
+    if (this.sipOpen) return;
+    this.sipOpen = true;
+    this.sipButton.disabled = true;
+    const packets = this.packets;
+    const snapshot = packets.slice();
+    const sourceName = this.fileName || 'Live capture snapshot';
+    try {
+      // Yield for the busy control to paint before bounded, on-demand analysis.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      if (this.disposed || this.packets !== packets) return;
+      const analysis = analyzeSipCalls(snapshot);
+      const save = async (format, bytes) => {
+        const path = await api.invoke('cap:saveSip', format, bytes);
+        if (path) toast('SIP call exported', 'ok');
+      };
+      const result = await showSipCalls(analysis, {
+        onExportCall: (call) => save('pcapng', buildSipCallCapture(snapshot, call)),
+        onExportReport: (call) => save('json', buildSipCallReport(call, { ...analysis, sourceName })),
+      });
+      if (!result || this.disposed || this.packets !== packets) return;
+      if (result.action === 'packet') {
+        const index = packets.findIndex((packet) => packet.no === result.frame);
+        if (index < 0) return;
+        this.setAutoScroll(false);
+        // SIP may be split over TCP packets that have no per-packet SIP label.
+        if (!this.view.includes(index)) this.setFilter('');
+        this.select(index);
+        this.list.ensureVisible(this.view.indexOf(index));
+      }
+    } catch (error) {
+      toast(errMsg(error), 'err');
+    } finally {
+      this.sipOpen = false;
+      this.sipButton.disabled = false;
+    }
   }
 
   // ------------------------------------------------------------ side panel
@@ -943,26 +975,6 @@ export class CaptureTab {
   }
 }
 
-function concat(parts) {
-  if (parts.length === 1) return parts[0];
-  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
-  let o = 0;
-  for (const p of parts) {
-    out.set(p, o);
-    o += p.length;
-  }
-  return out;
-}
-
-function hexDump(data) {
-  const lines = [];
-  for (let o = 0; o < data.length; o += 16) {
-    const row = data.subarray(o, o + 16);
-    lines.push(`${o.toString(16).padStart(8, '0')}  ${Array.from(row, (b) => b.toString(16).padStart(2, '0')).join(' ').padEnd(47)}  ${Array.from(row, (b) => (b >= 32 && b < 127 ? String.fromCharCode(b) : '.')).join('')}`);
-  }
-  return lines.join('\n');
-}
-
 /** Virtualized packet list: only the visible rows exist in the DOM. */
 class PacketList {
   constructor(tab) {
@@ -975,9 +987,9 @@ class PacketList {
     this.scroller = h('div.pscroll', { tabIndex: 0 }, this.spacer, this.rows);
     this.el = h('div.plist', this.head, this.scroller);
     this.scroller.addEventListener('scroll', () => {
-      // Scrolling up pauses auto-scroll; reaching the bottom resumes it.
+      // Scrolling up pauses following until Auto-scroll is checked again.
       const atEnd = this.scroller.scrollTop + this.scroller.clientHeight >= this.scroller.scrollHeight - ROW_H * 2;
-      if (this.tab.state === 'running' && !atEnd && this.lastTop > this.scroller.scrollTop) this.tab.autoScroll = false;
+      if (this.tab.state === 'running' && !atEnd && this.lastTop > this.scroller.scrollTop) this.tab.setAutoScroll(false);
       this.lastTop = this.scroller.scrollTop;
       this.render();
     });
@@ -1009,6 +1021,7 @@ class PacketList {
 
   scrollToEnd() {
     this.scroller.scrollTop = this.scroller.scrollHeight;
+    this.lastTop = this.scroller.scrollTop;
   }
 
   scrollTo(vi) {
@@ -1037,7 +1050,7 @@ class PacketList {
     if (e.key === 'End') vi = t.view.length - 1;
     vi = Math.max(0, Math.min(t.view.length - 1, vi));
     if (t.view[vi] == null) return;
-    t.autoScroll = false;
+    t.setAutoScroll(false);
     this.ensureVisible(vi);
     t.select(t.view[vi]);
   }

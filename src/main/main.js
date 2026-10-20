@@ -14,10 +14,11 @@ const nettools = require('./nettools');
 const importers = require('./importers');
 const serial = require('./serial');
 const { CaptureManager, readCaptureFile } = require('./capture');
+const { saveCaptureBody, saveSipExport } = require('./capture/export');
 const elevate = require('./capture/elevate');
 const notepad = require('./notepad');
 
-const PRODUCT = require('../../package.json').productName;
+const { productName: PRODUCT, version: VERSION } = require('../../package.json');
 const CAPTURE = process.env.KONX_CAPTURE;
 
 let win = null;
@@ -166,7 +167,7 @@ function registerIpc() {
   // app
   handle('app:info', () => ({
     name: PRODUCT,
-    version: app.getVersion(),
+    version: VERSION,
     platform: process.platform,
     serial: serial.serialAvailable(),
     encryption: safeStorage.isEncryptionAvailable(),
@@ -403,6 +404,14 @@ function registerIpc() {
     await fs.promises.writeFile(r.filePath, Buffer.from(bytes));
     return r.filePath;
   });
+  handle('cap:saveBody', (defaultName, bytes) => saveCaptureBody(defaultName, bytes, {
+    chooseFile: (options) => dialog.showSaveDialog(win, options),
+    writeFile: (filePath, data) => fs.promises.writeFile(filePath, data),
+  }));
+  handle('cap:saveSip', (format, bytes) => saveSipExport(format, bytes, {
+    chooseFile: (options) => dialog.showSaveDialog(win, options),
+    writeFile: (filePath, data) => fs.promises.writeFile(filePath, data),
+  }));
 }
 
 app.whenReady().then(() => {

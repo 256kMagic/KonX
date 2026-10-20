@@ -389,6 +389,7 @@ export function ipv4(c, o) {
   const df = !!(ff & 0x4000);
   const mf = !!(ff & 0x2000);
   const frag = (ff & 0x1fff) * 8;
+  if (mf || frag) c.r.fragmented = true;
   // Header checksum
   let sum = 0;
   for (let i = 0; i < ihl; i += 2) if (i !== 10) sum += (c.d[o + i] << 8) | c.d[o + i + 1];
@@ -488,6 +489,7 @@ export function ipv6(c, o) {
       p += len;
     } else if (nh === 44) {
       const offFlags = c.u16(p + 2);
+      if ((offFlags & 1) || (offFlags >> 3)) c.r.fragmented = true;
       n.add(`Fragment Header, offset ${(offFlags >> 3) * 8}${offFlags & 1 ? ', more fragments' : ''}`, p, 8);
       nh = c.u8(p);
       p += 8;

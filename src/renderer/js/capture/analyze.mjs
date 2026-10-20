@@ -1,6 +1,7 @@
 // Stateful analysis over decoded packets: TCP stream tracking and expert flags,
 // DNS timing, conversations, endpoints, neighbors (CDP/LLDP), and plain-English insights.
 import { tcpInfoText } from './decode.mjs';
+import { reassembleStream } from './reassemble.mjs';
 
 const seqDiff = (a, b) => (a - b) | 0; // wrap-safe 32-bit comparison
 const fmtMs = (s) => (s < 0.001 ? `${(s * 1e6).toFixed(0)} µs` : s < 1 ? `${(s * 1000).toFixed(1)} ms` : `${s.toFixed(2)} s`);
@@ -477,70 +478,10 @@ export class Analyzer {
     return out.sort((a, b) => rank[a.sev] - rank[b.sev]);
   }
 
-  /**
-   * Payload of one stream for "Follow stream". TCP data is reassembled by sequence
-   * number: duplicates are dropped, out-of-order segments wait for the gap to fill,
-   * and a retransmission that is the only copy of lost data is kept.
-   */
+  /** Sequence ranges, typed gaps and frame provenance for one conversation. */
   followStream(packets, streamId, proto = 'TCP') {
     const conv = this.streams.find((c) => c.proto === proto && c.id === streamId);
     if (!conv) return null;
-    const chunks = [];
-    const emit = (fromA, data, no) => {
-      if (!data.length) return;
-      const last = chunks[chunks.length - 1];
-      if (last && last.fromA === fromA) last.parts.push(data);
-      else chunks.push({ fromA, parts: [data], no });
-    };
-    const dirs = {};
-    for (const p of packets) {
-      if (!p.ann || p.ann.stream !== streamId) continue;
-      if ((p.d.tcp ? 'TCP' : p.d.udp ? 'UDP' : '') !== proto) continue;
-      const fromA = `${p.d.src}:${p.d.sport}` === conv.a;
-      if (!p.d.payloadLen && !(p.d.tcp && p.d.tcp.flags & 2)) continue;
-      const data = p.data.subarray(p.d.payloadOff, p.d.payloadOff + p.d.payloadLen);
-      if (proto === 'UDP') {
-        emit(fromA, data, p.no);
-        continue;
-      }
-      const t = p.d.tcp;
-      const st = dirs[fromA] || (dirs[fromA] = { next: null, pending: [] });
-      if (t.flags & 2) {
-        st.next = (t.seq + 1) >>> 0;
-        continue;
-      }
-      if (st.next === null) st.next = t.seq;
-      st.pending.push({ seq: t.seq, data, no: p.no });
-      // Deliver everything that is now contiguous.
-      for (let progress = true; progress; ) {
-        progress = false;
-        st.pending.sort((x, y) => seqDiff(x.seq, y.seq));
-        for (let i = 0; i < st.pending.length; i++) {
-          const s = st.pending[i];
-          const end = (s.seq + s.data.length) >>> 0;
-          if (seqDiff(end, st.next) <= 0) {
-            st.pending.splice(i--, 1); // already delivered
-            continue;
-          }
-          if (seqDiff(s.seq, st.next) <= 0) {
-            emit(fromA, s.data.subarray(seqDiff(st.next, s.seq)), s.no);
-            st.next = end;
-            st.pending.splice(i, 1);
-            progress = true;
-            break;
-          }
-        }
-      }
-    }
-    // Anything still waiting sits behind a gap that was never filled.
-    for (const [fromA, st] of Object.entries(dirs)) {
-      for (const s of st.pending.sort((x, y) => seqDiff(x.seq, y.seq))) {
-        if (seqDiff((s.seq + s.data.length) >>> 0, st.next) <= 0) continue;
-        emit(fromA === 'true', new TextEncoder().encode(`[${seqDiff(s.seq, st.next)} bytes missing]`), s.no);
-        emit(fromA === 'true', s.data, s.no);
-        st.next = (s.seq + s.data.length) >>> 0;
-      }
-    }
-    return { conv, chunks };
+    return reassembleStream(packets, conv);
   }
 }

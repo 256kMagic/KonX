@@ -410,6 +410,24 @@ const fakeCrypt = {
   const { runCaptureTests } = await import(require('url').pathToFileURL(path.join(__dirname, 'capture-tests.mjs')).href);
   await runCaptureTests(test);
 
+  const { runReassemblyTests } = await import(require('url').pathToFileURL(path.join(__dirname, 'reassembly-tests.mjs')).href);
+  await runReassemblyTests(test);
+  const { runHttpTests } = await import(require('url').pathToFileURL(path.join(__dirname, 'http-tests.mjs')).href);
+  await runHttpTests(test);
+  const { runStreamPreviewTests } = await import(require('url').pathToFileURL(path.join(__dirname, 'stream-preview-tests.mjs')).href);
+  await runStreamPreviewTests(test);
+  await require('./capture-export-tests.cjs').runCaptureExportTests(test);
+  await require('./traffic-ui-tests.cjs').runTrafficUiTests(test);
+  await require('./capture-auto-scroll-tests.cjs').runCaptureAutoScrollTests(test);
+
+  const { runSdpTests } = await import(require('url').pathToFileURL(path.join(__dirname, 'sdp-tests.mjs')).href);
+  await runSdpTests(test);
+  const { runSipTests } = await import(require('url').pathToFileURL(path.join(__dirname, 'sip-tests.mjs')).href);
+  await runSipTests(test);
+  const { runSipIntegrationTests } = await import(require('url').pathToFileURL(path.join(__dirname, 'sip-integration-tests.mjs')).href);
+  await runSipIntegrationTests(test);
+  await require('./sip-navigation-tests.cjs').runSipNavigationTests(test);
+
   const { runBuiltinCaptureTests } = await import(require('url').pathToFileURL(path.join(__dirname, 'builtin-capture-tests.mjs')).href);
   await runBuiltinCaptureTests(test);
 

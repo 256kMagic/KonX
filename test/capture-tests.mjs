@@ -199,11 +199,11 @@ export async function runCaptureTests(test) {
     const { an, pkts } = run(buildSample());
     const http = pkts.find((p) => p.d.http && p.d.http.method);
     const f = an.followStream(pkts, http.ann.stream, 'TCP');
-    const text = f.chunks.map((c) => new TextDecoder().decode(P.concat(c.parts))).join('');
+    const text = f.directions.map((direction) => new TextDecoder().decode(P.concat(direction.ranges.filter((range) => range.kind === 'data').map((range) => range.data)))).join('');
     assert.match(text, /^GET \/api\/status HTTP\/1\.1[\s\S]*HTTP\/1\.1 200 OK[\s\S]*\{"status":"ok"\}$/);
     const tlsStream = pkts.find((p) => p.d.tls && p.d.tls.sni === 'www.example.com').ann.stream;
     const tf = an.followStream(pkts, tlsStream, 'TCP');
-    const serverBytes = tf.chunks.filter((c) => !c.fromA).reduce((n, c) => n + c.parts.reduce((m, x) => m + x.length, 0), 0);
+    const serverBytes = tf.directions.find((direction) => !direction.fromA).ranges.filter((range) => range.kind === 'data').reduce((n, range) => n + range.data.length, 0);
     // The lost segment's retransmission is its only copy, so it is kept and put back in order.
     assert.strictEqual(serverBytes, P.tlsServerHello().length + 3 * 1200);
   });
