@@ -334,7 +334,10 @@ async function electronFixture() {
 }
 
 module.exports = { runSecurityUiTests };
-if (process.versions.electron && process.argv.includes('--electron-security-fixture')) electronFixture();
+if (process.versions.electron && process.argv.includes('--electron-security-fixture')) electronFixture().catch((error) => {
+  console.error(error.stack || error);
+  require('electron').app.exit(1);
+});
 else if (require.main === module) {
   runSecurityUiTests(async (name, test) => { await test(); console.log('PASS ' + name); })
     .catch((error) => { console.error(error); process.exitCode = 1; });

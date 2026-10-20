@@ -455,6 +455,8 @@ const fakeCrypt = {
   await require('./security-network-tests.cjs').runSecurityNetworkTests(test);
   await require('./security-offline-tests.cjs').runSecurityOfflineTests(test);
   await require('./security-ui-tests.cjs').runSecurityUiTests(test);
+  await require('./diagnostics-tests.cjs').runDiagnosticsTests(test);
+  await require('./diagnostics-electron-tests.cjs').runDiagnosticsElectronTests(test);
 
   const failed = results.filter((r) => !r[0]);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

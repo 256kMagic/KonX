@@ -9,10 +9,11 @@
 - Offline Cisco-style configuration and saved PCAP/PCAPNG security findings with redacted line/frame evidence.
 - Result filters, evidence and recommendations, explicit unknown states and scope limits, local opt-in baselines, and JSON/HTML report exports.
 - Bounded collection and cancellation when stopped or closed, plus unit, loopback-network, synthetic-file, and real Electron workflow regression coverage.
+- Local JavaScript error logs for the next development build, including startup failures, uncaught main-process errors, and unhandled-rejection warnings. The original Electron error handling remains active; logs rotate at 128 KiB and individual entries are bounded to 16 KiB.
 
 See the [Security Suite guide](docs/SECURITY_SUITE.md). These source changes are not included in the installed 0.2.1 test build or the published 0.2.0 executables.
 
-Validation: 335 automated tests pass, including 56 new security checks using synthetic inputs, loopback services, and an isolated real Electron workflow. A separate local Windows smoke test completed all 14 posture checks at the current user's permission level; inaccessible firmware/encryption checks remained unknown.
+Validation: 348 automated tests pass, including 56 new security checks and 13 diagnostics/boot checks using synthetic inputs, loopback services, and isolated real Electron processes. Error-logging tests cover fatal exceptions, warning-only rejections, startup failures, rotation, size limits, and failed log writes while preserving the original error handling. A separate local Windows smoke test completed all 14 posture checks at the current user's permission level; inaccessible firmware/encryption checks remained unknown.
 
 ## 0.2.1 — 2026-10-20 (test build)
 
