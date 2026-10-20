@@ -1,0 +1,16 @@
+﻿node_modules/
+dist/
+
+# Local reviews, test profiles, and generated publication files.
+/review/
+/publication/
+/user-data/
+
+# Machine-local configuration and logs.
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+Thumbs.db
+.DS_Store

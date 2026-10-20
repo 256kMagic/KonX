@@ -1,0 +1,368 @@
+// A terminal tab: xterm.js view bound to one SSH / Telnet / raw / serial connection.
+import { Terminal, FitAddon, SearchAddon, WebLinksAddon } from './vendor.js';
+import { h, icon, api, contextMenu, modal, toast, errMsg, debounce } from './ui.js';
+import { scheme } from './themes.js';
+
+let seq = 0;
+
+const PROTO_LABEL = { ssh: 'SSH2', telnet: 'Telnet', raw: 'Raw TCP', serial: 'Serial' };
+
+export class TerminalTab {
+  /**
+   * @param app   the App
+   * @param spec  {sessionId} for a saved session, or an inline session object
+   * @param meta  {name, protocol, colorScheme, fontSize}
+   */
+  constructor(app, spec, meta) {
+    this.app = app;
+    this.spec = spec;
+    this.meta = meta;
+    this.kind = 'terminal';
+    this.id = `t${++seq}-${Date.now().toString(36)}`;
+    this.title = meta.name;
+    this.icon = meta.protocol === 'serial' ? 'usb' : 'terminal';
+    this.protocol = meta.protocol || 'ssh';
+    this.state = 'idle';
+    this.info = null;
+
+    const s = app.settings;
+    this.term = new Terminal({
+      fontFamily: s.fontFamily,
+      fontSize: meta.fontSize || s.fontSize,
+      theme: scheme(meta.colorScheme || s.colorScheme),
+      scrollback: s.scrollback,
+      cursorStyle: s.cursorStyle,
+      cursorBlink: s.cursorBlink,
+      allowProposedApi: true,
+      macOptionIsMeta: true,
+      drawBoldTextInBrightColors: true,
+    });
+    this.fit = new FitAddon();
+    this.search = new SearchAddon();
+    this.term.loadAddon(this.fit);
+    this.term.loadAddon(this.search);
+    this.term.loadAddon(new WebLinksAddon((e, uri) => e.ctrlKey && api.invoke('app:openExternal', uri)));
+
+    this.wrap = h('div.term-wrap');
+    this.overlay = null;
+    this.findbar = null;
+    this.el = h('div.view', this.wrap);
+    this.term.open(this.wrap);
+    this.wrap.style.background = this.term.options.theme.background;
+
+    this.term.onData((d) => this._input(d, false));
+    this.term.onBinary((d) => this._input(d, true));
+    this.term.onResize(({ cols, rows }) => {
+      api.send('conn:resize', this.id, cols, rows);
+      this.app.updateStatus(this);
+    });
+    this.term.onTitleChange((t) => {
+      if (t && this.app.settings.useRemoteTitle) this.app.setTabTitle(this, t);
+    });
+    const copySel = debounce(() => {
+      const sel = this.term.getSelection();
+      if (sel && this.app.settings.copyOnSelect) api.invoke('clipboard:write', sel);
+    }, 120);
+    this.term.onSelectionChange(copySel);
+    this.term.attachCustomKeyEventHandler((e) => this._key(e));
+
+    this.wrap.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (this.app.settings.rightClick === 'paste') this.pasteClipboard();
+      else this._menu(e.clientX, e.clientY);
+    });
+    this.wrap.addEventListener('mousedown', (e) => {
+      // Middle click pastes, like most X11 / PuTTY-style terminals.
+      if (e.button === 1) {
+        e.preventDefault();
+        this.pasteClipboard();
+      }
+    });
+
+    this.ro = new ResizeObserver(debounce(() => this.refit(), 30));
+    this.ro.observe(this.wrap);
+  }
+
+  // ------------------------------------------------------------ connection lifecycle
+
+  async connect() {
+    this._hideOverlay();
+    this.state = 'connecting';
+    this.app.tabStateChanged(this);
+    this.refit();
+    const r = await api.invoke('conn:open', this.id, this.spec, { cols: this.term.cols, rows: this.term.rows }).catch((e) => ({ ok: false, error: errMsg(e) }));
+    if (!r.ok && this.state !== 'disconnected') this.onStatus({ state: 'disconnected', message: r.error });
+  }
+
+  onData(buf) {
+    this.term.write(buf);
+    if (!this.active) this.app.tabActivity(this);
+  }
+
+  onStatus(st) {
+    this.state = st.state;
+    if (st.info) this.info = st.info;
+    if (st.state === 'connected') {
+      this._hideOverlay();
+      this.term.focus();
+    }
+    if (st.state === 'disconnected') {
+      this.term.write(`\r\n\x1b[90m[${st.message || 'Disconnected'}]\x1b[0m\r\n`);
+      this._showOverlay(st.message || 'Disconnected');
+    }
+    this.app.tabStateChanged(this);
+  }
+
+  reconnect() {
+    this.term.write('\r\n');
+    this.connect();
+  }
+
+  disconnect() {
+    api.invoke('conn:close', this.id);
+  }
+
+  _input(data, binary) {
+    if (this.state === 'disconnected') {
+      if (data === '\r') this.reconnect();
+      return;
+    }
+    if (this.state !== 'connected') return;
+    api.send('conn:write', this.id, data, binary);
+  }
+
+  /** Send text as if typed (used by the button bar and the command window). */
+  sendText(text) {
+    if (this.state === 'connected') api.send('conn:write', this.id, text, false);
+  }
+
+  _showOverlay(message) {
+    this._hideOverlay();
+    this.overlay = h(
+      'div.term-overlay',
+      h('span.msg', message),
+      h('button.btn.sm.primary', { onclick: () => this.reconnect() }, icon('refresh'), 'Reconnect'),
+      h('span.hint', 'or press Enter')
+    );
+    this.wrap.append(this.overlay);
+  }
+
+  _hideOverlay() {
+    if (this.overlay) this.overlay.remove();
+    this.overlay = null;
+  }
+
+  // ------------------------------------------------------------ view
+
+  show() {
+    this.active = true;
+    requestAnimationFrame(() => {
+      this.refit();
+      this.term.focus();
+    });
+  }
+
+  hide() {
+    this.active = false;
+  }
+
+  focus() {
+    this.term.focus();
+  }
+
+  refit() {
+    if (!this.active || !this.wrap.offsetParent) return;
+    try {
+      this.fit.fit();
+    } catch {}
+  }
+
+  applySettings(s) {
+    this.term.options.fontFamily = s.fontFamily;
+    this.term.options.fontSize = this.meta.fontSize || s.fontSize;
+    this.term.options.theme = scheme(this.meta.colorScheme || s.colorScheme);
+    this.wrap.style.background = this.term.options.theme.background;
+    this.term.options.cursorStyle = s.cursorStyle;
+    this.term.options.cursorBlink = s.cursorBlink;
+    this.term.options.scrollback = s.scrollback;
+    this.refit();
+  }
+
+  zoom(delta) {
+    const cur = this.term.options.fontSize;
+    this.term.options.fontSize = delta === 0 ? this.app.settings.fontSize : Math.max(7, Math.min(36, cur + delta));
+    this.refit();
+  }
+
+  statusSegments() {
+    const i = this.info || {};
+    const segs = [];
+    const state = this.state === 'connected' ? ['ok', 'Connected'] : this.state === 'connecting' ? ['warn', 'Connecting'] : ['err', 'Disconnected'];
+    segs.push({ icon: this.state === 'connected' ? 'plug' : 'unplug', text: state[1], cls: state[0] });
+    segs.push({ text: PROTO_LABEL[this.protocol] || this.protocol });
+    if (this.protocol === 'serial') segs.push({ text: `${i.serialPort || ''} ${i.baudRate || ''}`.trim() });
+    else if (i.host) segs.push({ text: `${i.username ? i.username + '@' : ''}${i.host}:${i.port}` });
+    if (i.via) segs.push({ icon: 'route', text: 'via ' + i.via });
+    if (i.cipher) segs.push({ icon: 'lock', text: i.cipher });
+    segs.push({ text: `${this.term.cols}×${this.term.rows}` });
+    if (i.logging) segs.push({ icon: 'log', text: 'Logging', cls: 'ok', title: i.logging });
+    return segs;
+  }
+
+  // ------------------------------------------------------------ clipboard / keys / menu
+
+  copy() {
+    const sel = this.term.getSelection();
+    if (sel) api.invoke('clipboard:write', sel);
+  }
+
+  async pasteClipboard() {
+    const text = await api.invoke('clipboard:read');
+    if (text) this.paste(text);
+  }
+
+  async paste(text) {
+    if (this.state !== 'connected') return;
+    const lines = text.replace(/\r?\n$/, '').split(/\r?\n/);
+    if (lines.length > 1 && this.app.settings.confirmMultilinePaste) {
+      const ok = await modal({
+        title: 'Paste multiple lines?',
+        icon: 'alert',
+        body: [
+          h('div.message', `You are pasting ${lines.length} lines into ${this.title}. Each line will run as a command.`),
+          h('pre.fp', { style: { maxHeight: '220px', overflow: 'auto', whiteSpace: 'pre' } }, lines.slice(0, 40).join('\n') + (lines.length > 40 ? '\n…' : '')),
+        ],
+        buttons: [
+          { label: 'Cancel', value: null },
+          { label: `Paste ${lines.length} lines`, value: true, primary: true },
+        ],
+      });
+      this.term.focus();
+      if (!ok) return;
+    }
+    this.term.paste(text);
+  }
+
+  _key(e) {
+    if (e.type !== 'keydown') return true;
+    const k = e.key.toLowerCase();
+    if (e.ctrlKey && e.shiftKey && k === 'c') {
+      this.copy();
+      return false;
+    }
+    if ((e.ctrlKey && e.shiftKey && k === 'v') || (e.shiftKey && k === 'insert')) {
+      this.pasteClipboard();
+      return false;
+    }
+    if (e.ctrlKey && k === 'insert') {
+      this.copy();
+      return false;
+    }
+    if (e.ctrlKey && e.shiftKey && k === 'f') {
+      this.openFind();
+      return false;
+    }
+    if (e.ctrlKey && !e.shiftKey && (k === '=' || k === '+')) {
+      this.zoom(1);
+      return false;
+    }
+    if (e.ctrlKey && !e.shiftKey && k === '-') {
+      this.zoom(-1);
+      return false;
+    }
+    if (e.ctrlKey && !e.shiftKey && k === '0') {
+      this.zoom(0);
+      return false;
+    }
+    if (e.shiftKey && (k === 'pageup' || k === 'pagedown')) {
+      this.term.scrollPages(k === 'pageup' ? -1 : 1);
+      return false;
+    }
+    return true;
+  }
+
+  openFind() {
+    if (this.findbar) {
+      this.findbar.querySelector('input').select();
+      return;
+    }
+    const input = h('input', { placeholder: 'Find in scrollback', spellcheck: false });
+    const opts = { caseSensitive: false, regex: false };
+    const next = () => input.value && this.search.findNext(input.value, opts);
+    const prev = () => input.value && this.search.findPrevious(input.value, opts);
+    const close = () => {
+      this.findbar.remove();
+      this.findbar = null;
+      this.search.clearDecorations && this.search.clearDecorations();
+      this.term.clearSelection();
+      this.term.focus();
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') (e.shiftKey ? prev : next)();
+      else if (e.key === 'Escape') close();
+      e.stopPropagation();
+    });
+    input.addEventListener('input', () => input.value && this.search.findNext(input.value, { ...opts, incremental: true }));
+    this.findbar = h(
+      'div.findbar',
+      input,
+      h('button', { title: 'Previous (Shift+Enter)', onclick: prev }, icon('up')),
+      h('button', { title: 'Next (Enter)', onclick: next }, icon('chev-down')),
+      h('button', { title: 'Close (Esc)', onclick: close }, icon('x'))
+    );
+    this.wrap.append(this.findbar);
+    input.focus();
+  }
+
+  /** Copy the whole scrollback (e.g. a long show run) into a new Notepad document. */
+  async openScrollback() {
+    const buf = this.term.buffer.active;
+    const lines = [];
+    for (let i = 0; i < buf.length; i++) {
+      const line = buf.getLine(i);
+      const text = line.translateToString(true);
+      if (line.isWrapped && lines.length) lines[lines.length - 1] += text;
+      else lines.push(text);
+    }
+    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+    const np = await this.app.openNotepad();
+    np.newDoc({ text: lines.join('\n'), title: `${this.title} scrollback` });
+  }
+
+  async toggleLog() {
+    try {
+      if (this.info && this.info.logging) await api.invoke('conn:stopLog', this.id);
+      else await api.invoke('conn:startLog', this.id);
+    } catch (e) {
+      toast(errMsg(e), 'err');
+    }
+  }
+
+  _menu(x, y) {
+    const connected = this.state === 'connected';
+    const sel = this.term.getSelection();
+    contextMenu(x, y, [
+      { label: 'Copy', icon: 'copy', shortcut: 'Ctrl+Shift+C', disabled: !sel, action: () => this.copy() },
+      { label: 'Paste', icon: 'file', shortcut: 'Ctrl+Shift+V', disabled: !connected, action: () => this.pasteClipboard() },
+      { label: 'Select All', action: () => this.term.selectAll() },
+      { label: 'Find…', icon: 'search', shortcut: 'Ctrl+Shift+F', action: () => this.openFind() },
+      { label: 'Clear Scrollback', action: () => this.term.clear() },
+      { label: 'Open scrollback in Notepad', icon: 'edit', action: () => this.openScrollback() },
+      '-',
+      this.protocol === 'ssh' && { label: 'Open SFTP Tab', icon: 'file-transfer', disabled: !connected, action: () => this.app.openSftpFromTerminal(this) },
+      { label: this.info && this.info.logging ? 'Stop Logging' : 'Start Logging', icon: 'log', disabled: !connected, action: () => this.toggleLog() },
+      (this.protocol === 'serial' || this.protocol === 'telnet') && { label: 'Send Break', disabled: !connected, action: () => api.invoke('conn:break', this.id) },
+      '-',
+      connected
+        ? { label: 'Disconnect', icon: 'unplug', action: () => this.disconnect() }
+        : { label: 'Reconnect', icon: 'refresh', action: () => this.reconnect() },
+      { label: 'Clone Tab', icon: 'copy', action: () => this.app.openTerminal(this.spec, this.meta) },
+    ]);
+  }
+
+  dispose() {
+    this.ro.disconnect();
+    api.invoke('conn:close', this.id);
+    this.term.dispose();
+  }
+}

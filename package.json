@@ -1,0 +1,91 @@
+{
+  "name": "konx",
+  "productName": "KonX",
+  "version": "0.1.2",
+  "description": "SSH / Telnet / Serial terminal, SFTP file manager and network toolkit in one desktop app",
+  "main": "src/main/boot.js",
+  "author": "KonX",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node test/run-tests.js",
+    "test-server": "node test/ssh-test-server.js",
+    "make-icon": "electron scripts/make-icon.js",
+    "dist": "electron-builder --win",
+    "dist:dir": "electron-builder --win --dir"
+  },
+  "build": {
+    "appId": "com.konx.app",
+    "productName": "KonX",
+    "copyright": "Copyright © 2026",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json",
+      "!node_modules/@serialport/bindings-cpp/prebuilds/{android-*,darwin-*,linux-*,win32-ia32,win32-arm64}/**",
+      "!node_modules/**/*.{md,map,ts}",
+      "!node_modules/koffi/{doc,lib,vendor}/**",
+      "!node_modules/koffi/src/koffi/**/*.{cc,hh,inc,txt}",
+      "!node_modules/monaco-editor/{esm,dev,min-maps}/**",
+      "!assets/installer.nsh"
+    ],
+    "asarUnpack": [
+      "src/main/capture/**",
+      "node_modules/koffi/**",
+      "node_modules/@koromix/**",
+      "assets/get-npcap.ps1"
+    ],
+    "npmRebuild": false,
+    "win": {
+      "icon": "assets/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "KonX",
+      "artifactName": "KonX-Setup-${version}.exe",
+      "uninstallDisplayName": "KonX"
+    },
+    "portable": {
+      "artifactName": "KonX-${version}-portable.exe"
+    }
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-search": "^0.16.0",
+    "@xterm/addon-web-links": "^0.12.0",
+    "@xterm/xterm": "^6.0.0",
+    "koffi": "^3.3.3",
+    "monaco-editor": "^0.57.0",
+    "ssh2": "^1.17.0"
+  },
+  "devDependencies": {
+    "electron": "^44.9.0",
+    "electron-builder": "^26.15.3"
+  },
+  "optionalDependencies": {
+    "serialport": "^13.0.0"
+  }
+}

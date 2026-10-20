@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- KonX mark: a K whose arms end in network nodes ("connects"). -->
+  <defs>
+    <linearGradient id="bg" gradientUnits="userSpaceOnUse" x1="24" y1="24" x2="488" y2="488">
+      <stop offset="0" stop-color="#2f8ff0"/>
+      <stop offset="1" stop-color="#6a4ff0"/>
+    </linearGradient>
+    <linearGradient id="shine" gradientUnits="userSpaceOnUse" x1="0" y1="24" x2="0" y2="300">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="lift" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#1b1060" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#bg)"/>
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#shine)"/>
+  <g filter="url(#lift)">
+    <g stroke="#fff" stroke-width="58" stroke-linecap="round" fill="none">
+      <path d="M168 136V376"/>
+      <path d="M168 256 324 146M168 256 324 366"/>
+    </g>
+    <circle cx="324" cy="146" r="47" fill="#fff"/>
+    <circle cx="324" cy="366" r="47" fill="#fff"/>
+  </g>
+  <!-- Node "ports": punched through to the background. -->
+  <circle cx="324" cy="146" r="18" fill="url(#bg)"/>
+  <circle cx="324" cy="146" r="18" fill="url(#shine)"/>
+  <circle cx="324" cy="366" r="18" fill="url(#bg)"/>
+</svg>
