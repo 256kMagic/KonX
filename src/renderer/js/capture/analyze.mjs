@@ -247,13 +247,17 @@ export class Analyzer {
     const d = pkt.d;
     const q = d.dns;
     if (q.kind !== 'DNS') return;
+    // IDs are scoped to a client/server transport pair. A resolver retry can use
+    // the same client port and ID against multiple DNS servers concurrently.
+    const key = q.qr
+      ? `${d.tcp ? 'TCP' : 'UDP'}|${d.dst}|${d.dport}|${d.src}|${d.sport}|${q.id}`
+      : `${d.tcp ? 'TCP' : 'UDP'}|${d.src}|${d.sport}|${d.dst}|${d.dport}|${q.id}`;
     if (!q.qr) {
       this.dns.queries++;
-      this.dnsPending.set(`${d.src}|${d.sport}|${q.id}`, { ts: pkt.ts, no: pkt.no, name: q.qname, server: d.dst });
+      this.dnsPending.set(key, { ts: pkt.ts, no: pkt.no, name: q.qname, server: d.dst });
       return;
     }
     this.dns.responses++;
-    const key = `${d.dst}|${d.dport}|${q.id}`;
     const pend = this.dnsPending.get(key);
     if (pend) {
       this.dnsPending.delete(key);
@@ -536,8 +540,9 @@ export class Analyzer {
     for (const [fromA, st] of Object.entries(dirs)) {
       for (const s of st.pending.sort((x, y) => seqDiff(x.seq, y.seq))) {
         if (seqDiff((s.seq + s.data.length) >>> 0, st.next) <= 0) continue;
-        emit(fromA === 'true', new TextEncoder().encode(`[${seqDiff(s.seq, st.next)} bytes missing]`), s.no);
-        emit(fromA === 'true', s.data, s.no);
+        const gap = seqDiff(s.seq, st.next);
+        if (gap > 0) emit(fromA === 'true', new TextEncoder().encode(`[${gap} bytes missing]`), s.no);
+        emit(fromA === 'true', s.data.subarray(Math.max(0, -gap)), s.no);
         st.next = (s.seq + s.data.length) >>> 0;
       }
     }

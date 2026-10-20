@@ -52,6 +52,9 @@ function tokenize(s) {
       i += 2;
       continue;
     }
+    // A lone boolean operator must fail validation; otherwise the word scanner
+    // below stops at this same character forever (including on every input event).
+    if (ch === '&' || ch === '|') throw new Error(`Unexpected operator "${ch}"; use "${ch + ch}"`);
     if ('<>=~!'.includes(ch)) {
       toks.push(ch === '!' ? { t: 'not' } : { t: 'op', v: ch });
       i++;
@@ -86,10 +89,12 @@ function ipToInt(s) {
 }
 
 function cidrMatcher(cidr) {
-  const [base, bitsS] = cidr.split('/');
+  const match = /^([^/]+)\/(\d{1,2})$/.exec(cidr);
+  if (!match) return null;
+  const [, base, bitsS] = match;
   const bits = Number(bitsS);
   const b = ipToInt(base);
-  if (b === null || !(bits >= 0 && bits <= 32)) return null;
+  if (b === null || !Number.isInteger(bits) || !(bits >= 0 && bits <= 32)) return null;
   const size = 2 ** (32 - bits);
   const net = Math.floor(b / size);
   return (v) => {
@@ -287,6 +292,7 @@ export function compileFilter(text) {
     if (!m) throw new Error(`Bad port "${v}"`);
     const lo = Number(m[1]);
     const hi = m[2] ? Number(m[2]) : lo;
+    if (lo > 65535 || hi > 65535 || hi < lo) throw new Error(`Bad port "${v}" (use 0–65535 or an ascending range)`);
     const inR = (x) => x != null && x >= lo && x <= hi;
     if (which === 'src') return (p) => inR(p.d.sport);
     if (which === 'dst') return (p) => inR(p.d.dport);
@@ -375,6 +381,9 @@ export function compileFilter(text) {
       const v = expectValue(`a value after "${w}"`);
       return (p) => cmp(op, fieldValue(p, field), v);
     }
+    // "vlan" tests for the layer, including an 802.1p priority tag (VID 0).
+    // Keep the vlan.id alias for comparisons such as "vlan == 20".
+    if (lw === 'vlan') return (p) => !!p.d.f.vlan;
     if (!field.includes('.') && !PROTOCOLS.has(field)) throw new Error(`Unknown protocol or field "${w}"`);
     return (p) => truthy(fieldValue(p, field));
   };

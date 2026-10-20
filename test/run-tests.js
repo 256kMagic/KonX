@@ -422,6 +422,11 @@ const fakeCrypt = {
   await require('./capture-lifecycle-regression-tests.cjs').runCaptureLifecycleRegressionTests(test);
   await require('./ssh-close-regression-tests.cjs').runSshCloseRegressionTests(test);
   await require('./tab-close-ui-regression-tests.cjs').runTabCloseUiRegressionTests(test);
+  await require('./connection-review-regression-tests.cjs').runConnectionReviewRegressionTests(test);
+  await require('./file-review-regression-tests.cjs').runFileReviewRegressionTests(test);
+  const { runCaptureReviewRegressionTests } = await import(require('url').pathToFileURL(path.join(__dirname, 'capture-review-regression-tests.mjs')).href);
+  await runCaptureReviewRegressionTests(test);
+  await require('./tool-review-regression-tests.cjs').runToolReviewRegressionTests(test);
 
   const failed = results.filter((r) => !r[0]);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

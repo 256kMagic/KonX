@@ -176,7 +176,7 @@ The build creates `dist/KonX-Setup-0.1.2.exe` and `dist/KonX-0.1.2-portable.exe`
 npm test
 ~~~
 
-The current suite contains **117 automated tests** covering connections, host-key/authentication handling, SFTP, session storage/imports, network tools, packet decoding/filtering/analysis, capture files, and editor operations. Regression checks also cover download path validation, save/upload recovery, prompt handling, capture-file isolation, and closing connection tabs. Some live-capture behavior additionally depends on Windows permissions, adapters, and installed drivers.
+The current source suite contains **159 automated tests** covering connections, host-key/authentication handling, SFTP, session storage/imports, network tools, packet decoding/filtering/analysis, capture files, and editor operations. Regression checks also cover download cancellation and original-file preservation, editor reload/save recovery, prompt handling, capture-file isolation, malformed filters/files, large scans, and closing connection tabs. Some live-capture behavior additionally depends on Windows permissions, adapters, and installed drivers.
 
 For a local SSH/SFTP demo with a simulated switch CLI:
 
@@ -207,6 +207,8 @@ Connect to `127.0.0.1` on port `2222`, username `test`, password `test`. These c
 KonX is an early **0.1.x** project. The Windows x64 release is the currently tested distribution. Packet filters implement KonX's supported syntax rather than the complete Wireshark filter language, capture insights are diagnostic aids, and serial/capture support depends on the available hardware and drivers.
 
 Version **0.1.2** fixes the connection-tab close button so a click closes the tab and disconnects its session. It also includes the earlier fixes for SFTP download paths, connection errors and trust prompts, editor save state, remote-edit upload recovery, and loading capture files while a live capture is active.
+
+Changes in development after 0.1.2 are recorded in the [changelog](docs/CHANGELOG.md).
 
 For help, start with the [user guide](docs/USER_GUIDE.md). Common first checks:
 

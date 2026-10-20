@@ -52,12 +52,13 @@ async function checkDownloadDestination(root, destination) {
 }
 
 class SftpSession {
-  constructor(id, client, sftp, session, owned) {
+  constructor(id, client, sftp, session, owned, dispose) {
     this.id = id;
     this.client = client;
     this.sftp = sftp;
     this.session = session;
     this.owned = owned; // we opened the SSH connection ourselves and must close it
+    this.dispose = dispose;
     this.home = '/';
   }
 
@@ -146,6 +147,7 @@ class SftpSession {
   }
 
   close() {
+    if (this.dispose) return this.dispose();
     try {
       this.sftp.end();
     } catch {}
@@ -236,19 +238,24 @@ class TransferQueue {
   async _run(job) {
     const started = Date.now();
     let channel;
+    let stagingDir;
+    let stagingFile;
     try {
       // Conflict handling happens just before the transfer so batch answers apply.
       const proceed = await job.checkConflict();
+      if (job.status === 'cancelled') return;
       if (!proceed) {
         job.status = 'skipped';
         this._update(job);
         return;
       }
-      if (job.status === 'cancelled') return;
       channel = await job.sess.channel();
       this.active.get(job.id).channel = channel;
+      // A cancel can arrive while SSH is opening the worker's channel.
+      if (job.status === 'cancelled') return;
       let lastEmit = 0;
       const step = (transferred, _chunk, total) => {
+        if (job.status === 'cancelled') return;
         job.done = transferred;
         job.size = total;
         const now = Date.now();
@@ -266,11 +273,23 @@ class TransferQueue {
         }
       } else {
         if (job.checkDestination) await job.checkDestination();
-        await p((cb) => channel.fastGet(job.src, job.dst, { step, concurrency: 32 }, cb));
+        if (job.status === 'cancelled') return;
+        // fastGet truncates its local destination immediately. Keep the original
+        // file intact until every byte has arrived, including on cancellation.
+        stagingDir = await fs.promises.mkdtemp(path.join(path.dirname(job.dst), '.konx-download-'));
+        stagingFile = path.join(stagingDir, 'download');
+        if (job.status === 'cancelled') return;
+        await p((cb) => channel.fastGet(job.src, stagingFile, { step, concurrency: 32 }, cb));
+        if (job.status === 'cancelled') return;
         if (job.preserveTime && job.mtime) {
           const t = new Date(job.mtime);
-          await fs.promises.utimes(job.dst, t, t).catch(() => {});
+          await fs.promises.utimes(stagingFile, t, t).catch(() => {});
         }
+        if (job.checkDestination) await job.checkDestination();
+        if (job.status === 'cancelled') return;
+        // Commit synchronously after the final cancellation/path checks: an IPC
+        // cancel must not race an already-dispatched asynchronous replacement.
+        fs.renameSync(stagingFile, job.dst);
       }
       if (job.status === 'cancelled') return;
       job.done = job.size;
@@ -283,8 +302,6 @@ class TransferQueue {
         job.status = 'error';
         job.error = e.message;
         this._update(job);
-      } else if (job.direction === 'down') {
-        fs.promises.unlink(job.dst).catch(() => {});
       }
     } finally {
       if (channel) {
@@ -292,6 +309,8 @@ class TransferQueue {
           channel.end();
         } catch {}
       }
+      if (stagingFile) await fs.promises.unlink(stagingFile).catch(() => {});
+      if (stagingDir) await fs.promises.rmdir(stagingDir).catch(() => {});
     }
   }
 }
@@ -303,6 +322,7 @@ class SftpManager {
   constructor(deps) {
     this.deps = deps;
     this.sessions = new Map();
+    this.pending = new Map();
     this.queue = new TransferQueue(deps.emit);
     this.watchers = new Map();
   }
@@ -315,43 +335,111 @@ class SftpManager {
 
   /** spec: {sessionId} | {fromConn: terminalTabId} | inline session */
   async open(id, spec) {
+    this.close(id);
     let client;
+    let sftp;
+    let sess;
     let session;
-    let owned = true;
-    if (spec.fromConn) {
-      const shared = this.deps.connections.sshClient(spec.fromConn);
-      if (!shared) throw new Error('That terminal tab is not connected over SSH');
-      client = shared.client;
-      session = shared.session;
-      owned = false;
-    } else {
-      session = this.deps.connections.resolveSession(spec);
-      if ((session.protocol || 'ssh') !== 'ssh') throw new Error('SFTP needs an SSH session');
-      const hooks = {
-        knownHost: (h, pt) => this.deps.store.hostKeyFor(h, pt),
-        saveHost: (h, pt, rec) => this.deps.store.saveHostKey(h, pt, rec),
-        ask: this.deps.ask,
-        log: () => {},
-      };
-      const r = await ssh.connectChain(session, hooks, (jid) => this.deps.store.getSessionSecret(jid));
-      client = r.client;
-    }
-    const sftp = await p((cb) => client.sftp(cb));
-    const sess = new SftpSession(id, client, sftp, session, owned);
-    sess.home = await sess.realpath('.').catch(() => '/');
-    this.sessions.set(id, sess);
-    client.once('close', () => {
-      if (this.sessions.get(id) === sess) {
-        this.sessions.delete(id);
-        this.queue.cancelForSession(id);
+    const owned = !spec.fromConn;
+    let clientEnded = false;
+    let channelEnded = false;
+    let cancelled = false;
+    let rejectClosed;
+    const closed = new Promise((_resolve, reject) => { rejectClosed = reject; });
+    // A close can precede the first asynchronous operation (for example, a
+    // failed session lookup). Retain a rejection handler until races attach.
+    closed.catch(() => {});
+    const dispose = () => {
+      if (sftp && !channelEnded) {
+        channelEnded = true;
+        try { sftp.end(); } catch {}
+      }
+      if (client && owned && !clientEnded) {
+        clientEnded = true;
+        try { client.end(); } catch {}
+      }
+      if (client && !owned) {
+        client.removeListener('error', onError);
+        client.removeListener('close', onClose);
+      }
+    };
+    const cancel = (error = new Error('SFTP connection cancelled')) => {
+      cancelled = true;
+      rejectClosed(error);
+      dispose();
+    };
+    const onClose = () => {
+      cancel(new Error('SFTP connection closed'));
+      if (this.sessions.get(id) === sess && sess) {
+        this.close(id);
         this.deps.emit('sftp:closed', id);
       }
-    });
-    return {
-      home: sess.home,
-      title: `${session.username || ''}@${session.host}`,
-      name: session.name || session.host,
+      client?.removeListener('error', onError);
+      client?.removeListener('close', onClose);
     };
+    const onError = (error) => {
+      cancel(error);
+      if (this.sessions.get(id) === sess && sess) {
+        this.close(id);
+        this.deps.emit('sftp:closed', id);
+      }
+    };
+    const token = { cancel };
+    this.pending.set(id, token);
+    const wait = (operation) => Promise.race([operation, closed]);
+    const connected = (value) => {
+      client = value;
+      client.on('error', onError);
+      client.once('close', onClose);
+      if (cancelled) {
+        dispose();
+        throw new Error('SFTP connection cancelled');
+      }
+    };
+    try {
+      if (spec.fromConn) {
+        const shared = this.deps.connections.sshClient(spec.fromConn);
+        if (!shared) throw new Error('That terminal tab is not connected over SSH');
+        connected(shared.client);
+        session = shared.session;
+      } else {
+        session = this.deps.connections.resolveSession(spec);
+        if ((session.protocol || 'ssh') !== 'ssh') throw new Error('SFTP needs an SSH session');
+        const hooks = {
+          knownHost: (h, pt) => this.deps.store.hostKeyFor(h, pt),
+          saveHost: (h, pt, rec) => this.deps.store.saveHostKey(h, pt, rec),
+          ask: async (payload) => {
+            if (cancelled) return null;
+            const result = await this.deps.ask(payload);
+            return cancelled ? null : result;
+          },
+          log: () => {},
+        };
+        await wait(ssh.connectChain(session, hooks, (jid) => this.deps.store.getSessionSecret(jid)).then((r) => connected(r.client)));
+      }
+      sftp = await wait(p((cb) => client.sftp(cb)).then((channel) => {
+        sftp = channel;
+        if (cancelled) {
+          dispose();
+          throw new Error('SFTP connection cancelled');
+        }
+        return channel;
+      }));
+      sess = new SftpSession(id, client, sftp, session, owned, dispose);
+      sess.home = await wait(sess.realpath('.').catch(() => '/'));
+      if (cancelled || this.pending.get(id) !== token) throw new Error('SFTP connection cancelled');
+      this.sessions.set(id, sess);
+      return {
+        home: sess.home,
+        title: `${session.username || ''}@${session.host}`,
+        name: session.name || session.host,
+      };
+    } catch (error) {
+      cancel(error);
+      throw error;
+    } finally {
+      if (this.pending.get(id) === token) this.pending.delete(id);
+    }
   }
 
   list(id, dir) {
@@ -411,6 +499,9 @@ class SftpManager {
   /** Upload local files/folders into a remote directory. */
   async upload(id, localPaths, remoteDir, opts = {}) {
     const s = this.get(id);
+    const checkSession = () => {
+      if (this.sessions.get(id) !== s) throw new Error('SFTP session is closed');
+    };
     const batch = { policy: opts.conflict || 'ask' };
     let count = 0;
     const addFile = (src, dst, st) => {
@@ -437,7 +528,9 @@ class SftpManager {
       count++;
     };
     const walk = async (src, dst) => {
+      checkSession();
       const st = await fs.promises.stat(src);
+      checkSession();
       if (st.isDirectory()) {
         await s.mkdirp(dst);
         for (const name of await fs.promises.readdir(src)) await walk(path.join(src, name), posix.join(dst, name));
@@ -452,14 +545,19 @@ class SftpManager {
   /** Download remote files/folders into a local directory. */
   async download(id, remotePaths, localDir, opts = {}) {
     const s = this.get(id);
+    const checkSession = () => {
+      if (this.sessions.get(id) !== s) throw new Error('SFTP session is closed');
+    };
     const batch = { policy: opts.conflict || 'ask' };
     await fs.promises.mkdir(localDir, { recursive: true });
     // A user-selected linked directory is allowed; its resolved target is the root.
     const root = await fs.promises.realpath(localDir);
     let count = 0;
     const walk = async (src, dst) => {
+      checkSession();
       await checkDownloadDestination(root, dst);
       const st = await s.stat(src);
+      checkSession();
       if (((st.mode || 0) & S_IFMT) === S_IFDIR) {
         await fs.promises.mkdir(dst, { recursive: true });
         const entries = await p((cb) => s.sftp.readdir(src, cb));
@@ -567,6 +665,11 @@ class SftpManager {
   }
 
   close(id) {
+    const pending = this.pending.get(id);
+    if (pending) {
+      this.pending.delete(id);
+      pending.cancel();
+    }
     const s = this.sessions.get(id);
     if (!s) return;
     this.sessions.delete(id);
@@ -581,7 +684,7 @@ class SftpManager {
   }
 
   closeAll() {
-    for (const id of [...this.sessions.keys()]) this.close(id);
+    for (const id of new Set([...this.pending.keys(), ...this.sessions.keys()])) this.close(id);
   }
 }
 

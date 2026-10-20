@@ -294,10 +294,12 @@ function registerIpc() {
     portscan: nettools.portScan,
     traceroute: nettools.traceroute,
   };
-  handle('tools:start', (kind, params) => {
+  handle('tools:start', (kind, params, requestedId) => {
     const fn = runners[kind];
     if (!fn) throw new Error('Unknown tool ' + kind);
-    const id = ++jobSeq;
+    if (requestedId !== undefined && (typeof requestedId !== 'string' || !requestedId || requestedId.length > 128)) throw new Error('Invalid tool job ID');
+    const id = requestedId ?? ++jobSeq;
+    if (jobs.has(id)) throw new Error('Tool job is already running');
     const signal = { stopped: false, onStop: null };
     jobs.set(id, signal);
     const emit = (type, data) => send('tools:event', id, type, data);

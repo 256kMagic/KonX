@@ -37,24 +37,34 @@ function readPcapng(u8, dv) {
   let ifaces = [];
   const packets = [];
   let off = 0;
-  while (off + 12 <= u8.length) {
+  const bad = (message) => { throw new Error(`Malformed pcapng at byte ${off}: ${message}`); };
+  while (off < u8.length) {
+    if (off + 12 > u8.length) bad('truncated block header');
     const type = dv.getUint32(off, little);
     if (type === 0x0a0d0d0a) {
       // Section header: the byte-order magic decides endianness for the whole section.
-      little = dv.getUint32(off + 8, true) === 0x1a2b3c4d;
+      const bom = dv.getUint32(off + 8, true);
+      if (bom !== 0x1a2b3c4d && bom !== 0x4d3c2b1a) bad('invalid section byte-order magic');
+      little = bom === 0x1a2b3c4d;
       ifaces = [];
     }
     const blen = dv.getUint32(off + 4, little);
-    if (blen < 12 || off + blen > u8.length) break;
+    if (blen < 12 || blen % 4 || off + blen > u8.length) bad('invalid or truncated block length');
+    if (dv.getUint32(off + blen - 4, little) !== blen) bad('block length trailer does not match');
     const body = off + 8;
-    if (type === 1) {
+    if (type === 0x0a0d0d0a) {
+      if (blen < 28) bad('section header is too short');
+    } else if (type === 1) {
       // Interface description: link type, snaplen and timestamp resolution option.
-      const iface = { linktype: dv.getUint16(body, little), tsdiv: 1e6, name: '' };
+      if (blen < 20) bad('interface description is too short');
+      const iface = { linktype: dv.getUint16(body, little), snaplen: dv.getUint32(body + 4, little), tsdiv: 1e6, name: '' };
       let o = body + 8;
       const end = off + blen - 4;
-      while (o + 4 <= end) {
+      while (o < end) {
+        if (o + 4 > end) bad('truncated interface option');
         const code = dv.getUint16(o, little);
         const olen = dv.getUint16(o + 2, little);
+        if (o + 4 + ((olen + 3) & ~3) > end) bad('interface option length exceeds its block');
         if (code === 0) break;
         if (code === 9 && olen >= 1) {
           const r = u8[o + 4];
@@ -66,17 +76,25 @@ function readPcapng(u8, dv) {
       }
       ifaces.push(iface);
     } else if (type === 6 || type === 2) {
+      if (blen < 32) bad('packet block is too short');
       const ifid = type === 6 ? dv.getUint32(body, little) : dv.getUint16(body, little);
-      const iface = ifaces[ifid] || { linktype: 1, tsdiv: 1e6 };
+      const iface = ifaces[ifid];
+      if (!iface) bad(`packet references unknown interface ${ifid}`);
       const ts = (dv.getUint32(body + 4, little) * 2 ** 32 + dv.getUint32(body + 8, little)) / iface.tsdiv;
       const caplen = dv.getUint32(body + 12, little);
       const len = dv.getUint32(body + 16, little);
-      const data = u8.slice(body + 20, body + 20 + Math.min(caplen, blen - 32));
-      packets.push({ ts, caplen: data.length, len, linktype: iface.linktype, data });
+      if (caplen > len || Math.ceil(caplen / 4) * 4 > blen - 32) bad('captured packet length exceeds its block or original length');
+      const data = u8.slice(body + 20, body + 20 + caplen);
+      packets.push({ ts, caplen, len, linktype: iface.linktype, data });
     } else if (type === 3) {
-      const iface = ifaces[0] || { linktype: 1 };
+      if (blen < 16) bad('simple packet block is too short');
+      const iface = ifaces[0];
+      if (!iface) bad('simple packet references unknown interface 0');
       const len = dv.getUint32(body, little);
-      const caplen = Math.min(len, blen - 16);
+      // Simple packets omit caplen; the first interface's snaplen determines it.
+      // The bytes added to align the block to four bytes are not packet payload.
+      const caplen = iface.snaplen ? Math.min(len, iface.snaplen) : len;
+      if (Math.ceil(caplen / 4) * 4 !== blen - 16) bad('simple packet length does not match its block');
       packets.push({ ts: 0, caplen, len, linktype: iface.linktype, data: u8.slice(body + 4, body + 4 + caplen) });
     }
     off += blen;

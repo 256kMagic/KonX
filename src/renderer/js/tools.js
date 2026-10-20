@@ -72,6 +72,8 @@ class ToolView {
     this.icon = def.icon;
     this.state = 'idle';
     this.jobId = null;
+    this.jobSeq = 0;
+    this.disposed = false;
     this.el = h('div.view');
   }
 
@@ -99,13 +101,21 @@ class ToolView {
   }
 
   async runJob(kind, params) {
-    if (this.jobId) await this.stop();
+    if (this.disposed || this.jobId) return;
+    // Subscribe before starting: validation errors and short jobs can finish
+    // before the tools:start IPC reply reaches this window.
+    const id = `${this.id}:${++this.jobSeq}`;
+    this.jobId = id;
+    this.app.registerJob(id, this);
+    this.started = Date.now();
+    this.setRunning(true);
     try {
-      this.jobId = await api.invoke('tools:start', kind, params);
-      this.app.registerJob(this.jobId, this);
-      this.started = Date.now();
-      this.setRunning(true);
+      await api.invoke('tools:start', kind, params, id);
     } catch (e) {
+      if (this.disposed || this.jobId !== id) return;
+      this.app.unregisterJob(id);
+      this.jobId = null;
+      this.setRunning(false);
       toast(errMsg(e), 'err');
     }
   }
@@ -115,6 +125,7 @@ class ToolView {
   }
 
   onJobEvent(type, data) {
+    if (this.disposed) return;
     if (type === 'done' || type === 'error') {
       this.app.unregisterJob(this.jobId);
       this.jobId = null;
@@ -149,8 +160,10 @@ class ToolView {
   }
 
   dispose() {
-    this.stop();
+    this.disposed = true;
+    this.stop().catch(() => {});
     if (this.jobId) this.app.unregisterJob(this.jobId);
+    this.jobId = null;
   }
 }
 
@@ -215,6 +228,7 @@ class PingTool extends ToolView {
   }
 
   start() {
+    if (this.disposed || this.jobId) return;
     const hosts = this.hosts.value.trim();
     if (!hosts) return toast('Enter at least one host');
     this.stats.clear();
@@ -393,6 +407,7 @@ class SweepTool extends ToolView {
   }
 
   async start() {
+    if (this.disposed || this.jobId) return;
     this.hosts.clear();
     this.progress = { done: 0, total: 0, alive: 0 };
     this.app.setTabTitle(this, 'Sweep ' + this.targets.value.trim().split(/[\s,]+/)[0]);
@@ -505,6 +520,7 @@ class PortScanTool extends ToolView {
   }
 
   async start() {
+    if (this.disposed || this.jobId) return;
     if (!this.targets.value.trim()) return toast('Enter a target');
     this.results = [];
     this.progress = {};
@@ -590,14 +606,15 @@ class TraceTool extends ToolView {
   }
 
   async start() {
+    if (this.disposed || this.jobId) return;
     const host = this.host.value.trim();
     if (!host) return toast('Enter a destination');
     this.hops = [];
     this.log.replaceChildren();
     this.app.setTabTitle(this, 'Trace ' + host);
     this.table.setRows([]);
-    await this.runJob('traceroute', { host, maxHops: Number(this.maxHops.value) || 30, timeout: Number(this.timeout.value) || 1000, resolveNames: this.names.checked });
     this.summary.replaceChildren(h('span', `Tracing route to ${host}…`));
+    await this.runJob('traceroute', { host, maxHops: Number(this.maxHops.value) || 30, timeout: Number(this.timeout.value) || 1000, resolveNames: this.names.checked });
   }
 
   onEvent(type, d) {
