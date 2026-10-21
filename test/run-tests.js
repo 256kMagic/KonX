@@ -466,6 +466,8 @@ const fakeCrypt = {
   await require('./knowledge-tests.cjs').runKnowledgeTests(test);
   await require('./ai-integration-tests.cjs').runAiIntegrationTests(test);
   await require('./ai-ui-tests.cjs').runAiUiTests(test);
+  await require('./theme-tests.cjs').runThemeTests(test);
+  await require('./theme-ui-tests.cjs').runThemeUiTests(test);
 
   const failed = results.filter((r) => !r[0]);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

@@ -1,7 +1,8 @@
 // A terminal tab: xterm.js view bound to one SSH / Telnet / raw / serial connection.
 import { Terminal, FitAddon, SearchAddon, WebLinksAddon } from './vendor.js';
 import { h, icon, api, contextMenu, modal, toast, errMsg, debounce } from './ui.js';
-import { scheme } from './themes.js';
+import { scheme, terminalTheme, usesThemeEffects } from './themes.js';
+import { mountThemeOutput } from './theme-effects.js';
 
 let seq = 0;
 
@@ -29,7 +30,8 @@ export class TerminalTab {
     this.term = new Terminal({
       fontFamily: s.fontFamily,
       fontSize: meta.fontSize || s.fontSize,
-      theme: scheme(meta.colorScheme || s.colorScheme),
+      theme: terminalTheme(s, meta),
+      allowTransparency: true,
       scrollback: s.scrollback,
       cursorStyle: s.cursorStyle,
       cursorBlink: s.cursorBlink,
@@ -48,7 +50,8 @@ export class TerminalTab {
     this.findbar = null;
     this.el = h('div.view', this.wrap);
     this.term.open(this.wrap);
-    this.wrap.style.background = this.term.options.theme.background;
+    mountThemeOutput(this.wrap);
+    this.applyColors(s);
 
     this.term.onData((d) => this._input(d, false));
     this.term.onBinary((d) => this._input(d, true));
@@ -180,12 +183,17 @@ export class TerminalTab {
   applySettings(s) {
     this.term.options.fontFamily = s.fontFamily;
     this.term.options.fontSize = this.meta.fontSize || s.fontSize;
-    this.term.options.theme = scheme(this.meta.colorScheme || s.colorScheme);
-    this.wrap.style.background = this.term.options.theme.background;
+    this.applyColors(s);
     this.term.options.cursorStyle = s.cursorStyle;
     this.term.options.cursorBlink = s.cursorBlink;
     this.term.options.scrollback = s.scrollback;
     this.refit();
+  }
+
+  applyColors(s) {
+    this.term.options.theme = terminalTheme(s, this.meta);
+    this.wrap.style.background = scheme(this.meta.colorScheme || s.colorScheme || 'app', s.uiTheme).background;
+    this.wrap.classList.toggle('theme-output-enabled', usesThemeEffects(s, this.meta));
   }
 
   zoom(delta) {

@@ -1,7 +1,7 @@
 {
   "name": "konx",
   "productName": "KonX",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Windows terminal, SFTP, packet analysis, security, wireless and AI troubleshooting workspace",
   "main": "src/main/boot.js",
   "author": "KonX",
@@ -45,7 +45,7 @@
     ],
     "npmRebuild": false,
     "win": {
-      "icon": "assets/icon.png",
+      "icon": "assets/icon.ico",
       "target": [
         {
           "target": "nsis",

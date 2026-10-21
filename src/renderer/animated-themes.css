@@ -1,0 +1,507 @@
+/* Optional animated appearance. Classic Dark and Light never match these rules.
+   Effects belong to the chrome and output backgrounds, not the tool layout. */
+:root.theme-animated {
+  --ok: #8fe0ad;
+  --warn: #f3cf73;
+  --err: #ff9a9a;
+  --hover: color-mix(in srgb, var(--accent) 7%, transparent);
+  --accent-soft: color-mix(in srgb, var(--accent) 13%, var(--panel));
+  --sel: color-mix(in srgb, var(--accent) 18%, var(--panel));
+  --border: color-mix(in srgb, var(--muted) 28%, var(--panel));
+  --border-strong: color-mix(in srgb, var(--muted) 43%, var(--panel));
+  --shadow: 0 12px 40px #0009;
+  --theme-glow: color-mix(in srgb, var(--accent) 28%, transparent);
+  --theme-ribbon: linear-gradient(90deg, var(--accent), var(--theme-secondary), var(--theme-third), var(--accent));
+  color-scheme: dark;
+}
+
+:root[data-theme="arc-reactor"] {
+  --bg: #020711;
+  --panel: #071421;
+  --panel-2: #0d2637;
+  --panel-3: #16394c;
+  --text: #e7f8ff;
+  --text-strong: #f4fcff;
+  --muted: #a5c6d8;
+  --faint: #8aabbd;
+  --accent: #4ceaff;
+  --accent-strong: #87f2ff;
+  --theme-button-text: #00151b;
+  --theme-secondary: #006aff;
+  --theme-third: #55ffc8;
+}
+
+:root[data-theme="chroma-rgb"] {
+  --bg: #05050e;
+  --panel: #101222;
+  --panel-2: #192037;
+  --panel-3: #26324c;
+  --text: #f4f5ff;
+  --text-strong: #ffffff;
+  --muted: #b8bdd8;
+  --faint: #9ba4c2;
+  --accent: #63f4ff;
+  --accent-strong: #a1faff;
+  --theme-button-text: #06121c;
+  --theme-secondary: #ff3cb4;
+  --theme-third: #d7ff44;
+  --theme-ribbon: linear-gradient(90deg, #ff3c7c, #ffb938, #e7ff26, #50ff8f, #00ecff, #6970ff, #ed49ff, #ff3c7c);
+}
+
+:root[data-theme="matrix-mainframe"] {
+  --bg: #020804;
+  --panel: #07180e;
+  --panel-2: #112a1a;
+  --panel-3: #1e3d28;
+  --text: #e8ffe9;
+  --text-strong: #f5fff5;
+  --muted: #a1caa9;
+  --faint: #89b591;
+  --accent: #9aff50;
+  --accent-strong: #bbff8b;
+  --theme-button-text: #091400;
+  --theme-secondary: #00f4a8;
+  --theme-third: #cfff5d;
+  --radius: 3px;
+}
+
+:root[data-theme="synthwave-grid"] {
+  --bg: #0a0315;
+  --panel: #150d25;
+  --panel-2: #25183a;
+  --panel-3: #392650;
+  --text: #f9eeff;
+  --text-strong: #fff8ff;
+  --muted: #c7b2d7;
+  --faint: #ae96c1;
+  --accent: #ff9adf;
+  --accent-strong: #ffc2ed;
+  --theme-button-text: #21051d;
+  --theme-secondary: #00deff;
+  --theme-third: #ffd26c;
+}
+
+:root[data-theme="hologram-prism"] {
+  --bg: #060512;
+  --panel: #131127;
+  --panel-2: #242044;
+  --panel-3: #37305d;
+  --text: #f3f0ff;
+  --text-strong: #fcfaff;
+  --muted: #c4bbe2;
+  --faint: #a99dca;
+  --accent: #d0b0ff;
+  --accent-strong: #e3d0ff;
+  --theme-button-text: #160a2b;
+  --theme-secondary: #54fff0;
+  --theme-third: #ff71e9;
+}
+
+:root[data-theme="plasma-forge"] {
+  --bg: #100510;
+  --panel: #21101d;
+  --panel-2: #342033;
+  --panel-3: #4b2f45;
+  --text: #fff0e9;
+  --text-strong: #fff9f4;
+  --muted: #d7b7c2;
+  --faint: #bc9ba9;
+  --accent: #ffbe87;
+  --accent-strong: #ffd8b7;
+  --theme-button-text: #230e03;
+  --theme-secondary: #d35aff;
+  --theme-third: #ff7634;
+  --radius: 4px;
+}
+
+@property --konx-theme-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+/* One thin app frame and a rail in the existing 42px toolbar. */
+:root.theme-animated #app { position: relative; isolation: isolate; }
+:root.theme-animated #app::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  padding: 1px;
+  pointer-events: none;
+  background: conic-gradient(from var(--konx-theme-angle), var(--accent), transparent 18%, var(--theme-secondary) 40%, var(--theme-third) 58%, transparent 77%, var(--accent));
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  animation: konx-theme-led-orbit 18s linear infinite;
+}
+:root.theme-animated #toolbar {
+  position: relative;
+  background: linear-gradient(105deg, var(--panel), color-mix(in srgb, var(--accent) 8%, var(--bg)), var(--panel));
+  box-shadow: 0 4px 19px color-mix(in srgb, var(--accent) 10%, transparent);
+  z-index: 3;
+}
+:root.theme-animated #toolbar::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--theme-ribbon);
+  background-size: 300% 100%;
+  box-shadow: 0 0 10px var(--theme-glow);
+  pointer-events: none;
+  animation: konx-theme-led-flow 10s linear infinite;
+}
+:root.theme-animated .brand {
+  font-family: Bahnschrift, var(--ui);
+  letter-spacing: .7px;
+  text-shadow: 0 0 18px var(--theme-glow);
+}
+:root.theme-animated .brand .logo { filter: drop-shadow(0 0 5px var(--theme-glow)); }
+.theme-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  flex: none;
+  margin-left: 5px;
+}
+.theme-header-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.theme-header-name::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 7px var(--theme-glow);
+}
+.theme-motion-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 7px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.theme-motion-toggle svg.i { width: 13px; height: 13px; }
+.theme-motion-toggle:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
+.theme-motion-toggle:disabled { cursor: default; opacity: .7; }
+:root.theme-animated :is(button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Glowing accents support navigation without changing semantic status colors. */
+:root.theme-animated #sidebar {
+  background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 5%, var(--bg)), var(--panel) 60%, color-mix(in srgb, var(--theme-secondary) 5%, var(--bg)));
+  border-right-color: color-mix(in srgb, var(--accent) 35%, var(--panel));
+}
+:root.theme-animated .tree-row.selected {
+  background: var(--sel);
+  box-shadow: inset 2px 0 var(--accent), 0 0 12px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+:root.theme-animated .tool-item:hover { box-shadow: inset 2px 0 var(--accent); }
+:root.theme-animated .tool-item svg.i { filter: drop-shadow(0 0 3px var(--theme-glow)); }
+:root.theme-animated :is(.tab.active, .np-tab.active) {
+  background: linear-gradient(0deg, color-mix(in srgb, var(--accent) 10%, var(--bg)), var(--bg));
+  box-shadow: inset 0 2px var(--accent);
+  text-shadow: 0 0 13px var(--theme-glow);
+}
+:root.theme-animated :is(.tab.active .ticon, .np-tab.active .np-tabicon) { color: var(--accent); }
+:root.theme-animated :is(.btn.primary, .tb-btn.primary) {
+  border-color: var(--accent);
+  background: linear-gradient(125deg, var(--accent), color-mix(in srgb, var(--accent) 75%, var(--theme-third)));
+  color: var(--theme-button-text);
+  box-shadow: 0 0 13px var(--theme-glow), inset 0 1px 0 #ffffff40;
+  font-weight: 600;
+}
+:root.theme-animated :is(.btn.primary, .tb-btn.primary):hover:not(:disabled) {
+  background: var(--accent-strong);
+  box-shadow: 0 0 20px var(--theme-glow);
+}
+:root.theme-animated :is(.input, .field input, .field select, .field textarea):focus {
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+:root.theme-animated #statusbar { border-top-color: color-mix(in srgb, var(--accent) 40%, var(--panel)); }
+:root.theme-animated :is(.ctx .item:hover, .prows .prow.sel, .prows .prow.sel.c-expert, .phex .hl) { color: var(--theme-button-text); }
+:root.theme-animated .btn.danger { color: #230607; }
+:root.theme-animated .ctx .item.danger:hover { color: #230607; }
+
+/* Tools, result tables, AI explanations and dialogs stay on opaque surfaces. */
+:root.theme-animated :is(.security-detail, .wireless-detail, .wireless-observation, .ai-answer, .ai-document-content, .ai-connection, .ai-context-details, .ai-note-editor) {
+  background: var(--panel);
+}
+:root.theme-animated :is(.tbl-wrap, .security-results, .wireless-content, .ai-workspace, .pre-out, .kv, .pdetails, .phex) { background-color: var(--bg); }
+:root.theme-animated .ai-source { border-left: 2px solid var(--accent); }
+:root.theme-animated .ai-library-item:hover { border-color: var(--accent); }
+:root.theme-animated .notice { color: var(--muted); }
+
+/* Decorations are separate from xterm's canvas and Monaco's edit/selection DOM.
+   Hosts retain their original padding and size, so terminal fitting is unchanged. */
+.theme-output-fx { display: none; }
+:root.theme-animated :is(.term-wrap, .np-editor) {
+  isolation: isolate;
+  background: var(--bg);
+}
+:root.theme-animated .term-wrap { overflow: hidden; }
+:root.theme-animated .term-wrap > .xterm,
+:root.theme-animated .np-editor > .monaco-editor,
+:root.theme-animated .np-editor > .monaco-diff-editor {
+  position: relative;
+  z-index: 1;
+}
+:root.theme-animated :is(.term-wrap, .np-editor) > .theme-output-fx {
+  display: block;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: none;
+  user-select: none;
+  contain: paint;
+  opacity: .45;
+  mask-image: linear-gradient(90deg, transparent 12%, #000 80%);
+}
+:root.theme-animated .term-wrap:not(.theme-output-enabled) > .theme-output-fx { display: none; }
+.theme-output-fx * { pointer-events: none; }
+.theme-output-fx::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(color-mix(in srgb, var(--accent) 9%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--theme-secondary) 10%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+  animation: konx-theme-grid-drift 25s linear infinite;
+}
+.theme-output-fx::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 30%, color-mix(in srgb, var(--accent) 5%, transparent) 48%, transparent 62%);
+  background-size: 300% 100%;
+  animation: konx-theme-glass-sweep 18s linear infinite;
+}
+.theme-engine {
+  position: absolute;
+  right: 8px;
+  bottom: 4px;
+  width: 260px;
+  height: 240px;
+  display: grid;
+  place-items: center;
+  opacity: .3;
+}
+.theme-engine-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--accent) 20%, transparent), transparent 67%);
+}
+.theme-orbit {
+  position: absolute;
+  inset: 7px 15px;
+  border: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  border-radius: 50%;
+  box-shadow: 0 0 15px var(--theme-glow), inset 0 0 15px color-mix(in srgb, var(--accent) 12%, transparent);
+  animation: konx-theme-ring-spin 32s linear infinite;
+}
+.theme-orbit::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border: 4px solid transparent;
+  border-top-color: var(--accent);
+  border-radius: inherit;
+}
+.theme-orbit-inner {
+  inset: 29px 37px;
+  border: 1px dashed var(--theme-secondary);
+  animation: konx-theme-ring-reverse 20s linear infinite;
+}
+.theme-orbit-inner::after { border-top-color: var(--theme-secondary); border-width: 2px; }
+.theme-engine-core {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--accent) 18%, var(--bg)), var(--bg));
+  box-shadow: 0 0 16px var(--theme-glow), inset 0 0 18px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.theme-engine-core::before,
+.theme-engine-core::after {
+  content: '';
+  position: absolute;
+  inset: 19px;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+}
+.theme-engine-core::after { inset: 27px; background: var(--accent); }
+.theme-code-rain, .theme-horizon, .theme-plasma-field { display: none; }
+
+:root[data-theme="arc-reactor"] .theme-orbit { border: 5px double var(--accent); }
+:root[data-theme="arc-reactor"] .theme-orbit-inner { border: 2px dotted var(--theme-secondary); }
+:root[data-theme="arc-reactor"] .theme-engine-core { border-radius: 14px; }
+
+:root[data-theme="chroma-rgb"] #app::after,
+:root[data-theme="hologram-prism"] #app::after {
+  background: conic-gradient(from var(--konx-theme-angle), #ff3c7c, #ffb938, #e7ff26, #50ff8f, #00ecff, #6970ff, #ed49ff, #ff3c7c);
+}
+:root[data-theme="chroma-rgb"] .theme-header-name { color: var(--text); }
+:root[data-theme="chroma-rgb"] .theme-orbit {
+  border: 3px solid transparent;
+  background: linear-gradient(var(--bg), var(--bg)) padding-box, conic-gradient(from var(--konx-theme-angle), #ff3c7c, #ffb938, #e7ff26, #50ff8f, #00ecff, #6970ff, #ed49ff, #ff3c7c) border-box;
+  animation: konx-theme-led-orbit 12s linear infinite;
+}
+:root[data-theme="chroma-rgb"] .theme-orbit-inner { border: 2px dashed var(--theme-secondary); background: none; animation: konx-theme-ring-reverse 25s linear infinite; }
+:root[data-theme="chroma-rgb"] .theme-engine-core { border-radius: 20px; }
+
+:root[data-theme="matrix-mainframe"] .theme-header-name { font-family: var(--mono); }
+:root[data-theme="matrix-mainframe"] .theme-output-fx::before { opacity: .25; }
+:root[data-theme="matrix-mainframe"] .theme-code-rain {
+  display: flex;
+  position: absolute;
+  inset: -50px 0 0 30%;
+  gap: 25px;
+  justify-content: space-evenly;
+  align-items: flex-start;
+  overflow: hidden;
+  opacity: .18;
+  color: var(--accent);
+  mask-image: linear-gradient(90deg, transparent, #000);
+}
+.theme-code-rain span {
+  white-space: pre;
+  height: max-content;
+  font: 12px/1.8 var(--mono);
+  text-shadow: 0 0 5px var(--accent);
+  animation: konx-theme-code-fall 12s linear infinite;
+}
+.theme-code-rain span:nth-child(even) { animation-duration: 19s; animation-direction: reverse; color: var(--theme-secondary); }
+:root[data-theme="matrix-mainframe"] .theme-orbit { border-radius: 4px; inset: 28px 35px; border: 2px solid var(--accent); animation-duration: 45s; }
+:root[data-theme="matrix-mainframe"] .theme-orbit-inner { inset: 17px 25px; border: 1px dashed var(--theme-secondary); animation-duration: 30s; }
+:root[data-theme="matrix-mainframe"] .theme-engine-core { border-radius: 2px; clip-path: polygon(15% 0, 85% 0, 100% 15%, 100% 85%, 85% 100%, 15% 100%, 0 85%, 0 15%); }
+
+:root[data-theme="synthwave-grid"] .theme-output-fx::before { background: none; animation: none; }
+:root[data-theme="synthwave-grid"] .theme-horizon {
+  display: block;
+  position: absolute;
+  inset: 60% -20% -60% 10%;
+  background-image: linear-gradient(#ff33c9aa 1px, transparent 1px), linear-gradient(90deg, #00deff70 1px, transparent 1px);
+  background-size: 35px 35px;
+  transform: perspective(180px) rotateX(55deg);
+  transform-origin: center top;
+  mask-image: linear-gradient(90deg, transparent, #000);
+  animation: konx-theme-synth-grid 9s linear infinite;
+}
+:root[data-theme="synthwave-grid"] .theme-engine-glow {
+  inset: 8px 25px 20px;
+  background: linear-gradient(#ffd574, #ff8749 30%, #ff20c5 75%, #7024ff);
+  mask-image: repeating-linear-gradient(#000 0 12px, transparent 12px 17px);
+  box-shadow: 0 0 50px #ff20c555;
+}
+:root[data-theme="synthwave-grid"] .theme-orbit { display: none; }
+:root[data-theme="synthwave-grid"] .theme-engine-core { width: 55px; height: 55px; align-self: end; margin-bottom: 14px; border: 1px solid var(--theme-secondary); background: var(--bg); box-shadow: 0 0 25px #00deff66; border-radius: 8px; }
+:root[data-theme="synthwave-grid"] .theme-engine-core::before { inset: 13px; border-color: var(--theme-secondary); }
+:root[data-theme="synthwave-grid"] .theme-engine-core::after { inset: 21px; background: var(--theme-secondary); }
+:root[data-theme="synthwave-grid"] .theme-header-name { color: #ffb5eb; font-style: italic; }
+
+:root[data-theme="hologram-prism"] .theme-orbit { border-radius: 50%; inset: 34px 1px; border: 2px dotted var(--theme-secondary); animation: konx-theme-prism-turn 18s ease-in-out infinite; }
+:root[data-theme="hologram-prism"] .theme-orbit-inner { inset: 1px 39px; border: 2px solid var(--accent); animation: konx-theme-prism-turn 23s ease-in-out infinite reverse; }
+:root[data-theme="hologram-prism"] .theme-engine-core { border-radius: 12px; transform: rotate(45deg); background: linear-gradient(125deg, #332866, #092d3e, #3b164c); box-shadow: 0 0 30px #b57cff66, inset 0 0 20px #54fff033; }
+
+:root[data-theme="plasma-forge"] .theme-engine-glow { display: none; }
+:root[data-theme="plasma-forge"] .theme-plasma-field {
+  display: block;
+  position: absolute;
+  inset: 5px 10px;
+  background: radial-gradient(ellipse at 20% 25%, #ff6c00aa, transparent 65%), radial-gradient(ellipse at 75% 70%, #bf38ffaa, transparent 60%);
+  filter: blur(14px);
+  border-radius: 40% 60% 65% 35%;
+  animation: konx-theme-plasma-drift 13s ease-in-out infinite;
+}
+:root[data-theme="plasma-forge"] .theme-orbit { border-radius: 28% 50% 30% 50%; border-color: var(--theme-third); animation-duration: 28s; }
+:root[data-theme="plasma-forge"] .theme-orbit-inner { border-color: var(--theme-secondary); border-style: solid; animation-duration: 22s; }
+:root[data-theme="plasma-forge"] .theme-engine-core { border-radius: 4px; border-color: var(--theme-third); box-shadow: 0 0 22px #ff6c0088, inset 0 0 20px #ff6c0022; }
+:root[data-theme="plasma-forge"] :is(.security-detail, .wireless-detail) { border-radius: 0 10px 0 10px; }
+
+@keyframes konx-theme-led-orbit { to { --konx-theme-angle: 360deg; } }
+@keyframes konx-theme-led-flow { to { background-position: 300% 50%; } }
+@keyframes konx-theme-ring-spin { to { transform: rotate(360deg); } }
+@keyframes konx-theme-ring-reverse { to { transform: rotate(-360deg); } }
+@keyframes konx-theme-grid-drift { to { background-position: 0 48px, 48px 0; } }
+@keyframes konx-theme-glass-sweep { from { background-position: 180% 0; } to { background-position: -180% 0; } }
+@keyframes konx-theme-code-fall { from { transform: translateY(-50%); } to { transform: translateY(0); } }
+@keyframes konx-theme-synth-grid { to { background-position: 0 35px, 35px 0; } }
+@keyframes konx-theme-prism-turn { 0%, 100% { transform: rotate(-18deg) skewY(-6deg); } 50% { transform: rotate(18deg) skewY(6deg); } }
+@keyframes konx-theme-plasma-drift { 0%, 100% { transform: translate(-10px, -5px) scale(.9); } 50% { transform: translate(10px, 7px) scale(1.12); } }
+
+/* Unfocused/hidden windows and inactive output tabs do no animation work.
+   Reduced motion is a hard stop even when the saved preference is running. */
+:root.theme-animated[data-theme-motion="paused"] #app::after,
+:root.theme-animated[data-theme-motion="paused"] #toolbar::after,
+:root.theme-animated[data-theme-motion="paused"] .theme-output-fx,
+:root.theme-animated[data-theme-motion="paused"] .theme-output-fx *,
+:root.theme-animated[data-theme-motion="paused"] .theme-output-fx::before,
+:root.theme-animated[data-theme-motion="paused"] .theme-output-fx::after,
+:root.theme-animated[data-theme-motion="paused"] .theme-output-fx *::before,
+:root.theme-animated[data-theme-motion="paused"] .theme-output-fx *::after,
+:root.theme-animated[data-theme-visible="false"] #app::after,
+:root.theme-animated[data-theme-visible="false"] #toolbar::after,
+:root.theme-animated[data-theme-visible="false"] .theme-output-fx,
+:root.theme-animated[data-theme-visible="false"] .theme-output-fx *,
+:root.theme-animated[data-theme-visible="false"] .theme-output-fx::before,
+:root.theme-animated[data-theme-visible="false"] .theme-output-fx::after,
+:root.theme-animated[data-theme-visible="false"] .theme-output-fx *::before,
+:root.theme-animated[data-theme-visible="false"] .theme-output-fx *::after,
+:root.theme-animated .view:not(.active) .theme-output-fx,
+:root.theme-animated .view:not(.active) .theme-output-fx *,
+:root.theme-animated .view:not(.active) .theme-output-fx::before,
+:root.theme-animated .view:not(.active) .theme-output-fx::after,
+:root.theme-animated .view:not(.active) .theme-output-fx *::before,
+:root.theme-animated .view:not(.active) .theme-output-fx *::after,
+:root.theme-animated .np-editor.hidden .theme-output-fx,
+:root.theme-animated .np-editor.hidden .theme-output-fx *,
+:root.theme-animated .np-editor.hidden .theme-output-fx::before,
+:root.theme-animated .np-editor.hidden .theme-output-fx::after,
+:root.theme-animated .np-editor.hidden .theme-output-fx *::before,
+:root.theme-animated .np-editor.hidden .theme-output-fx *::after {
+  animation-play-state: paused !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root.theme-animated *, :root.theme-animated *::before, :root.theme-animated *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+@media (max-width: 1180px) {
+  .theme-header-name { display: none; }
+}
+@media (max-width: 1100px) {
+  /* Reserve space for Pause/Reduced motion at the minimum window width,
+     including Windows scale factors that round a 900px window to 902px. */
+  :root.theme-animated #toolbar .tb-btn:not(.icon-only) { padding-inline: 6px; }
+  :root.theme-animated #toolbar .tb-btn.icon-only { padding-inline: 5px; }
+  :root.theme-animated #toolbar .quick { min-width: 130px; }
+}
+@media (max-width: 900px) {
+  .theme-header { gap: 0; margin-left: 2px; }
+  .theme-motion-toggle { padding: 0 5px; }
+  .theme-engine { right: -55px; opacity: .2; }
+}

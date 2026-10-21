@@ -1,8 +1,10 @@
 # KonX User Guide
 
-This guide covers KonX 0.2.x and the 0.3.0/0.4.0 test builds for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, and network troubleshooting tools in one window. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
+This guide covers KonX 0.2.x and the 0.3.0–0.5.0 test builds for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, and network troubleshooting tools in one window. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
 
 Version 0.4.0 adds [AI & Knowledge](AI_KNOWLEDGE_GUIDE.md): provider API keys, explanations of selected tool output, and an offline reference library backed by a background SQLite vector index. Older 0.3.0 builds do not include this feature.
+
+Version 0.5.0 adds six animated application themes, with a compact top header and effects behind terminal and editor output. Classic Dark and Light application themes and the existing terminal schemes remain available. See [Appearance and motion](#appearance-and-motion).
 
 For downloads, build instructions, and project information, see the [README](../README.md) and [GitHub releases](https://github.com/256kMagic/KonX/releases).
 
@@ -538,12 +540,33 @@ Click the gear icon, make changes, and choose **Save**.
 
 | Page | Controls |
 | --- | --- |
-| **Appearance** | Dark/light application theme; terminal color scheme, font, size, cursor shape, blink |
+| **Appearance** | Application theme; Animate theme effects; terminal color scheme, font, size, cursor shape, blink |
 | **Terminal** | Scrollback; right-click behavior; copy on select; multi-line paste confirmation; remote tab titles; default log folder |
 | **File Transfer** | Initial local folder; conflict policy; simultaneous transfers; hidden files |
 | **Known Hosts** | Saved SSH host keys and removal |
 
 Defaults include a dark theme, terminal font size 14, block cursor, 10,000 scrollback lines, copy on select, a context menu on right-click, multi-line paste confirmation, Ask on SFTP conflicts, and two simultaneous transfers. Per-session color scheme/font size can override terminal defaults in **Terminal & Log**.
+
+### Appearance and motion
+
+In 0.5.0 or later, open **Settings → Appearance**, choose an **Application theme**, and choose **Save**. Existing Dark and Light themes keep the classic appearance. Six additional themes add glow and animation:
+
+| Theme | Look |
+| --- | --- |
+| **Arc Reactor** | Cyan and cobalt with reactor rings and circuit light |
+| **Chroma RGB** | Dark surfaces with a moving spectrum of LED colors |
+| **Matrix Mainframe** | Green phosphor, binary rain, and terminal scan texture |
+| **Synthwave Grid** | Magenta and cyan with a neon sun and perspective grid |
+| **Hologram Prism** | Violet and mint with iridescent edges and orbital geometry |
+| **Plasma Forge** | Orange and purple with plasma glow and rotating machinery |
+
+The top header stays compact. Decorative effects appear behind terminal and editor output; there is no separate hero banner above the workspace. Tables, forms, and explanations use quieter surfaces for reading.
+
+Choose **Pause effects** in the top header to stop theme animation, or clear **Animate theme effects** in **Settings → Appearance**. This preference is saved for your next launch. Choose **Resume effects** to start motion again. KonX automatically respects Windows' reduced-motion preference; the header motion button is disabled while that preference is active.
+
+Application themes coordinate the interface and Notepad's palette and background automatically. To coordinate terminal colors and backgrounds too, set **Terminal color scheme → Follow application theme** in **Settings → Appearance** and choose **Save**. This is the default for new profiles; upgrading preserves an existing profile's terminal scheme, so select it explicitly after updating. A saved session's explicit scheme in **Terminal & Log** continues to override the global selection.
+
+Terminal palettes remain independently selectable. Existing schemes such as KonX Dark, Classic, Green Phosphor, Solarized Dark, Monokai, and Light keep their original colors and opaque backgrounds. Choose one of these whenever you want a classic terminal inside an animated application theme.
 
 Notepad's wrap/map/whitespace options are managed in its own menu and toolbar. Its language, encoding, and line-ending choices apply to the document. Saved session connection settings are edited from that session rather than the global settings dialog.
 

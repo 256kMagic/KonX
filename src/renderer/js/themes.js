@@ -1,5 +1,6 @@
 // Terminal color schemes.
 export const SCHEMES = {
+  app: { label: 'Follow application theme' },
   konx: {
     label: 'KonX Dark',
     background: '#13161b', foreground: '#d9dfe8', cursor: '#3b9cf2', cursorAccent: '#13161b', selectionBackground: '#2b4f75',
@@ -38,8 +39,46 @@ export const SCHEMES = {
   },
 };
 
-export function scheme(name) {
-  const s = SCHEMES[name] || SCHEMES.konx;
+// Application themes are independent of explicit terminal/session palettes.
+export const APP_THEMES = Object.fromEntries([
+  ['dark', 'Dark (classic)', false, '#13161b', '#d9dfe8', '#3b9cf2', '#8b95a5', '#2b4f75', '#b77ee0'],
+  ['light', 'Light (classic)', false, '#fbfbfc', '#26303c', '#1f7ad6', '#637083', '#bcd8f5', '#8b46b8'],
+  ['arc-reactor', 'Arc Reactor', true, '#020711', '#e7f8ff', '#4ceaff', '#a5c6d8', '#163b50', '#006aff'],
+  ['chroma-rgb', 'Chroma RGB', true, '#05050e', '#f4f5ff', '#63f4ff', '#b8bdd8', '#233848', '#ff3cb4'],
+  ['matrix-mainframe', 'Matrix Mainframe', true, '#020804', '#e8ffe9', '#9aff50', '#a1caa9', '#25452b', '#00f4a8'],
+  ['synthwave-grid', 'Synthwave Grid', true, '#0a0315', '#f9eeff', '#ff9adf', '#c7b2d7', '#472740', '#00deff'],
+  ['hologram-prism', 'Hologram Prism', true, '#060512', '#f3f0ff', '#d0b0ff', '#c4bbe2', '#3a3058', '#54fff0'],
+  ['plasma-forge', 'Plasma Forge', true, '#100510', '#fff0e9', '#ffbe87', '#d7b7c2', '#53352f', '#d35aff'],
+].map(([id, label, animated, background, foreground, accent, muted, selection, secondary]) =>
+  [id, { id, label, animated, background, foreground, accent, muted, selection, secondary }]));
+
+export function applicationTheme(name) {
+  return Object.hasOwn(APP_THEMES, name) ? APP_THEMES[name] : APP_THEMES.dark;
+}
+
+export function scheme(name, uiTheme = 'dark') {
+  if (name === 'app') {
+    const theme = applicationTheme(uiTheme);
+    if (!theme.animated) return scheme(theme.id === 'light' ? 'light' : 'konx');
+    return {
+      ...scheme('konx'), background: theme.background, foreground: theme.foreground,
+      cursor: theme.accent, cursorAccent: theme.background, selectionBackground: theme.selection,
+      black: theme.background, brightBlack: theme.muted, white: theme.foreground, brightWhite: '#ffffff',
+      blue: '#8dcbff', brightBlue: '#b4e0ff', cyan: theme.accent, brightCyan: theme.accent,
+      magenta: '#d5a8ff', brightMagenta: '#ebcaff', red: '#ff9a9a', brightRed: '#ffbbbb',
+      green: '#8fe0ad', brightGreen: '#b2efc8', yellow: '#f3cf73', brightYellow: '#ffe6a6',
+    };
+  }
+  const s = Object.hasOwn(SCHEMES, name) ? SCHEMES[name] : SCHEMES.konx;
   const { label, ...colors } = s;
   return colors;
+}
+
+export function usesThemeEffects(settings, meta = {}) {
+  return (meta.colorScheme || settings.colorScheme || 'app') === 'app' && applicationTheme(settings.uiTheme).animated;
+}
+
+export function terminalTheme(settings, meta = {}) {
+  const colors = scheme(meta.colorScheme || settings.colorScheme || 'app', settings.uiTheme);
+  return usesThemeEffects(settings, meta) ? { ...colors, background: '#00000000' } : colors;
 }
