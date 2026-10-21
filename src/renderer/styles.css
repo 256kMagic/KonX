@@ -141,7 +141,7 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
   display: flex; flex-direction: column;
   background: var(--panel);
   border-right: 1px solid var(--border);
-  min-width: 0; position: relative;
+  min-width: 0; min-height: 0; position: relative;
 }
 #sidebar .resizer { position: absolute; right: -3px; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 5; }
 .side-section { display: flex; flex-direction: column; min-height: 0; }
@@ -172,6 +172,8 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
 .tree-row.drop-target { outline: 1px dashed var(--accent); }
 .tree-empty { color: var(--muted); padding: 12px; font-size: 12px; line-height: 1.6; }
 .tool-list { padding: 0 4px 8px; }
+.side-tools { flex: 0 1 auto; max-height: 60%; }
+.side-tools .tool-list { overflow: auto; min-height: 0; }
 .tool-item { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px; border-radius: 4px; cursor: pointer; }
 .tool-item:hover { background: var(--hover); }
 .tool-item svg.i { color: var(--accent); }

@@ -12,6 +12,8 @@ const { SftpManager } = require('./sftp');
 const localfs = require('./localfs');
 const nettools = require('./nettools');
 const security = require('./security');
+const wifi = require('./wifi');
+const { MistClient } = require('./mist');
 const importers = require('./importers');
 const serial = require('./serial');
 const { CaptureManager, readCaptureFile } = require('./capture');
@@ -29,6 +31,8 @@ let sftp;
 let capture;
 let npStore;
 let npWatcher;
+let mist;
+const toolJobs = new Map();
 
 function send(channel, ...args) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, ...args);
@@ -288,10 +292,12 @@ function registerIpc() {
   });
 
   // network tools
-  const jobs = new Map();
+  const jobs = toolJobs;
   let jobSeq = 0;
   const runners = {
     security: security.run,
+    wifi: wifi.run,
+    mist: (params, emit, signal) => mist.run(params, emit, signal),
     ping: nettools.pingMonitor,
     sweep: nettools.sweep,
     portscan: nettools.portScan,
@@ -321,6 +327,8 @@ function registerIpc() {
     s.stopped = true;
     if (s.onStop) s.onStop();
   });
+  handle('tools:mistConfig', () => mist.getConfig());
+  handle('tools:mistConfigure', (params) => mist.configure(params));
   handle('tools:dns', (params) => nettools.dnsLookup(params));
   handle('tools:whois', (params) => nettools.whois(params));
   handle('tools:wol', (params) => nettools.wakeOnLan(params));
@@ -425,6 +433,7 @@ app.whenReady().then(() => {
     decrypt: (s) => safeStorage.decryptString(Buffer.from(s, 'base64')),
   };
   store = new Store(app.getPath('userData'), crypt);
+  mist = new MistClient({ dir: app.getPath('userData'), crypt });
   connections = new ConnectionManager({ emit: send, ask, store, defaultLogDir });
   sftp = new SftpManager({
     emit: send,
@@ -444,6 +453,10 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  for (const signal of toolJobs.values()) {
+    signal.stopped = true;
+    try { signal.onStop?.(); } catch { /* Finish shutting down other jobs too. */ }
+  }
   connections && connections.closeAll();
   sftp && sftp.closeAll();
   capture && capture.stopAll();

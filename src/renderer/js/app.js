@@ -201,7 +201,7 @@ class App {
       addEventListener('mousemove', move);
       addEventListener('mouseup', up);
     });
-    this.sidebar = h('div#sidebar', this.sideSessions, h('div.side-section', h('div.side-head', h('span.title', 'Network Tools')), toolList), resizer);
+    this.sidebar = h('div#sidebar', this.sideSessions, h('div.side-section.side-tools', h('div.side-head', h('span.title', 'Network Tools')), toolList), resizer);
 
     this.tabbar = h('div#tabbar');
     this.tabScrollLeft = h('button.tb-btn.icon-only.tab-nav', { title: 'Scroll tabs left', 'aria-label': 'Scroll tabs left', onclick: () => this.scrollTabs(-1) }, icon('chev-left'));

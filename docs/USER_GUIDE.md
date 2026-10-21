@@ -19,6 +19,7 @@ For downloads, build instructions, and project information, see the [README](../
 - [SIP calls and signaling ladders](#sip-calls-and-signaling-ladders)
 - [Network tools](#network-tools)
 - [Security Suite development guide](SECURITY_SUITE.md)
+- [Wi-Fi and Mist/Marvis development guide](WIRELESS_MIST_GUIDE.md)
 - [Settings](#settings)
 - [Keyboard reference](#keyboard-reference)
 - [Application data and backups](#application-data-and-backups)

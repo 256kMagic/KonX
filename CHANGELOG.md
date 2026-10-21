@@ -4,6 +4,9 @@
 
 ### Added
 
+- Wi-Fi Tools with native Windows adapter/connection details, cached BSSID survey, signal and channel views, security observations, filtering, and JSON export.
+- Mist & Marvis workspace with encrypted API-token storage, regional endpoint selection, authorized organization/site discovery, AP/client snapshots, and direct Marvis device/site troubleshooting.
+- Cancellation of active tool jobs during application shutdown, including Wi-Fi inventory children and Mist requests.
 - Security Suite tab with local Windows posture checks and a remote Windows TCP-exposure profile.
 - TLS/certificate, pre-authentication SSH, web-header, and single-host service-exposure assessments.
 - Offline Cisco-style configuration and saved PCAP/PCAPNG security findings with redacted line/frame evidence.
@@ -13,7 +16,7 @@
 
 See the [Security Suite guide](docs/SECURITY_SUITE.md). These source changes are not included in the installed 0.2.1 test build or the published 0.2.0 executables.
 
-Validation: 348 automated tests pass, including 56 new security checks and 13 diagnostics/boot checks using synthetic inputs, loopback services, and isolated real Electron processes. Error-logging tests cover fatal exceptions, warning-only rejections, startup failures, rotation, size limits, and failed log writes while preserving the original error handling. A separate local Windows smoke test completed all 14 posture checks at the current user's permission level; inaccessible firmware/encryption checks remained unknown.
+Validation: 384 automated tests pass, including 36 Wi-Fi/Mist checks, 56 security checks, and 13 diagnostics/boot checks using synthetic inputs, loopback services, and isolated real Electron processes. Wireless coverage includes native WLAN layouts, a nested child loading from an ASAR archive, encrypted token storage, fixed regional HTTPS requests, cancellation, redaction, cloud scope/revision changes, exports, and minimum-window layout. Mist tests use synthetic credentials and mocked cloud responses; no live Mist account was queried. Error-logging tests cover fatal exceptions, warning-only rejections, startup failures, rotation, size limits, and failed log writes. A separate local Windows smoke test completed all 14 posture checks at the current user's permission level; inaccessible firmware/encryption checks remained unknown.
 
 ## 0.2.1 — 2026-10-20 (test build)
 
