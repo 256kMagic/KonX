@@ -8,19 +8,19 @@ Connect to a switch, move files over SFTP, edit its configuration, and investiga
 
 [Download the latest release](https://github.com/256kMagic/KonX/releases/latest) · [User guide](docs/USER_GUIDE.md) · [Report an issue](https://github.com/256kMagic/KonX/issues)
 
-**KonX 0.6.2** fixes the installed updater's application and installation detection. Installed 0.6.0 and 0.6.1 copies need one manual upgrade to 0.6.2; portable copies can use **Update KonX**. From 0.6.2, both distributions can check for a newer release, download and verify it, then restart when your work is safe. See the [0.6.2 release notes](docs/releases/0.6.2.md).
+**KonX 0.6.3** carries the same application and updater code as 0.6.2, with a newer version for verifying the complete installed update workflow. Installed 0.6.2 and portable 0.6.0 or later copies can use **Update KonX**. Installed 0.6.0 and 0.6.1 copies need one manual upgrade to 0.6.3 to gain the fixes introduced in 0.6.2. See the [0.6.3 release notes](docs/releases/0.6.3.md).
 
 ![KonX terminal workspace](docs/screenshots/terminal.png)
 
 ## Download and install
 
-The **0.6.2** release targets **Windows x64**. Node.js is only needed when running from source.
+The **0.6.3** release targets **Windows x64**. Node.js is only needed when running from source.
 
 | Download | Use it for |
 | --- | --- |
-| [KonX-Setup-0.6.2.exe](https://github.com/256kMagic/KonX/releases/download/v0.6.2/KonX-Setup-0.6.2.exe) | A per-user installation with Start menu and desktop shortcuts, an uninstaller, and a choice of installation folder. |
-| [KonX-0.6.2-portable.exe](https://github.com/256kMagic/KonX/releases/download/v0.6.2/KonX-0.6.2-portable.exe) | Run without installing, including from a USB drive. Application settings are still stored in the Windows user profile. |
-| [SHA256SUMS.txt](https://github.com/256kMagic/KonX/releases/download/v0.6.2/SHA256SUMS.txt) | SHA-256 checksums for the release files. |
+| [KonX-Setup-0.6.3.exe](https://github.com/256kMagic/KonX/releases/download/v0.6.3/KonX-Setup-0.6.3.exe) | A per-user installation with Start menu and desktop shortcuts, an uninstaller, and a choice of installation folder. |
+| [KonX-0.6.3-portable.exe](https://github.com/256kMagic/KonX/releases/download/v0.6.3/KonX-0.6.3-portable.exe) | Run without installing, including from a USB drive. Application settings are still stored in the Windows user profile. |
+| [SHA256SUMS.txt](https://github.com/256kMagic/KonX/releases/download/v0.6.3/SHA256SUMS.txt) | SHA-256 checksums for the release files. |
 | [SIP sample capture](https://github.com/256kMagic/KonX/releases/download/v0.2.0/sip-demo.pcapng) | Three synthetic calls for trying the ladder, SDP details, and call exports. |
 
 1. Download the installer or portable executable from the release above.
@@ -32,24 +32,24 @@ The current executables are unsigned. Windows SmartScreen may show an unrecogniz
 To calculate a downloaded file's checksum in PowerShell:
 
 ~~~powershell
-Get-FileHash .\KonX-Setup-0.6.2.exe -Algorithm SHA256
+Get-FileHash .\KonX-Setup-0.6.3.exe -Algorithm SHA256
 ~~~
 
-Compare the hash with `SHA256SUMS.txt`. Installed 0.6.0 and 0.6.1 copies need one manual upgrade because their update button is broken: save your work, close KonX, and run the 0.6.2 installer using the existing installation folder and mode. Portable 0.6.0 and 0.6.1 copies can use **Update KonX**. Version 0.5.0 and earlier also need a manual installer upgrade or portable-file replacement. An all-users installation in Program Files can require administrator approval.
+Compare the hash with `SHA256SUMS.txt`. Installed 0.6.0 and 0.6.1 copies need one manual upgrade because their update button is broken: save your work, close KonX, and run the 0.6.3 installer using the existing installation folder and mode. Installed 0.6.2 and portable 0.6.0 or later copies can use **Update KonX**. Version 0.5.0 and earlier also need a manual installer upgrade or portable-file replacement. An all-users installation in Program Files can require administrator approval.
 
 ### Update from inside KonX
 
 In installed 0.6.2 or later, or portable 0.6.0 or later, choose **Update KonX** on Home or under **Settings → Updates**. One press checks the public GitHub release, downloads the appropriate Windows x64 file, verifies its SHA-256 checksum, then updates and restarts when no work is active. Installed copies keep their installation folder and mode; portable copies keep the same executable filename and location. Both retain the existing Windows profile, settings, sessions, credentials, and Knowledge library. Save documents and notes, disconnect sessions, and stop captures or jobs first. KonX keeps a verified update ready when these steps are still needed.
 
-No GitHub token or background update check is used. The updater runs only in installed or portable releases; a source checkout or unpacked build explains why updating is unavailable. See the [0.6.2 release notes](docs/releases/0.6.2.md) and [update guide](docs/UPDATING.md) for the fixes and upgrade path.
+No GitHub token or background update check is used. The updater runs only in installed or portable releases; a source checkout or unpacked build explains why updating is unavailable. See the [0.6.3 release notes](docs/releases/0.6.3.md) and [update guide](docs/UPDATING.md) for the current release and upgrade path.
 
-## What's new in 0.6.2
+## What's new in 0.6.3
 
-- **Installed app detection fixed:** an installed KonX no longer appears unsupported because Electron presents its application archive as a virtual directory.
-- **Installation lookup fixed:** the update helper reads the install location and uninstall registration from their correct Windows registry keys and validates the folder and installation mode together.
-- **Updated upgrade instructions:** guides explain the one-time manual upgrade for installed 0.6.0/0.6.1 copies, future one-press updates, and settings preservation.
+- **A newer update target:** 0.6.3 allows installed 0.6.2 users to exercise the complete public-release download, installation, and restart workflow.
+- **The same fixes as 0.6.2:** installed application detection and the Windows registry lookup remain corrected. This release introduces no additional application features or updater code changes.
+- **Updated guides:** current downloads and upgrade instructions distinguish working update buttons from the manual upgrade required by installed 0.6.0/0.6.1 copies.
 
-Download verification, progress, cancellation, and checks for work that must be saved before restart remain available. Version 0.6.2 does not fix the six inherited AI, Wi-Fi, and security-assessment review findings listed in the [release notes](docs/releases/0.6.2.md#known-issues).
+Download verification, progress, cancellation, and checks for work that must be saved before restart remain available. Version 0.6.3 does not fix the six inherited AI, Wi-Fi, and security-assessment review findings listed in the [release notes](docs/releases/0.6.3.md#known-issues).
 
 Existing workspace features remain available:
 
@@ -62,7 +62,7 @@ Existing workspace features remain available:
 - **AI & Knowledge:** encrypted connections for OpenAI, Claude, Gemini, Nyquest, and a custom OpenAI-compatible endpoint; 46 bundled articles and editable notes in an offline background SQLite vector index; and **Explain with AI** with explicit context sharing. Library search works without an AI key. [AI and knowledge guide](docs/AI_KNOWLEDGE_GUIDE.md).
 - **Reliability fixes and diagnostics:** improved SFTP cancellation and file preservation, editor recovery, connection and capture handling, and local JavaScript error logs. See the [changelog](CHANGELOG.md) for these fixes and earlier packet/SIP improvements.
 
-See the [0.6.2 release notes](docs/releases/0.6.2.md) and [user guide](docs/USER_GUIDE.md) for workflows and limitations. To try SIP immediately, open the downloadable sample in **Packet Capture** and click **SIP Calls**.
+See the [0.6.3 release notes](docs/releases/0.6.3.md) and [user guide](docs/USER_GUIDE.md) for workflows and limitations. To try SIP immediately, open the downloadable sample in **Packet Capture** and click **SIP Calls**.
 
 ## Start working
 
@@ -206,7 +206,7 @@ Then retry `npm start`. Serial support depends on the optional `serialport` pack
 npm run dist
 ~~~
 
-The build creates versioned executables under `dist/`, such as `KonX-Setup-0.6.2.exe` and `KonX-0.6.2-portable.exe` for the current source version. `npm run dist:dir` creates the unpacked Windows application for inspection. Published release executables are attached to [GitHub Releases](https://github.com/256kMagic/KonX/releases); they are not checked into the source tree.
+The build creates versioned executables under `dist/`, such as `KonX-Setup-0.6.3.exe` and `KonX-0.6.3-portable.exe` for the current source version. `npm run dist:dir` creates the unpacked Windows application for inspection. Published release executables are attached to [GitHub Releases](https://github.com/256kMagic/KonX/releases); they are not checked into the source tree.
 
 ### Test and try a local device
 
@@ -255,9 +255,9 @@ Connect to `127.0.0.1` on port `2222`, username `test`, password `test`. These c
 
 KonX is an early **0.x** project. The Windows x64 release is the currently tested distribution. Packet filters implement KonX's supported syntax rather than the complete Wireshark filter language, capture insights are diagnostic aids, and serial/capture support depends on the available hardware and drivers.
 
-Version **0.6.2** fixes installed update detection and retains the animated themes, AI/library workspace, Security Suite, wireless/Mist tools, and earlier packet/SIP workflows. The corrected updater source passed **485 automated tests** and a real all-users installation handoff to the published 0.6.1 installer. That component test preserved settings and restarted successfully; it does not establish a complete update from a packaged 0.6.2 button. Current release validation and the six inherited known findings are recorded in the [0.6.2 release notes](docs/releases/0.6.2.md).
+Version **0.6.3** carries the same application source as 0.6.2 and retains its updater fixes, animated themes, AI/library workspace, Security Suite, wireless/Mist tools, and earlier packet/SIP workflows. The published 0.6.2 installer was manually installed and its update button successfully checked the public release, with settings unchanged. A complete installed 0.6.2 → 0.6.3 update is a separate test that requires 0.6.3 to be published first. Current validation and the six inherited known findings are recorded in the [0.6.3 release notes](docs/releases/0.6.3.md).
 
-Detailed version history and validation limits are recorded in the [changelog](CHANGELOG.md) and [release notes](docs/releases/0.6.2.md).
+Detailed version history and validation limits are recorded in the [changelog](CHANGELOG.md) and [release notes](docs/releases/0.6.3.md).
 
 For help, start with the [user guide](docs/USER_GUIDE.md). Common first checks:
 

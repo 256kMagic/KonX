@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.3 — 2026-10-21
+
+### Release verification
+
+- A version-only release carrying the same application and updater source as 0.6.2, providing a newer public target for the complete installed update workflow. No new application features or updater fixes are introduced.
+- Updated download links, release notes, and user guides. Installed 0.6.2 and portable 0.6.0 or later copies can use **Update KonX**; installed 0.6.0/0.6.1 copies need a manual upgrade to 0.6.3.
+
+Before publication, the released 0.6.2 installer was manually installed and its update button successfully checked the public release with the existing settings unchanged. A full installed 0.6.2 → 0.6.3 download, installation, restart, and settings comparison requires 0.6.3 to be published first. See the [0.6.3 release notes](docs/releases/0.6.3.md#validation) for validation and coverage limits.
+
 ## 0.6.2 — 2026-10-21
 
 ### Fixed
