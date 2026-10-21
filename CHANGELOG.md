@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.0 — 2026-10-21
+
+- Save named, immutable device snapshots and reopen them from local history.
+- Compare interfaces, VLANs, neighbors, routes, and configuration before and after maintenance, with original evidence and explicit unknowns for incomplete collection.
+- Opt in to running-configuration and route collection without changing ordinary inventory collection.
+- Try a synthetic before/after demo and retain or delete its library entries.
+- Exclude raw configuration and comparison bodies from AI context.
+
+See the [snapshot guide](docs/DEVICE_SNAPSHOTS.md) and [release notes](docs/releases/0.8.0.md).
+
 ## 0.7.0 — 2026-10-21
 
 ### Added

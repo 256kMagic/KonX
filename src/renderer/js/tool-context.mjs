@@ -4,7 +4,11 @@ const LIMIT = 23000;
 export function toolContext(tab) {
   const title = String(tab.title || tab.toolKind || 'KonX tool').slice(0, 200);
   let output;
-  if (tab.report && typeof tab.report === 'object') {
+  if (tab.toolKind === 'snapshots') {
+    // Comparison bodies contain original configuration lines. Only the owning
+    // view's explicit metadata/count summary is eligible for AI context.
+    output = JSON.stringify(tab.aiContext || { message: 'No snapshot comparison selected.' }, null, 2);
+  } else if (tab.report && typeof tab.report === 'object') {
     let nodes = 0;
     const copy = (value, depth = 0) => {
       if (++nodes > 1500 || depth > 8) return '[Omitted]';

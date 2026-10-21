@@ -1,0 +1,37 @@
+.snapshot-view { min-width: 0; }
+.snapshot-view .tool-head { flex: 0 1 auto; max-height: 54%; min-height: 115px; min-width: 0; overflow: auto; gap: 8px; }
+.snapshot-view .tool-title { flex-wrap: wrap; }
+.snapshot-view .tool-title .sub, .snapshot-status, .snapshot-heading { overflow-wrap: anywhere; }
+.snapshot-status { color: var(--muted); }
+.snapshot-heading { font-weight: 600; }
+.snapshot-content { flex: 1; min-width: 0; min-height: 100px; overflow: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+.snapshot-content > * { flex-shrink: 0; }
+.snapshot-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
+.snapshot-actions .input { max-width: 100%; width: auto; min-width: 120px; }
+.snapshot-actions input { flex: 1 1 180px; }
+.snapshot-actions .hint { margin-right: auto; }
+.snapshot-selectors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.snapshot-choice { min-width: 0; }
+.snapshot-choice .field { margin-bottom: 7px; }
+.snapshot-choice .input { width: 100%; min-width: 0; }
+.snapshot-pairing { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; }
+.snapshot-pairing summary { cursor: pointer; }
+.snapshot-pair-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; align-items: center; margin-top: 6px; overflow-wrap: anywhere; }
+.snapshot-pair-row select { width: 100%; min-width: 0; }
+.snapshot-summary { display: flex; flex-wrap: wrap; gap: 8px; }
+.snapshot-badge { border: 1px solid var(--border); border-radius: 5px; padding: 5px 8px; color: var(--muted); }
+.snapshot-view .tbl-wrap { flex: 0 0 auto; max-height: 340px; overflow: auto; min-width: 0; width: 100%; }
+.snapshot-view .tbl { min-width: 570px; }
+.snapshot-change-detail { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; user-select: text; overflow-wrap: anywhere; }
+.snapshot-change-detail h3, .snapshot-side h4 { margin: 0 0 8px; }
+.snapshot-evidence-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.snapshot-side { min-width: 0; }
+.snapshot-side pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 300px; overflow: auto; font: 12px/1.5 var(--mono); }
+.snapshot-source-line { background: var(--accent-dim, var(--panel-3)); color: var(--text-strong); }
+.snapshot-coverage { color: var(--muted); overflow-wrap: anywhere; user-select: text; }
+.snapshot-coverage-item { border-left: 3px solid var(--border-strong); padding: 7px 10px; }
+.snapshot-coverage .notice { margin: 8px 0; }
+@media (max-width: 1000px) {
+  .snapshot-content, .snapshot-view .tool-head { padding: 10px; }
+  .snapshot-evidence-columns { grid-template-columns: minmax(0, 1fr); }
+}

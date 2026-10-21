@@ -45,9 +45,11 @@
   const noteTitle = 'Package smoke synthetic reference';
   const versionParts = info.version.split('.').map(Number);
   const supportsDeviceInspector = versionParts[0] > 0 || versionParts[1] >= 7;
+  const supportsSnapshots = versionParts[0] > 0 || versionParts[1] >= 8;
 
   if (options.phase === 'save') {
     let deviceInspector = null;
+    let deviceSnapshots = null;
     if (supportsDeviceInspector) {
       assert(TOOLS.some((tool) => tool.kind === 'device'), 'Device Inspector entry is missing');
       const device = app.openTool('device');
@@ -62,6 +64,23 @@
       deviceInspector = { demoDevices: device.report.devices.length, endpointMatches: device.trace.matches.length, paths: device.trace.paths.length, noNetworkCollection: !device.jobId };
       await app.closeTab(device);
       assert(!app.byId.has(device.id) && app.jobs.size === 0, 'Device Inspector smoke did not close cleanly');
+    }
+    if (supportsSnapshots) {
+      assert(TOOLS.some((tool) => tool.kind === 'snapshots'), 'Device Snapshots entry is missing');
+      const snapshots = app.openTool('snapshots'); await snapshots.ready;
+      assert(snapshots.snapshots.length === 0, 'Fresh smoke profile unexpectedly contains device snapshots');
+      await snapshots.loadDemo();
+      assert(snapshots.report?.kind === 'device-snapshot-comparison' && snapshots.report.devices.length === 2 && snapshots.report.changes.length > 0,
+        'Packaged snapshot demo comparison failed: ' + snapshots.status.textContent);
+      assert(snapshots.report.changes.some((change) => change.category === 'configuration'), 'Packaged configuration comparison is missing');
+      assert(snapshots.report.changes.some((change) => change.category === 'routes'), 'Packaged route comparison is missing');
+      assert(snapshots.aiContext?.summary && !Object.hasOwn(snapshots.aiContext, 'changes'), 'Snapshot AI context must contain a summary without changed values');
+      const saved = await api.invoke('tools:snapshotList');
+      assert(saved.snapshots.length === 2 && saved.issues.length === 0, 'Demo snapshots were not stored correctly');
+      deviceSnapshots = { savedSnapshots: saved.snapshots.length, comparedDevices: snapshots.report.devices.length, changes: snapshots.report.changes.length,
+        configurationAndRoutesCompared: true, aiSummaryOnly: true, noNetworkCollection: app.jobs.size === 0 };
+      await app.closeTab(snapshots);
+      assert(!app.byId.has(snapshots.id) && app.jobs.size === 0, 'Snapshot smoke did not close cleanly');
     }
     assert(!mist.config.hasToken && mist.testButton.disabled, 'Fresh profile must have no API token');
     app.activate(security);
@@ -103,7 +122,7 @@
     const article = await api.invoke('tools:knowledgeSave', { title: noteTitle, vendor: 'Synthetic fixture', content: 'Wireless RSSI observations are cached evidence. Verify the adapter and collection time.' });
     await ai.readDocument(article.id);
     assert(ai.documentContent.textContent.includes('cached evidence'), 'Packaged local article did not render');
-    await complete({ phase: options.phase, version: info.version, tools: supportsDeviceInspector ? 5 : 4, ...(deviceInspector ? { deviceInspector } : {}), assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
+    await complete({ phase: options.phase, version: info.version, tools: supportsSnapshots ? 6 : supportsDeviceInspector ? 5 : 4, ...(deviceInspector ? { deviceInspector } : {}), ...(deviceSnapshots ? { deviceSnapshots } : {}), assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
   } else if (options.phase === 'forget') {
     assert(mist.config.hasToken && !mist.testButton.disabled, 'Encrypted Mist token did not survive app restart');
     assert(mist.token.value === '', 'Saved credential must not be returned to the input');
@@ -122,7 +141,20 @@
     assert(note, 'Custom knowledge note did not survive restart');
     await api.invoke('tools:knowledgeRemove', note.id);
     assert(!(await api.invoke('tools:knowledgeGet', note.id)), 'Custom note remained after removal');
+    let deviceSnapshots = null;
+    if (supportsSnapshots) {
+      const history = await api.invoke('tools:snapshotList');
+      assert(history.snapshots.length === 2 && history.issues.length === 0, 'Device snapshots did not survive restart');
+      const before = history.snapshots.find((item) => item.label === 'Demo before change');
+      const after = history.snapshots.find((item) => item.label === 'Demo after change');
+      assert(before && after, 'Saved demo snapshot identities are missing');
+      const comparison = await api.invoke('tools:snapshotCompare', { beforeId: before.id, afterId: after.id });
+      assert(comparison.devices.length === 2 && comparison.changes.length > 0, 'Restored snapshots no longer compare correctly');
+      await api.invoke('tools:snapshotRemove', before.id); await api.invoke('tools:snapshotRemove', after.id);
+      assert((await api.invoke('tools:snapshotList')).snapshots.length === 0, 'Synthetic snapshots remained after removal');
+      deviceSnapshots = { persistedAcrossRestart: true, comparisonRestored: true, syntheticSnapshotsRemoved: true };
+    }
     assert(app.jobs.size === 0, 'Smoke left running jobs');
-    await complete({ phase: options.phase, version: info.version, encryptedTokenPersisted: true, tokenForgotten: true, encryptedAiKeyPersisted: true, aiKeyForgotten: true, customNotePersisted: true, customNoteRemoved: true, vectorIndexReady: true, noAutomaticJobs: true });
+    await complete({ phase: options.phase, version: info.version, ...(deviceSnapshots ? { deviceSnapshots } : {}), encryptedTokenPersisted: true, tokenForgotten: true, encryptedAiKeyPersisted: true, aiKeyForgotten: true, customNotePersisted: true, customNoteRemoved: true, vectorIndexReady: true, noAutomaticJobs: true });
   } else throw new Error('Unknown package smoke phase');
 })()

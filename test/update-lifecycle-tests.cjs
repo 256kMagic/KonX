@@ -70,6 +70,7 @@ function fixture() {
     './sftp': { SftpManager: class { constructor() { return sftp; } } },
     './capture': { CaptureManager: class { constructor() { return capture; } } },
     './knowledge': { KnowledgeLibrary: class { constructor() { return knowledge; } } },
+    './device-snapshots': { SnapshotStore: class {} },
     './mist': { MistClient: class {} }, './ai': { AIClient: class {} },
     './notepad': { NotepadStore: class {}, FileWatcher: class {} },
     './updater': { UpdateManager: class {

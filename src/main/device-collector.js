@@ -3,7 +3,7 @@
 // A diagnostic shell belongs to this collector; the authenticated SSH client
 // belongs to the terminal tab. Never send commands to, or close, that terminal.
 const { StringDecoder } = require('node:string_decoder');
-const { COMMANDS, LIMITS, analyzeDevices } = require('./device-analysis');
+const { commandsForProfile, LIMITS, analyzeDevices } = require('./device-analysis');
 
 const DEFAULTS = Object.freeze({ openTimeoutMs: 20000, commandTimeoutMs: 15000, settleMs: 80,
   commandBytes: LIMITS.commandBytes, totalBytes: LIMITS.totalBytes });
@@ -21,7 +21,7 @@ function utf8Prefix(text, limit) {
 
 function listConnections(connections) {
   return [...connections.conns.values()].filter((c) => c.protocol === 'ssh' && !c.closed && c.stream && c.client)
-    .map((c) => ({ id: c.id, label: String(c.session.name || c.session.host || c.id), host: String(c.session.host || '') }));
+    .map((c) => ({ id: c.id, label: String(c.session.name || c.session.host || c.id), host: String(c.session.host || ''), port: Number(c.session.port) || 22 }));
 }
 
 function failure(message, status = 'error', output = '') {
@@ -153,6 +153,7 @@ class DiagnosticShell {
 async function collectDevice(borrowed, metadata, signal, budget, options = DEFAULTS) {
   const shell = new DiagnosticShell(borrowed.client, { ...DEFAULTS, ...options }, budget);
   const commands = [];
+  const selectedCommands = commandsForProfile(metadata.profile, metadata.includeRunningConfig);
   let problem = null;
   const stop = () => shell.abort(failure('Collection cancelled.', 'cancelled'));
   signal.onStop = stop;
@@ -162,7 +163,7 @@ async function collectDevice(borrowed, metadata, signal, budget, options = DEFAU
     await shell.open();
     const setup = await shell.command('terminal length 0');
     if (CLI_ERROR.test(setup)) throw failure('The device did not accept session-local paging control: ' + setup.slice(0, 500));
-    for (const item of COMMANDS) {
+    for (const item of selectedCommands) {
       if (signal.stopped) throw failure('Collection cancelled.', 'cancelled');
       try {
         const output = await shell.command(item.command);
@@ -175,12 +176,15 @@ async function collectDevice(borrowed, metadata, signal, budget, options = DEFAU
   } catch (error) { problem = error; }
   finally { if (signal.onStop === stop) signal.onStop = null; shell.close(); }
   if (problem) {
-    for (const item of COMMANDS.slice(commands.length)) commands.push({ ...item, output: '', status: problem.status || 'error', error: 'Not collected: ' + problem.message });
+    for (const item of selectedCommands.slice(commands.length)) commands.push({ ...item, output: '', status: problem.status || 'error', error: 'Not collected: ' + problem.message });
   }
   return { ...metadata, commands };
 }
 
 async function run(params, emit, signal, connections) {
+  const profile = params?.profile || 'inventory';
+  const includeRunningConfig = params?.includeRunningConfig === true;
+  const selectedCommands = commandsForProfile(profile, includeRunningConfig);
   const ids = params?.connectionIds;
   if (!Array.isArray(ids) || !ids.length || ids.length > LIMITS.devices || ids.some((id) => typeof id !== 'string' || !id || id.length > 128) || new Set(ids).size !== ids.length) {
     throw new Error(`Choose between one and ${LIMITS.devices} distinct connected SSH sessions.`);
@@ -190,7 +194,7 @@ async function run(params, emit, signal, connections) {
     const metadata = available.find((c) => c.id === id);
     const borrowed = connections.sshClient(id);
     if (!metadata || !borrowed) throw new Error('A selected SSH terminal is no longer connected. Refresh the connection list.');
-    return { metadata, borrowed };
+    return { metadata: { ...metadata, profile, includeRunningConfig }, borrowed };
   });
   // Validate the selected public metadata at the report's owning boundary
   // before starting any remote commands, including unusually long saved names.
@@ -204,7 +208,7 @@ async function run(params, emit, signal, connections) {
     const observedAt = new Date().toISOString();
     if (connections.sshClient(metadata.id)?.client !== borrowed.client) {
       devices.push({ ...metadata, connectionId: metadata.id, collectedAt: observedAt,
-        commands: COMMANDS.map((item) => ({ ...item, output: '', status: 'error', error: 'The original SSH connection is no longer available.' })) });
+        commands: selectedCommands.map((item) => ({ ...item, output: '', status: 'error', error: 'The original SSH connection is no longer available.' })) });
       continue;
     }
     devices.push(await collectDevice(borrowed, { ...metadata, connectionId: metadata.id, collectedAt: observedAt }, signal, budget));

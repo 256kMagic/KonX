@@ -8,19 +8,19 @@ Connect to a switch, move files over SFTP, edit its configuration, and investiga
 
 [Download the latest release](https://github.com/256kMagic/KonX/releases/latest) · [User guide](docs/USER_GUIDE.md) · [Report an issue](https://github.com/256kMagic/KonX/issues)
 
-**KonX 0.7.0** adds Device Inspector: collect Cisco IOS/IOS-XE interface, VLAN, MAC, ARP, neighbor and PoE observations through connected SSH sessions, inspect command evidence, and trace IP/MAC switch-port candidates. Try the offline demo without a switch. See the [Device Inspector guide](docs/DEVICE_INSPECTOR.md) and [release notes](docs/releases/0.7.0.md).
+**KonX 0.8.0** adds named device snapshots and before/after change checks, including optional Cisco configuration and route collection. Compare operational observations, inspect source evidence, and try a synthetic demonstration. See the [snapshot guide](docs/DEVICE_SNAPSHOTS.md) and [release notes](docs/releases/0.8.0.md).
 
 ![KonX terminal workspace](docs/screenshots/terminal.png)
 
 ## Download and install
 
-The **0.7.0** release targets **Windows x64**. Node.js is only needed when running from source.
+The **0.8.0** release targets **Windows x64**. Node.js is only needed when running from source.
 
 | Download | Use it for |
 | --- | --- |
-| [KonX-Setup-0.7.0.exe](https://github.com/256kMagic/KonX/releases/download/v0.7.0/KonX-Setup-0.7.0.exe) | A per-user installation with Start menu and desktop shortcuts, an uninstaller, and a choice of installation folder. |
-| [KonX-0.7.0-portable.exe](https://github.com/256kMagic/KonX/releases/download/v0.7.0/KonX-0.7.0-portable.exe) | Run without installing, including from a USB drive. Application settings are still stored in the Windows user profile. |
-| [SHA256SUMS.txt](https://github.com/256kMagic/KonX/releases/download/v0.7.0/SHA256SUMS.txt) | SHA-256 checksums for the release files. |
+| [KonX-Setup-0.8.0.exe](https://github.com/256kMagic/KonX/releases/download/v0.8.0/KonX-Setup-0.8.0.exe) | A per-user installation with Start menu and desktop shortcuts, an uninstaller, and a choice of installation folder. |
+| [KonX-0.8.0-portable.exe](https://github.com/256kMagic/KonX/releases/download/v0.8.0/KonX-0.8.0-portable.exe) | Run without installing, including from a USB drive. Application settings are still stored in the Windows user profile. |
+| [SHA256SUMS.txt](https://github.com/256kMagic/KonX/releases/download/v0.8.0/SHA256SUMS.txt) | SHA-256 checksums for the release files. |
 | [SIP sample capture](https://github.com/256kMagic/KonX/releases/download/v0.2.0/sip-demo.pcapng) | Three synthetic calls for trying the ladder, SDP details, and call exports. |
 
 1. Download the installer or portable executable from the release above.
@@ -32,24 +32,25 @@ The current executables are unsigned. Windows SmartScreen may show an unrecogniz
 To calculate a downloaded file's checksum in PowerShell:
 
 ~~~powershell
-Get-FileHash .\KonX-Setup-0.7.0.exe -Algorithm SHA256
+Get-FileHash .\KonX-Setup-0.8.0.exe -Algorithm SHA256
 ~~~
 
-Compare the hash with `SHA256SUMS.txt`. Installed 0.6.0 and 0.6.1 copies need one manual upgrade because their update button is broken: save your work, close KonX, and run the 0.7.0 installer using the existing installation folder and mode. Installed 0.6.2 and portable 0.6.0 or later copies can use **Update KonX**. Version 0.5.0 and earlier also need a manual installer upgrade or portable-file replacement. An all-users installation in Program Files can require administrator approval.
+Compare the hash with `SHA256SUMS.txt`. Installed 0.6.0 and 0.6.1 copies need one manual upgrade because their update button is broken: save your work, close KonX, and run the 0.8.0 installer using the existing installation folder and mode. Installed 0.6.2 and portable 0.6.0 or later copies can use **Update KonX**. Version 0.5.0 and earlier also need a manual installer upgrade or portable-file replacement. An all-users installation in Program Files can require administrator approval.
 
 ### Update from inside KonX
 
 In installed 0.6.2 or later, or portable 0.6.0 or later, choose **Update KonX** on Home or under **Settings → Updates**. One press checks the public GitHub release, downloads the appropriate Windows x64 file, verifies its SHA-256 checksum, then updates and restarts when no work is active. Installed copies keep their installation folder and mode; portable copies keep the same executable filename and location. Both retain the existing Windows profile, settings, sessions, credentials, and Knowledge library. Save documents and notes, disconnect sessions, and stop captures or jobs first. KonX keeps a verified update ready when these steps are still needed.
 
-No GitHub token or background update check is used. The updater runs only in installed or portable releases; a source checkout or unpacked build explains why updating is unavailable. See the [0.7.0 release notes](docs/releases/0.7.0.md) and [update guide](docs/UPDATING.md) for the current release and upgrade path.
+No GitHub token or background update check is used. The updater runs only in installed or portable releases; a source checkout or unpacked build explains why updating is unavailable. See the [0.8.0 release notes](docs/releases/0.8.0.md) and [update guide](docs/UPDATING.md) for the current release and upgrade path.
 
-## What's new in 0.7.0
+## What's new in 0.8.0
 
-- **Device Inspector:** searchable device observations collected through a dedicated SSH channel, with cancellation and explicit incomplete results.
-- **Find this IP or MAC:** correlate ARP, MAC tables and CDP/LLDP neighbors across selected devices. Results distinguish candidate ports, uplinks, ambiguity and missing evidence.
-- **Offline reports:** load a synthetic demo, export original command evidence as JSON, and reopen reports without connecting to devices.
+- **Device snapshots:** save named observations before and after maintenance and reopen reports from local history.
+- **Change checks:** compare interfaces, VLANs, neighbors, routes, and configuration with original before/after evidence.
+- **Explicit coverage:** incomplete commands and ambiguous device identities stay unverified instead of appearing as confirmed removals.
+- **Offline demo:** try a complete before/after comparison without connecting to switches.
 
-See the [Device Inspector guide](docs/DEVICE_INSPECTOR.md), [release notes](docs/releases/0.7.0.md), and [phased roadmap](docs/ROADMAP.md).
+See the [snapshot guide](docs/DEVICE_SNAPSHOTS.md), [Device Inspector guide](docs/DEVICE_INSPECTOR.md), and [roadmap](docs/ROADMAP.md).
 
 Existing workspace features remain available:
 
@@ -62,7 +63,7 @@ Existing workspace features remain available:
 - **AI & Knowledge:** encrypted connections for OpenAI, Claude, Gemini, Nyquest, and a custom OpenAI-compatible endpoint; 46 bundled articles and editable notes in an offline background SQLite vector index; and **Explain with AI** with explicit context sharing. Library search works without an AI key. [AI and knowledge guide](docs/AI_KNOWLEDGE_GUIDE.md).
 - **Reliability fixes and diagnostics:** improved SFTP cancellation and file preservation, editor recovery, connection and capture handling, and local JavaScript error logs. See the [changelog](CHANGELOG.md) for these fixes and earlier packet/SIP improvements.
 
-See the [0.7.0 release notes](docs/releases/0.7.0.md) and [user guide](docs/USER_GUIDE.md) for workflows and limitations. To try SIP immediately, open the downloadable sample in **Packet Capture** and click **SIP Calls**.
+See the [0.8.0 release notes](docs/releases/0.8.0.md) and [user guide](docs/USER_GUIDE.md) for workflows and limitations. To try SIP immediately, open the downloadable sample in **Packet Capture** and click **SIP Calls**.
 
 ## Start working
 
@@ -206,7 +207,7 @@ Then retry `npm start`. Serial support depends on the optional `serialport` pack
 npm run dist
 ~~~
 
-The build creates versioned executables under `dist/`, such as `KonX-Setup-0.7.0.exe` and `KonX-0.7.0-portable.exe` for the current source version. `npm run dist:dir` creates the unpacked Windows application for inspection. Published release executables are attached to [GitHub Releases](https://github.com/256kMagic/KonX/releases); they are not checked into the source tree.
+The build creates versioned executables under `dist/`, such as `KonX-Setup-0.8.0.exe` and `KonX-0.8.0-portable.exe` for the current source version. `npm run dist:dir` creates the unpacked Windows application for inspection. Published release executables are attached to [GitHub Releases](https://github.com/256kMagic/KonX/releases); they are not checked into the source tree.
 
 ### Test and try a local device
 
@@ -255,9 +256,9 @@ Connect to `127.0.0.1` on port `2222`, username `test`, password `test`. These c
 
 KonX is an early **0.x** project. The Windows x64 release is the currently tested distribution. Packet filters implement KonX's supported syntax rather than the complete Wireshark filter language, capture insights are diagnostic aids, and serial/capture support depends on the available hardware and drivers.
 
-Version **0.7.0** carries the same application source as 0.6.2 and retains its updater fixes, animated themes, AI/library workspace, Security Suite, wireless/Mist tools, and earlier packet/SIP workflows. The published 0.6.2 installer was manually installed and its update button successfully checked the public release, with settings unchanged. A complete installed 0.6.2 → 0.7.0 update is a separate test that requires 0.7.0 to be published first. Current validation and the six inherited known findings are recorded in the [0.7.0 release notes](docs/releases/0.7.0.md).
+Version **0.8.0** carries the same application source as 0.6.2 and retains its updater fixes, animated themes, AI/library workspace, Security Suite, wireless/Mist tools, and earlier packet/SIP workflows. The published 0.6.2 installer was manually installed and its update button successfully checked the public release, with settings unchanged. A complete installed 0.6.2 → 0.8.0 update is a separate test that requires 0.8.0 to be published first. Current validation and the six inherited known findings are recorded in the [0.8.0 release notes](docs/releases/0.8.0.md).
 
-Detailed version history and validation limits are recorded in the [changelog](CHANGELOG.md) and [release notes](docs/releases/0.7.0.md).
+Detailed version history and validation limits are recorded in the [changelog](CHANGELOG.md) and [release notes](docs/releases/0.8.0.md).
 
 For help, start with the [user guide](docs/USER_GUIDE.md). Common first checks:
 

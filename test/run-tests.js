@@ -476,6 +476,8 @@ const fakeCrypt = {
   await require('./device-analysis-tests.cjs').runDeviceAnalysisTests(test);
   await require('./device-collector-tests.cjs').runDeviceCollectorTests(test);
   await require('./device-ui-tests.cjs').runDeviceUiTests(test);
+  await require('./device-snapshot-tests.cjs').runDeviceSnapshotTests(test);
+  await require('./snapshot-ui-tests.cjs').runSnapshotUiTests(test);
 
   const failed = results.filter((r) => !r[0]);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

@@ -15,6 +15,7 @@ const security = require('./security');
 const wifi = require('./wifi');
 const deviceAnalysis = require('./device-analysis');
 const deviceCollector = require('./device-collector');
+const { SnapshotStore, compareSnapshots } = require('./device-snapshots');
 const { MistClient } = require('./mist');
 const { AIClient } = require('./ai');
 const { KnowledgeLibrary } = require('./knowledge');
@@ -30,6 +31,7 @@ const notepad = require('./notepad');
 
 const { productName: PRODUCT, version: VERSION } = require('../../package.json');
 const CAPTURE = process.env.KONX_CAPTURE;
+const MAX_DEVICE_REPORT_BYTES = 20 * 1024 * 1024;
 
 let win = null;
 let store;
@@ -41,6 +43,7 @@ let npWatcher;
 let mist;
 let ai;
 let knowledge;
+let snapshots;
 let updates;
 const toolJobs = new Map();
 
@@ -351,6 +354,22 @@ function registerIpc() {
     if (s.onStop) s.onStop();
   });
   handle('tools:deviceConnections', () => deviceCollector.listConnections(connections));
+  handle('tools:snapshotSave', (params) => snapshots.save(params));
+  handle('tools:snapshotList', () => snapshots.list());
+  handle('tools:snapshotGet', (id) => snapshots.get(id));
+  handle('tools:snapshotRemove', (id) => snapshots.remove(id));
+  handle('tools:snapshotCompare', async (params) => compareSnapshots(await snapshots.get(params?.beforeId), await snapshots.get(params?.afterId), params?.devicePairs));
+  handle('tools:snapshotDemo', async () => {
+    const demo = JSON.parse(fs.readFileSync(path.join(__dirname, '../../assets/device-snapshot-demo.json'), 'utf8'));
+    const before = await snapshots.save({ label: 'Demo before change', report: demo.before });
+    try {
+      const after = await snapshots.save({ label: 'Demo after change', report: demo.after });
+      return { beforeId: before.id, afterId: after.id };
+    } catch (error) {
+      try { await snapshots.remove(before.id); } catch (cleanupError) { throw new Error(`${error.message} The first demo snapshot could not be removed: ${cleanupError.message}`); }
+      throw error;
+    }
+  });
   handle('tools:deviceCommands', () => deviceAnalysis.COMMANDS);
   handle('tools:deviceDemo', () => deviceAnalysis.analyzeDevices(JSON.parse(fs.readFileSync(path.join(__dirname, '../../assets/device-inspector-demo.json'), 'utf8'))));
   handle('tools:deviceImport', async () => {
@@ -358,15 +377,15 @@ function registerIpc() {
     if (result.canceled || !result.filePaths[0]) return null;
     const file = await fs.promises.open(result.filePaths[0], 'r');
     try {
-      if ((await file.stat()).size > 16 * 1024 * 1024) throw new Error('Device report exceeds the 16 MiB file limit.');
-      const buffer = Buffer.alloc(16 * 1024 * 1024 + 1);
+      if ((await file.stat()).size > MAX_DEVICE_REPORT_BYTES) throw new Error('Device report exceeds the 20 MiB file limit.');
+      const buffer = Buffer.alloc(MAX_DEVICE_REPORT_BYTES + 1);
       let length = 0;
       while (length < buffer.length) {
         const { bytesRead } = await file.read(buffer, length, buffer.length - length, null);
         if (!bytesRead) break;
         length += bytesRead;
       }
-      if (length > 16 * 1024 * 1024) throw new Error('Device report exceeds the 16 MiB file limit.');
+      if (length > MAX_DEVICE_REPORT_BYTES) throw new Error('Device report exceeds the 20 MiB file limit.');
       const input = buffer.subarray(0, length).toString('utf8');
       return deviceAnalysis.analyzeDevices(JSON.parse(input.replace(/^\uFEFF/, '')));
     } finally { await file.close(); }
@@ -374,9 +393,11 @@ function registerIpc() {
   handle('tools:deviceTrace', (devices, query) => deviceAnalysis.traceEndpoint(deviceAnalysis.analyzeDevices({ devices }).devices, query));
   handle('tools:deviceExport', async (input) => {
     const report = deviceAnalysis.analyzeDevices(input);
+    const serialized = JSON.stringify(report, null, 2);
+    if (Buffer.byteLength(serialized) > MAX_DEVICE_REPORT_BYTES) throw new Error('Serialized device report exceeds the 20 MiB file limit.');
     const result = await dialog.showSaveDialog(win, { defaultPath: `konx-device-${new Date().toISOString().slice(0, 10)}.json`, filters: [{ name: 'Device report', extensions: ['json'] }] });
     if (result.canceled || !result.filePath) return null;
-    await fs.promises.writeFile(result.filePath, JSON.stringify(report, null, 2));
+    await fs.promises.writeFile(result.filePath, serialized);
     return result.filePath;
   });
   handle('tools:mistConfig', () => mist.getConfig());
@@ -510,6 +531,7 @@ app.whenReady().then(() => {
     decrypt: (s) => safeStorage.decryptString(Buffer.from(s, 'base64')),
   };
   store = new Store(app.getPath('userData'), crypt);
+  snapshots = new SnapshotStore(app.getPath('userData'));
   mist = new MistClient({ dir: app.getPath('userData'), crypt });
   knowledge = new KnowledgeLibrary({ dir: app.getPath('userData') });
   ai = new AIClient({ dir: app.getPath('userData'), crypt, knowledge });

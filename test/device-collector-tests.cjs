@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { Server, Client, utils } = require('ssh2');
 const { run, listConnections, collectDevice } = require('../src/main/device-collector');
-const { COMMANDS, analyzeDevices } = require('../src/main/device-analysis');
+const { INVENTORY_COMMANDS: COMMANDS, analyzeDevices } = require('../src/main/device-analysis');
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const metadata = { id: 'terminal-one', connectionId: 'terminal-one', label: 'Test switch', host: '192.0.2.1', collectedAt: '2026-10-21T00:00:00Z' };
@@ -67,7 +67,7 @@ async function runDeviceCollectorTests(test) {
     try {
       const session = { name: metadata.label, host: metadata.host, password: 'never-render-this', passphrase: 'never-this-either' };
       const connections = { conns: new Map([[metadata.id, { id: metadata.id, protocol: 'ssh', closed: false, client: fixture.client, stream: fixture.terminal, session }]]), sshClient: () => ({ client: fixture.client, session }) };
-      assert.deepEqual(listConnections(connections), [{ id: metadata.id, label: metadata.label, host: metadata.host }]);
+      assert.deepEqual(listConnections(connections), [{ id: metadata.id, label: metadata.label, host: metadata.host, port: 22 }]);
       const events = []; const signal = { stopped: false, onStop: null };
       await run({ connectionIds: [metadata.id] }, (type, data) => events.push({ type, data }), signal, connections);
       const report = events.find((event) => event.type === 'report')?.data;

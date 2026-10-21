@@ -1,4 +1,4 @@
-import { h, icon, api, DataTable, toast, errMsg } from './ui.js';
+import { h, icon, api, DataTable, toast, errMsg, promptText } from './ui.js';
 
 const shown = (value) => value == null || value === '' ? 'Unknown' : Array.isArray(value) ? value.join(', ') : String(value);
 const PAGE_SIZE = 100;
@@ -9,6 +9,7 @@ const FACTS = {
   arp: ['ARP', [['ip', 'IP address'], ['mac', 'MAC'], ['age', 'Age'], ['interface', 'Interface']]],
   neighbors: ['Neighbors', [['protocol', 'Protocol'], ['deviceId', 'Neighbor'], ['managementAddress', 'Management address'], ['localInterface', 'Local interface'], ['remoteInterface', 'Remote interface'], ['capabilities', 'Capabilities']]],
   poe: ['PoE', [['interface', 'Interface'], ['admin', 'Admin'], ['oper', 'State'], ['powerWatts', 'Watts'], ['device', 'Device'], ['class', 'Class'], ['maxWatts', 'Maximum watts']]],
+  routes: ['Routes', [['prefix', 'Prefix'], ['protocol', 'Protocol'], ['nextHop', 'Next hop'], ['interface', 'Interface'], ['distance', 'Distance'], ['metric', 'Metric']]],
 };
 const date = (value) => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : 'Unknown time';
 
@@ -25,6 +26,9 @@ export class DeviceTab {
     this.importButton = h('button.btn', { onclick: () => this.load('tools:deviceImport') }, icon('folder-open'), 'Load report');
     this.demoButton = h('button.btn', { onclick: () => this.load('tools:deviceDemo') }, icon('play'), 'Load demo');
     this.exportButton = h('button.btn', { disabled: true, onclick: () => this.export() }, icon('download'), 'Export JSON');
+    this.snapshotButton = h('button.btn', { disabled: true, onclick: () => this.saveSnapshot() }, icon('download'), 'Save snapshot');
+    this.historyButton = h('button.btn', { onclick: () => this.app.openTool('snapshots') }, icon('columns'), 'Snapshot history');
+    this.includeConfig = h('input', { type: 'checkbox', checked: params.profile === 'snapshot', 'aria-label': 'Include configuration and routes' });
     this.connectionList = h('div.device-connections');
     this.connectionSummary = h('summary', 'Connected SSH devices');
     this.connectionDetails = h('details.device-connection-picker', { open: true }, this.connectionSummary,
@@ -59,7 +63,10 @@ export class DeviceTab {
     this.el = h('div.view.device-view', h('div.tool-head',
       h('div.tool-title', icon('server'), h('h2', 'Device Inspector'), h('span.sub', 'Cisco interfaces, VLANs, neighbors and endpoint paths')),
       h('p.notice', 'Collection uses separate SSH channels for read-only show commands. Incomplete output and uncertain endpoint paths remain visible.'),
-      h('div.device-actions', this.collectButton, this.importButton, this.demoButton, this.exportButton), this.status, this.connectionDetails), this.content);
+      h('div.device-actions', this.collectButton, this.importButton, this.demoButton, this.exportButton, this.snapshotButton, this.historyButton),
+      h('label.device-connection', this.includeConfig, 'Include configuration and routes'),
+      h('p.hint', 'Running configuration can contain credentials. Snapshot files and exports retain the captured configuration locally.'),
+      this.status, this.connectionDetails), this.content);
     this.createTable(); this.updateButtons(); this.ready = this.refreshConnections();
   }
 
@@ -95,6 +102,7 @@ export class DeviceTab {
     this.collectButton.disabled = !!this.loading || (!this.jobId && !this.selectedConnections.size);
     this.importButton.disabled = busy; this.demoButton.disabled = busy; this.refreshButton.disabled = busy;
     this.exportButton.disabled = busy || !this.report;
+    this.snapshotButton.disabled = busy || !this.report; this.includeConfig.disabled = busy;
     this.findButton.disabled = !this.report || busy || !!this.tracing;
     this.connectionSummary.textContent = `Connected SSH devices · ${this.selectedConnections.size} selected`;
     for (const input of this.connectionList.querySelectorAll('input')) input.disabled = busy;
@@ -112,7 +120,7 @@ export class DeviceTab {
     this.cancelRequested = false; this.reportReceived = false; this.reportError = null; this.jobId = id;
     ++this.requestSeq; ++this.traceSeq; this.tracing = false;
     this.app.registerJob(id, this); this.setRunning(true); this.status.textContent = 'Collecting selected device observations…';
-    try { await api.invoke('tools:start', 'device', { connectionIds: [...this.selectedConnections] }, id); }
+    try { await api.invoke('tools:start', 'device', { connectionIds: [...this.selectedConnections], profile: this.includeConfig.checked ? 'snapshot' : 'inventory', includeRunningConfig: this.includeConfig.checked }, id); }
     catch (error) { if (!this.disposed && this.jobId === id) this.onJobEvent('error', { message: errMsg(error) }); }
   }
 
@@ -250,6 +258,19 @@ export class DeviceTab {
     if (!this.report || this.jobId || this.loading) return;
     try { const file = await api.invoke('tools:deviceExport', this.report); if (file && !this.disposed) toast('Saved ' + file, 'ok'); }
     catch (error) { if (!this.disposed) toast(errMsg(error), 'err'); }
+  }
+
+  async saveSnapshot() {
+    if (!this.report || this.disposed || this.jobId || this.loading) return;
+    const report = this.report, request = ++this.requestSeq;
+    this.loading = true; this.updateButtons();
+    try {
+      const label = await promptText('Save device snapshot', 'Snapshot name', 'Before maintenance', 'Save snapshot');
+      if (!label || this.disposed || request !== this.requestSeq) return;
+      const saved = await api.invoke('tools:snapshotSave', { label, report });
+      if (!this.disposed && request === this.requestSeq) this.status.textContent = `Saved snapshot “${saved.label}”. Open Snapshot history to compare observations.`;
+    } catch (error) { if (!this.disposed && request === this.requestSeq) this.status.textContent = errMsg(error); }
+    finally { if (!this.disposed && request === this.requestSeq) { this.loading = false; this.updateButtons(); } }
   }
 
   show() { this.active = true; this.terminalButton.disabled = !this.terminalFor(this.currentDevice()); }
