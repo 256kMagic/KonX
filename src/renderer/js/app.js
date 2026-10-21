@@ -7,6 +7,7 @@ import { TOOLS, createTool, hostMenuItems } from './tools.js';
 import { settingsDialog } from './settings.js';
 import { NotepadTab } from './notepad/notepad.js';
 import { toolContext } from './tool-context.mjs';
+import { applyApplicationTheme } from './theme-effects.js';
 
 const RECENT_KEY = 'konx.recent';
 
@@ -127,6 +128,11 @@ class App {
   async init() {
     this.info = await api.invoke('app:info');
     this.settings = await api.invoke('settings:get');
+    this.motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
+    this.motionPreference.addEventListener('change', () => this.updateThemeHeader());
+    document.addEventListener('visibilitychange', () => {
+      document.documentElement.dataset.themeVisible = String(!document.hidden);
+    });
     this.presets = await api.invoke('tools:presets');
     document.title = this.info.name;
     this.applyTheme();
@@ -145,8 +151,23 @@ class App {
   }
 
   applyTheme() {
-    document.documentElement.dataset.theme = this.settings.uiTheme === 'light' ? 'light' : 'dark';
+    this.theme = applyApplicationTheme(this.settings);
     document.documentElement.style.setProperty('--sidebar-w', (this.settings.sidebarWidth || 260) + 'px');
+    this.updateThemeHeader();
+  }
+
+  updateThemeHeader() {
+    if (!this.themeHeader) return;
+    this.themeHeader.classList.toggle('hidden', !this.theme.animated);
+    this.themeName.textContent = this.theme.label;
+    const reduced = this.motionPreference.matches;
+    const paused = this.settings.themeAnimations === false;
+    const label = reduced ? 'Reduced motion' : paused ? 'Resume effects' : 'Pause effects';
+    this.themeMotion.textContent = label;
+    this.themeMotion.disabled = reduced || !!this.savingThemeMotion;
+    this.themeMotion.setAttribute('aria-label', label + ' for ' + this.theme.label);
+    this.themeMotion.setAttribute('aria-pressed', String(paused || reduced));
+    this.themeMotion.title = reduced ? 'Animations are disabled by your Windows reduced-motion preference.' : label;
   }
 
   // ------------------------------------------------------------ layout
@@ -165,6 +186,15 @@ class App {
     });
     const toolsBtn = h('button.tb-btn', { onclick: (e) => this.toolsMenu(e) }, icon('wifi'), 'Network Tools', icon('chev-down'));
     this.buttonBarToggle = h('button.tb-btn.icon-only', { 'aria-controls': 'buttonbar', onclick: () => this.toggle('buttonbar') }, icon('button-bar'));
+    this.themeName = h('span.theme-header-name');
+    this.themeMotion = h('button.theme-motion-toggle', { type: 'button', onclick: async () => {
+      this.savingThemeMotion = true;
+      this.updateThemeHeader();
+      try { await this.saveSettings({ themeAnimations: this.settings.themeAnimations === false }); }
+      catch (error) { toast(errMsg(error)); }
+      finally { this.savingThemeMotion = false; this.updateThemeHeader(); }
+    } });
+    this.themeHeader = h('div.theme-header.hidden', this.themeName, this.themeMotion);
     this.toolbar = h(
       'div#toolbar',
       h('div.brand', h('img.logo', { src: '../../assets/logo.svg', alt: '' }), this.info.name),
@@ -176,6 +206,7 @@ class App {
       h('button.tb-btn', { title: 'Notepad++-style editor', onclick: () => this.openNotepad() }, icon('edit'), 'Notepad'),
       toolsBtn,
       h('div.tb-spacer'),
+      this.themeHeader,
       this.buttonBarToggle,
       h('button.tb-btn.icon-only', { title: 'Command window (send to one or all tabs)', onclick: () => this.toggle('cmdwin') }, icon('command')),
       h('button.tb-btn.icon-only', { title: 'Home', onclick: () => this.showHome() }, icon('home')),
@@ -235,6 +266,7 @@ class App {
     this.status = h('div#statusbar');
     this.root = h('div#app', this.toolbar, this.sidebar, this.main, this.status);
     document.body.append(this.root);
+    this.updateThemeHeader();
     this.tabResizeObserver = new ResizeObserver(() => this.scheduleTabLayout(true));
     this.tabResizeObserver.observe(this.tabstrip);
   }

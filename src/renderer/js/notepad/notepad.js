@@ -5,6 +5,7 @@ import { h, icon, api, contextMenu, modal, toast, errMsg, confirmDialog, buildFi
 import { loadMonaco } from './monaco.js';
 import * as T from './textops.mjs';
 import { toolsMenu, findInFilesDialog, sendToTerminalDialog, hashDialog } from './notepad-tools.js';
+import { editorTheme, mountThemeOutput } from '../theme-effects.js';
 
 let seq = 0;
 const newId = () => `d${Date.now().toString(36)}${(seq++).toString(36)}`;
@@ -122,6 +123,7 @@ export class NotepadTab {
       quickSuggestions: false,
       emptySelectionClipboard: true,
     });
+    mountThemeOutput(this.host);
     this.bindKeys();
     this.editor.onDidChangeCursorSelection(() => this.updateStatus());
     this.editor.onDidChangeModelContent(() => this.onContentChange());
@@ -137,7 +139,7 @@ export class NotepadTab {
   }
 
   theme() {
-    return this.app.settings.uiTheme === 'light' ? 'konx-light' : 'konx-dark';
+    return editorTheme(this.monaco, this.app.settings);
   }
 
   bindKeys() {
@@ -680,6 +682,7 @@ export class NotepadTab {
         renderIndicators: true,
         minimap: { enabled: false },
       });
+      mountThemeOutput(this.diffHost);
       this.diffEditor.onDidUpdateDiff(() => this.renderDiffBar());
     }
     this.diffPair = { other, base };

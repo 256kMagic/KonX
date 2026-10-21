@@ -2,27 +2,25 @@
 
 # KonX
 
-**A Windows desktop workspace for terminals, file transfers, configuration editing, packet analysis, and network troubleshooting.**
+**A Windows desktop workspace for terminals, file transfers, packet analysis, security, wireless, and AI-assisted troubleshooting.**
 
-Connect to a switch, move files over SFTP, edit its configuration, and investigate the network from the same tabbed application. KonX combines an SSH/Telnet/serial terminal, a two-pane file manager, a Monaco-based editor, a packet capture viewer, and practical network tools.
+Connect to a switch, move files over SFTP, edit its configuration, and investigate the network from the same tabbed application. KonX combines an SSH/Telnet/serial terminal, a two-pane file manager, a Monaco-based editor, a packet capture viewer, security assessments, Wi-Fi diagnostics, Mist/Marvis monitoring, and an AI workspace with a local reference library.
 
 [Download the latest release](https://github.com/256kMagic/KonX/releases/latest) · [User guide](docs/USER_GUIDE.md) · [Report an issue](https://github.com/256kMagic/KonX/issues)
 
-**0.3.0 test build:** Security Suite, Wi-Fi Tools, Mist/Marvis monitoring and troubleshooting, and local JavaScript error logs are now available in the latest source/test build. See the [0.3.0 notes](docs/releases/0.3.0.md). The public download links below still refer to the published 0.2.0 release.
-
-**0.4.0 test build:** adds **AI & Knowledge**, with encrypted keys for OpenAI, Claude, Gemini, Nyquest, and a custom OpenAI-compatible endpoint; an offline background SQLite vector index; 46 bundled articles and an editable reference library; and **Explain with AI** in tool tabs. See the [0.4.0 notes](docs/releases/0.4.0.md) and [AI and knowledge guide](docs/AI_KNOWLEDGE_GUIDE.md). Older 0.3.0 installations do not include AI. The public download links below still refer to 0.2.0.
+**KonX 0.5.0** adds six animated themes with glow, coordinated terminal/editor backgrounds, a compact top header, and saved motion controls. Classic themes remain available. This release also brings the Security Suite, Wi-Fi and Mist/Marvis tools, and AI & Knowledge to the public downloads. See the [0.5.0 release notes](docs/releases/0.5.0.md).
 
 ![KonX terminal workspace](docs/screenshots/terminal.png)
 
 ## Download and install
 
-The current release is **0.2.0**, built and tested for **Windows x64**. Node.js is only needed when running from source.
+The current release is **0.5.0**, built and tested for **Windows x64**. Node.js is only needed when running from source.
 
 | Download | Use it for |
 | --- | --- |
-| [KonX-Setup-0.2.0.exe](https://github.com/256kMagic/KonX/releases/download/v0.2.0/KonX-Setup-0.2.0.exe) | A per-user installation with Start menu and desktop shortcuts, an uninstaller, and a choice of installation folder. |
-| [KonX-0.2.0-portable.exe](https://github.com/256kMagic/KonX/releases/download/v0.2.0/KonX-0.2.0-portable.exe) | Run without installing, including from a USB drive. Application settings are still stored in the Windows user profile. |
-| [SHA256SUMS.txt](https://github.com/256kMagic/KonX/releases/download/v0.2.0/SHA256SUMS.txt) | SHA-256 checksums for the release files. |
+| [KonX-Setup-0.5.0.exe](https://github.com/256kMagic/KonX/releases/download/v0.5.0/KonX-Setup-0.5.0.exe) | A per-user installation with Start menu and desktop shortcuts, an uninstaller, and a choice of installation folder. |
+| [KonX-0.5.0-portable.exe](https://github.com/256kMagic/KonX/releases/download/v0.5.0/KonX-0.5.0-portable.exe) | Run without installing, including from a USB drive. Application settings are still stored in the Windows user profile. |
+| [SHA256SUMS.txt](https://github.com/256kMagic/KonX/releases/download/v0.5.0/SHA256SUMS.txt) | SHA-256 checksums for the release files. |
 | [SIP sample capture](https://github.com/256kMagic/KonX/releases/download/v0.2.0/sip-demo.pcapng) | Three synthetic calls for trying the ladder, SDP details, and call exports. |
 
 1. Download the installer or portable executable from the release above.
@@ -34,22 +32,25 @@ The current executables are unsigned. Windows SmartScreen may show an unrecogniz
 To calculate a downloaded file's checksum in PowerShell:
 
 ~~~powershell
-Get-FileHash .\KonX-Setup-0.2.0.exe -Algorithm SHA256
+Get-FileHash .\KonX-Setup-0.5.0.exe -Algorithm SHA256
 ~~~
 
-Compare the hash with `SHA256SUMS.txt`. For an update, save your documents and close KonX before running the newer installer. Updates are installed manually; KonX does not currently provide an automatic updater.
+Compare the hash with `SHA256SUMS.txt`. For an update, save your documents and close KonX before running the newer installer. An existing all-users installation in Program Files can require administrator approval. Updates are installed manually; KonX does not currently provide an automatic updater.
 
-## What's new in 0.2.0
+## What's new in 0.5.0
 
-- **Packet reassembly and readable traffic:** sequence-aware TCP reconstruction, distinct UDP datagrams, gap and conflicting-overlap warnings, and links back to source packets. The HTTP/1 view pairs requests and responses when supported by the capture, handles chunked and gzip/deflate bodies, formats JSON, and exports complete decoded bodies.
-- **SIP call analysis:** searchable call list, clickable signaling ladder, observed SDP media details, and PCAPNG/JSON call exports. Calls can span proxy legs, and retransmissions, dialog branches, incomplete evidence, and analysis limits stay visible.
-- **Stable dialogs:** switching session panels keeps the header and navigation in place, with long content scrolling inside the dialog.
-- **Accurate Auto-scroll:** scrolling upward or using packet-navigation keys pauses following and clears the checkbox; checking it again resumes following.
-- **Reachable tabs:** overflowing application tabs have arrow controls and a **Show all tabs** menu. Background activity preserves manual tab scrolling.
-- **Clearer toolbar:** the button-bar toggle has a dedicated icon and Show/Hide label, and Quick Connect uses the same dropdown styling as other forms.
-- **Consistent version reporting:** the development app reports the KonX package version in its status bar.
+- **Six animated themes:** Arc Reactor, Chroma RGB, Matrix Mainframe, Synthwave Grid, Hologram Prism, and Plasma Forge bring distinct palettes, glow, and motion. A compact top header keeps tools in view; decorative backgrounds sit behind terminal and editor output, with quieter surfaces for data and explanations.
+- **Motion and classic choices:** pause/resume effects from the header or save the setting in Appearance. Windows reduced-motion preferences are respected. Dark and Light themes and all existing terminal palettes remain available.
+- **Coordinated terminals:** choose **Settings → Appearance → Terminal color scheme → Follow application theme** for matching terminal colors and backgrounds. It is the default for new profiles; upgrades preserve existing global and per-session palettes. See the [Appearance guide](docs/USER_GUIDE.md#appearance-and-motion).
 
-See the [release notes](CHANGELOG.md) and [user guide](docs/USER_GUIDE.md) for workflows and limitations. To try SIP immediately, open the downloadable sample in **Packet Capture** and click **SIP Calls**.
+Also included since the previous public release:
+
+- **Security Suite:** local Windows posture, remote service exposure, TLS/SSH, web headers, device configurations, and saved-capture assessments, with evidence, baselines, and JSON/HTML exports. [Security Suite guide](docs/SECURITY_SUITE.md).
+- **Wi-Fi and Mist/Marvis:** Windows adapter and cached BSSID diagnostics, signal/channel views, encrypted Mist-token storage, AP/client monitoring, and direct Marvis troubleshooting. [Wi-Fi and Mist guide](docs/WIRELESS_MIST_GUIDE.md).
+- **AI & Knowledge:** encrypted connections for OpenAI, Claude, Gemini, Nyquest, and a custom OpenAI-compatible endpoint; 46 bundled articles and editable notes in an offline background SQLite vector index; and **Explain with AI** with explicit context sharing. Library search works without an AI key. [AI and knowledge guide](docs/AI_KNOWLEDGE_GUIDE.md).
+- **Reliability fixes and diagnostics:** improved SFTP cancellation and file preservation, editor recovery, connection and capture handling, and local JavaScript error logs. See the [changelog](CHANGELOG.md) for these fixes and earlier packet/SIP improvements.
+
+See the [0.5.0 release notes](docs/releases/0.5.0.md) and [user guide](docs/USER_GUIDE.md) for workflows and limitations. To try SIP immediately, open the downloadable sample in **Packet Capture** and click **SIP Calls**.
 
 ## Start working
 
@@ -57,9 +58,9 @@ See the [release notes](CHANGELOG.md) and [user guide](docs/USER_GUIDE.md) for w
 - **Transfer:** open SFTP from a saved SSH session or an existing SSH tab to work with local and remote files side by side.
 - **Edit:** open Notepad for local documents, remote SFTP files, configuration cleanup, file hashing, or document comparison.
 - **Investigate:** open Packet Capture to record traffic or inspect an existing capture, or choose a network tool from the home screen.
-- **Assess security (0.3.0):** open Security Suite for Windows posture and remote exposure, TLS/SSH, web headers, device configuration, and saved-capture checks. Review evidence, compare local baselines, and export JSON/HTML reports. See the [Security Suite guide](docs/SECURITY_SUITE.md) for scope and workflows.
-- **Wireless and Mist (0.3.0):** inspect local Wi-Fi adapters, cached BSSIDs, signal and channels, or save an encrypted Mist token for AP/client monitoring and direct Marvis troubleshooting. See the [Wi-Fi and Mist guide](docs/WIRELESS_MIST_GUIDE.md).
-- **Understand results (0.4.0):** choose **Explain with AI** in a tool tab, preview the result context, and ask a configured AI provider for an explanation with local references. Search the offline library or maintain your own reference notes without an AI key. See the [AI and knowledge guide](docs/AI_KNOWLEDGE_GUIDE.md).
+- **Assess security:** open Security Suite for Windows posture and remote exposure, TLS/SSH, web headers, device configuration, and saved-capture checks. Review evidence, compare local baselines, and export JSON/HTML reports. See the [Security Suite guide](docs/SECURITY_SUITE.md) for scope and workflows.
+- **Wireless and Mist:** inspect local Wi-Fi adapters, cached BSSIDs, signal and channels, or save an encrypted Mist token for AP/client monitoring and direct Marvis troubleshooting. See the [Wi-Fi and Mist guide](docs/WIRELESS_MIST_GUIDE.md).
+- **Understand results:** choose **Explain with AI** in a tool tab, preview the result context, and ask a configured AI provider for an explanation with local references. Search the offline library or maintain your own reference notes without an AI key. See the [AI and knowledge guide](docs/AI_KNOWLEDGE_GUIDE.md).
 
 The [user guide](docs/USER_GUIDE.md) covers connection settings, credentials, imports, transfers, editing, capture filters, and troubleshooting in detail.
 
@@ -193,7 +194,7 @@ Then retry `npm start`. Serial support depends on the optional `serialport` pack
 npm run dist
 ~~~
 
-The build creates versioned executables under `dist/`, such as `KonX-Setup-0.2.1.exe` and `KonX-0.2.1-portable.exe` for the current source version. `npm run dist:dir` creates the unpacked Windows application for inspection. Published release executables are attached to [GitHub Releases](https://github.com/256kMagic/KonX/releases); they are not checked into the source tree.
+The build creates versioned executables under `dist/`, such as `KonX-Setup-0.5.0.exe` and `KonX-0.5.0-portable.exe` for the current source version. `npm run dist:dir` creates the unpacked Windows application for inspection. Published release executables are attached to [GitHub Releases](https://github.com/256kMagic/KonX/releases); they are not checked into the source tree.
 
 ### Test and try a local device
 
@@ -242,9 +243,9 @@ Connect to `127.0.0.1` on port `2222`, username `test`, password `test`. These c
 
 KonX is an early **0.x** project. The Windows x64 release is the currently tested distribution. Packet filters implement KonX's supported syntax rather than the complete Wireshark filter language, capture insights are diagnostic aids, and serial/capture support depends on the available hardware and drivers.
 
-Version **0.2.0** adds the packet and SIP workflows and interface fixes described above. It retains the 0.1.2 connection-tab close fix and earlier fixes for SFTP download paths, connection errors and trust prompts, editor save state, remote-edit upload recovery, and loading capture files while a live capture is active.
+Version **0.5.0** includes the animated themes, AI/library workspace, Security Suite, wireless/Mist tools, and earlier packet/SIP workflows. It retains the connection-tab close fix and improvements to SFTP file preservation, cancellation, editor recovery, connection handling, and capture parsing. The release passed **439 automated tests**; all **76 application source files** matched the packaged archive. Unpacked, portable, and installed Windows builds passed isolated workflow checks.
 
-Development and test-build changes after the published 0.2.0 release are recorded in the [changelog](CHANGELOG.md).
+Detailed version history and validation limits are recorded in the [changelog](CHANGELOG.md) and [0.5.0 release notes](docs/releases/0.5.0.md).
 
 For help, start with the [user guide](docs/USER_GUIDE.md). Common first checks:
 

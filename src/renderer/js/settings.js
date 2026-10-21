@@ -1,12 +1,13 @@
 // Global settings dialog, including the known-hosts manager.
 import { h, api, modal, buildFields, DataTable, contextMenu, confirmDialog, fmtDate } from './ui.js';
-import { SCHEMES } from './themes.js';
+import { SCHEMES, APP_THEMES } from './themes.js';
 
 export async function settingsDialog(app) {
   const s = app.settings;
   const appearance = buildFields([
-    { name: 'uiTheme', label: 'Application theme', type: 'select', options: [['dark', 'Dark'], ['light', 'Light']] },
-    { name: 'colorScheme', label: 'Terminal color scheme', type: 'select', options: Object.entries(SCHEMES).map(([k, v]) => [k, v.label]) },
+    { name: 'uiTheme', label: 'Application theme', type: 'select', options: Object.entries(APP_THEMES).map(([k, v]) => [k, v.label]) },
+    { name: 'colorScheme', label: 'Terminal color scheme', type: 'select', options: Object.entries(SCHEMES).map(([k, v]) => [k, v.label]), hint: 'Follow application theme adds matching colors and backgrounds. Saved session palettes take priority.' },
+    { name: 'themeAnimations', label: 'Animate theme effects', type: 'checkbox', span: 2, hint: 'Use Pause effects in the header at any time. Windows reduced-motion preferences are respected.' },
     { name: 'fontFamily', label: 'Terminal font', span: 2 },
     { name: 'fontSize', label: 'Font size', type: 'number', min: 7, max: 36 },
     { name: 'cursorStyle', label: 'Cursor', type: 'select', options: [['block', 'Block'], ['underline', 'Underline'], ['bar', 'Bar']] },
