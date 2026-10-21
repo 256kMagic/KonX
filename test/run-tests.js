@@ -493,6 +493,10 @@ const fakeCrypt = {
   await (await import('./incident-evidence-tests.mjs')).runIncidentEvidenceTests(test);
   await require('./incident-ui-tests.cjs').runIncidentUiTests(test);
   await require('./incident-tests.cjs').runIncidentTests(test);
+  await require('./remote-capture-tests.cjs').runRemoteCaptureTests(test);
+  await require('./remote-results-tests.cjs').runRemoteResultTests(test);
+  await require('./remote-lifecycle-tests.cjs').runRemoteLifecycleTests(test);
+  await require('./remote-ui-tests.cjs').runRemoteUiTests(test);
 
   const failed = results.filter((r) => !r[0]);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

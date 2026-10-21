@@ -1,0 +1,21 @@
+.remote-capture-view { min-width:0; }
+.remote-capture-view .tool-head { flex:0 1 auto; max-height:58%; min-height:140px; overflow:auto; gap:8px; }
+.remote-capture-view .tool-title { flex-wrap:wrap; }
+.remote-capture-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; min-width:0; }
+.remote-capture-actions select { width:auto; min-width:200px; max-width:100%; flex:1; }
+.remote-capture-fields { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.remote-capture-view .field { min-width:0; }
+.remote-capture-view .field .input { max-width:100%; width:100%; }
+.remote-capture-requirements { color:var(--muted); font-size:12px; }
+.remote-capture-requirements summary { cursor:pointer; }
+.remote-capture-requirements p { margin:7px 0; }
+.remote-capture-status { color:var(--muted); overflow-wrap:anywhere; }
+.remote-capture-content { flex:1; min-width:0; min-height:100px; overflow:auto; padding:14px 16px; }
+.remote-capture-progress { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px; }
+.remote-capture-summary h3 { margin:0 0 12px; }
+.remote-capture-metadata { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:6px 14px; margin:0 0 14px; }
+.remote-capture-metadata dt { color:var(--muted); }
+.remote-capture-metadata dd { margin:0; overflow-wrap:anywhere; user-select:text; }
+.remote-capture-diagnostics { font:12px/1.5 var(--mono); white-space:pre-wrap; overflow-wrap:anywhere; max-height:260px; overflow:auto; }
+@media(max-width:1000px) { .remote-capture-view .tool-head,.remote-capture-content { padding:10px; } .remote-capture-fields { gap:8px; } }
+@media(max-width:650px) { .remote-capture-fields { grid-template-columns:1fr; } }

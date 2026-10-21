@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.0 — 2026-10-21
+
+- Collect bounded Linux packet captures through a separate channel of an existing SSH session, with explicit interface, filter, duration, and packet limits.
+- Stream complete PCAP records into local files, preserve usable partial captures, and disclose remote exit and termination uncertainty.
+- Verify retained results before opening; export collection reports or explicitly remove registered captures.
+- Keep the existing terminal available, protect running work during tab closing and updating, and await capture/file cleanup before application exit.
+
+See the [remote capture guide](docs/REMOTE_CAPTURE.md) and [release notes](docs/releases/0.11.0.md).
+
 ## 0.10.0 — 2026-10-21
 
 - Create local incident workspaces for captures, selected terminal output, tool results, imported syslog, and notes.

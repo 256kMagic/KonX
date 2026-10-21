@@ -15,6 +15,8 @@ const security = require('./security');
 const wifi = require('./wifi');
 const deviceAnalysis = require('./device-analysis');
 const deviceCollector = require('./device-collector');
+const remoteCapture = require('./remote-capture');
+const { RemoteCaptureResults } = require('./remote-results');
 const { SnapshotStore, compareSnapshots } = require('./device-snapshots');
 const { IncidentStore } = require('./incidents');
 const { MistClient } = require('./mist');
@@ -46,8 +48,14 @@ let ai;
 let knowledge;
 let snapshots;
 let incidents;
+let remoteResults;
 let updates;
 const toolJobs = new Map();
+let remoteReservations = 0;
+let remoteShuttingDown = false;
+
+function remoteJobs() { return [...toolJobs.values()].filter(signal => signal.kind === 'remote-capture'); }
+function hasRemoteOwnership() { return remoteReservations > 0 || remoteJobs().length > 0 || !!remoteResults?.hasOpenHandles || !!remoteCapture.hasPendingCleanup; }
 
 function send(channel, ...args) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, ...args);
@@ -107,6 +115,14 @@ function createWindow() {
   win.on('close', (e) => {
     if (updates?.installing && !updates.committed) {
       e.preventDefault();
+      return;
+    }
+    // Native close must retain the window and SSH transport until capture jobs
+    // and their registered file handles have finished cleanup. A failed close
+    // can then be shown to the user instead of silently exiting headlessly.
+    if (hasRemoteOwnership()) {
+      e.preventDefault();
+      app.quit();
       return;
     }
     if (connections.conns.size && !CAPTURE) {
@@ -322,6 +338,10 @@ function registerIpc() {
   let jobSeq = 0;
   const runners = {
     device: (params, emit, signal) => deviceCollector.run(params, emit, signal, connections),
+    'remote-capture': async (params, emit, signal) => {
+      const report = await remoteCapture.run(params, (type, data) => { if (type !== 'report') emit(type, data); }, signal, connections, app.getPath('userData'));
+      if (report) emit('report', await remoteResults.remember(report));
+    },
     security: security.run,
     wifi: wifi.run,
     mist: (params, emit, signal) => mist.run(params, emit, signal),
@@ -337,16 +357,22 @@ function registerIpc() {
     if (requestedId !== undefined && (typeof requestedId !== 'string' || !requestedId || requestedId.length > 128)) throw new Error('Invalid tool job ID');
     const id = requestedId ?? ++jobSeq;
     if (jobs.has(id)) throw new Error('Tool job is already running');
+    if (kind === 'remote-capture') {
+      if (remoteShuttingDown || updateShutdownPending) throw new Error('KonX is closing. Wait before starting another remote capture.');
+      if (remoteCapture.hasPendingCleanup) throw new Error('Remote capture cleanup is pending. Quit KonX to retry cleanup before starting another capture.');
+      remoteResults.assertCapacity(remoteReservations);
+      remoteReservations++;
+    }
     const signal = { stopped: false, onStop: null, kind };
     jobs.set(id, signal);
     const emit = (type, data) => send('tools:event', id, type, data);
-    Promise.resolve()
+    signal.task = Promise.resolve()
       .then(() => fn(params, emit, signal))
       .then(
         () => emit('done', { stopped: signal.stopped }),
         (err) => emit('error', { message: err.message })
       )
-      .finally(() => jobs.delete(id));
+      .finally(() => { jobs.delete(id); if (kind === 'remote-capture') remoteReservations--; });
     return id;
   });
   handle('tools:stop', (id) => {
@@ -356,6 +382,8 @@ function registerIpc() {
     if (s.onStop) s.onStop();
   });
   handle('tools:deviceConnections', () => deviceCollector.listConnections(connections));
+  handle('tools:remoteCaptureRead', (id) => remoteResults.read(id));
+  handle('tools:remoteCaptureRemove', (id) => remoteResults.remove(id));
   handle('tools:snapshotSave', (params) => snapshots.save(params));
   handle('tools:incidentCreate', (params) => incidents.create(params));
   handle('tools:incidentList', () => incidents.list());
@@ -559,6 +587,7 @@ app.whenReady().then(() => {
   store = new Store(app.getPath('userData'), crypt);
   snapshots = new SnapshotStore(app.getPath('userData'));
   incidents = new IncidentStore(app.getPath('userData'));
+  remoteResults = new RemoteCaptureResults(app.getPath('userData'));
   mist = new MistClient({ dir: app.getPath('userData'), crypt });
   knowledge = new KnowledgeLibrary({ dir: app.getPath('userData') });
   ai = new AIClient({ dir: app.getPath('userData'), crypt, knowledge });
@@ -606,25 +635,56 @@ app.whenReady().then(() => {
   createWindow();
 });
 
-// Let download cancellation close its stream and remove its own partial file
-// before Electron exits. A committed installer must retain its staged payload.
+// Let downloads and remote capture owners finish before Electron exits. A
+// committed installer retains its payload, but still waits for capture handles.
 let updateShutdownPending = false;
 let updateShutdownComplete = false;
 app.on('before-quit', (event) => {
-  if (!updates || updates.committed) return;
+  if (!updates && !hasRemoteOwnership()) return;
   if (updateShutdownComplete) {
     // Consume this single retry. If a close prompt cancels it, a future quit
     // still has to cancel any downloads started in the meantime.
     updateShutdownComplete = false;
+    remoteShuttingDown = false;
     return;
   }
+  if (updates?.committed && !hasRemoteOwnership()) return;
   event.preventDefault();
-  if (updates.installing || updateShutdownPending) return;
+  if ((updates?.installing && !updates.committed) || updateShutdownPending) return;
   updateShutdownPending = true;
-  Promise.resolve(updates.shutdown()).catch(() => {}).finally(() => {
+  remoteShuttingDown = true;
+  const finishOwners = async () => {
+    const jobs = remoteJobs();
+    for (const signal of jobs) {
+      signal.stopped = true;
+      try { signal.onStop?.(); } catch { /* The task remains owned and awaited. */ }
+    }
+    // Preserve the existing ordinary updater cleanup behavior; only failures
+    // from the newly owned remote resources block exit and require retry.
+    let updateCleanup;
+    try { updateCleanup = updates && !updates.committed ? Promise.resolve(updates.shutdown()).catch(() => {}) : Promise.resolve(); }
+    catch { updateCleanup = Promise.resolve(); }
+    await Promise.allSettled(jobs.map(signal => signal.task));
+    const remoteErrors = [];
+    for (const cleanup of [() => remoteCapture.closePending(), () => remoteResults?.close()]) {
+      try { await cleanup(); } catch (error) { remoteErrors.push(error.message); }
+    }
+    if (remoteResults?.hasOpenHandles || remoteCapture.hasPendingCleanup) remoteErrors.push('Remote capture handles are still open.');
+    await updateCleanup;
+    if (remoteErrors.length) throw new Error(remoteErrors.join('\n'));
+  };
+  finishOwners().then(() => {
     updateShutdownPending = false;
     updateShutdownComplete = true;
     app.quit();
+  }, error => {
+    updateShutdownPending = false;
+    remoteShuttingDown = false;
+    dialog.showMessageBoxSync(win && !win.isDestroyed() ? win : undefined, {
+      type: 'error', buttons: ['OK'], title: 'KonX could not finish closing',
+      message: 'Remote capture cleanup did not finish. KonX has stayed open.',
+      detail: `${error.message}\nTry quitting again to retry cleanup.`,
+    });
   });
 });
 

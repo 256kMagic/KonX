@@ -48,12 +48,27 @@
   const supportsSnapshots = versionParts[0] > 0 || versionParts[1] >= 8;
   const supportsRtp = versionParts[0] > 0 || versionParts[1] >= 9;
   const supportsIncidents = versionParts[0] > 0 || versionParts[1] >= 10;
+  const supportsRemoteCapture = versionParts[0] > 0 || versionParts[1] >= 11;
 
   if (options.phase === 'save') {
     let deviceInspector = null;
     let deviceSnapshots = null;
     let rtpMedia = null;
     let incidentWorkspace = null;
+    let remoteCapture = null;
+    if (supportsRemoteCapture) {
+      assert(TOOLS.some(tool => tool.kind === 'remote-capture'), 'Remote Capture tool is missing');
+      const remote = app.openTool('remote-capture'); await remote.ready;
+      assert(remote.connections.length === 0 && remote.startButton.disabled && !remote.jobId, 'Remote capture must require a connected session and explicit start');
+      assert(!remote.report && remote.openButton.disabled && remote.deleteButton.disabled, 'Fresh remote tool exposed a retained result');
+      assert(remote.updateBlockers().length === 0 && app.jobs.size === 0, 'Idle remote tool blocks updates or started a job');
+      let rejected = false;
+      try { await api.invoke('tools:remoteCaptureRead', 'unknown-result'); } catch { rejected = true; }
+      assert(rejected, 'Remote capture reader accepted an unknown result');
+      await app.closeTab(remote);
+      assert(!app.byId.has(remote.id), 'Idle remote tab failed to close');
+      remoteCapture = { explicitStartRequired: true, unknownResultRejected: true, noNetworkCollection: true };
+    }
     if (supportsDeviceInspector) {
       assert(TOOLS.some((tool) => tool.kind === 'device'), 'Device Inspector entry is missing');
       const device = app.openTool('device');
@@ -166,7 +181,7 @@
     const article = await api.invoke('tools:knowledgeSave', { title: noteTitle, vendor: 'Synthetic fixture', content: 'Wireless RSSI observations are cached evidence. Verify the adapter and collection time.' });
     await ai.readDocument(article.id);
     assert(ai.documentContent.textContent.includes('cached evidence'), 'Packaged local article did not render');
-    await complete({ phase: options.phase, version: info.version, tools: supportsIncidents ? 8 : supportsRtp ? 7 : supportsSnapshots ? 6 : supportsDeviceInspector ? 5 : 4, ...(deviceInspector ? { deviceInspector } : {}), ...(deviceSnapshots ? { deviceSnapshots } : {}), ...(rtpMedia ? { rtpMedia } : {}), ...(incidentWorkspace ? { incidentWorkspace } : {}), assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
+    await complete({ phase: options.phase, version: info.version, tools: supportsRemoteCapture ? 9 : supportsIncidents ? 8 : supportsRtp ? 7 : supportsSnapshots ? 6 : supportsDeviceInspector ? 5 : 4, ...(deviceInspector ? { deviceInspector } : {}), ...(deviceSnapshots ? { deviceSnapshots } : {}), ...(rtpMedia ? { rtpMedia } : {}), ...(incidentWorkspace ? { incidentWorkspace } : {}), ...(remoteCapture ? { remoteCapture } : {}), assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
   } else if (options.phase === 'forget') {
     assert(mist.config.hasToken && !mist.testButton.disabled, 'Encrypted Mist token did not survive app restart');
     assert(mist.token.value === '', 'Saved credential must not be returned to the input');
