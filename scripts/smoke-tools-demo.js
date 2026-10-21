@@ -49,6 +49,7 @@
   const supportsRtp = versionParts[0] > 0 || versionParts[1] >= 9;
   const supportsIncidents = versionParts[0] > 0 || versionParts[1] >= 10;
   const supportsRemoteCapture = versionParts[0] > 0 || versionParts[1] >= 11;
+  const supportsRunbooks = versionParts[0] > 0 || versionParts[1] >= 12;
 
   if (options.phase === 'save') {
     let deviceInspector = null;
@@ -56,6 +57,23 @@
     let rtpMedia = null;
     let incidentWorkspace = null;
     let remoteCapture = null;
+    let runbooks = null;
+    if (supportsRunbooks) {
+      assert(TOOLS.some(tool => tool.kind === 'runbook'), 'Troubleshooting Runbooks tool is missing');
+      const runbook = app.openTool('runbook'); await runbook.ready;
+      assert(runbook.templates.length === 3 && runbook.saved.length === 0 && app.jobs.size === 0, 'Built-in runbooks are missing or started automatically');
+      const definition = { schemaVersion: 1, name: 'Synthetic package smoke procedure', inputs: [], steps: [
+        { id: 'review', title: 'Review synthetic evidence', kind: 'checklist', instructions: 'Manual evidence remains unknown.' }
+      ] };
+      const saved = await api.invoke('tools:runbookSave', { definition });
+      await runbook.refresh(); await runbook.select('saved:' + saved.id);
+      assert(runbook.definition.name === definition.name && !runbook.isDirty(), 'Saved procedure did not load cleanly');
+      await runbook.start(); await until(() => !runbook.jobId && runbook.report, 'packaged manual procedure');
+      assert(runbook.report.complete && runbook.report.steps.length === 1 && runbook.report.steps[0].status === 'unknown', 'Manual procedure invented a passing observation');
+      assert(runbook.updateBlockers().length === 0, 'Saved idle runbook still blocks updating');
+      await app.closeTab(runbook); assert(!app.byId.has(runbook.id), 'Saved idle runbook failed to close');
+      runbooks = { templates: 3, customDefinitionSaved: true, manualObservationUnknown: true, noNetworkCollection: true };
+    }
     if (supportsRemoteCapture) {
       assert(TOOLS.some(tool => tool.kind === 'remote-capture'), 'Remote Capture tool is missing');
       const remote = app.openTool('remote-capture'); await remote.ready;
@@ -181,7 +199,7 @@
     const article = await api.invoke('tools:knowledgeSave', { title: noteTitle, vendor: 'Synthetic fixture', content: 'Wireless RSSI observations are cached evidence. Verify the adapter and collection time.' });
     await ai.readDocument(article.id);
     assert(ai.documentContent.textContent.includes('cached evidence'), 'Packaged local article did not render');
-    await complete({ phase: options.phase, version: info.version, tools: supportsRemoteCapture ? 9 : supportsIncidents ? 8 : supportsRtp ? 7 : supportsSnapshots ? 6 : supportsDeviceInspector ? 5 : 4, ...(deviceInspector ? { deviceInspector } : {}), ...(deviceSnapshots ? { deviceSnapshots } : {}), ...(rtpMedia ? { rtpMedia } : {}), ...(incidentWorkspace ? { incidentWorkspace } : {}), ...(remoteCapture ? { remoteCapture } : {}), assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
+    await complete({ phase: options.phase, version: info.version, tools: supportsRunbooks ? 10 : supportsRemoteCapture ? 9 : supportsIncidents ? 8 : supportsRtp ? 7 : supportsSnapshots ? 6 : supportsDeviceInspector ? 5 : 4, ...(deviceInspector ? { deviceInspector } : {}), ...(deviceSnapshots ? { deviceSnapshots } : {}), ...(rtpMedia ? { rtpMedia } : {}), ...(incidentWorkspace ? { incidentWorkspace } : {}), ...(remoteCapture ? { remoteCapture } : {}), ...(runbooks ? { runbooks } : {}), assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
   } else if (options.phase === 'forget') {
     assert(mist.config.hasToken && !mist.testButton.disabled, 'Encrypted Mist token did not survive app restart');
     assert(mist.token.value === '', 'Saved credential must not be returned to the input');
@@ -230,6 +248,16 @@
       incidentWorkspace = { persistedAcrossRestart: true, retainedCaptureVerified: true, syntheticIncidentRemoved: true };
     }
     assert(app.jobs.size === 0, 'Smoke left running jobs');
-    await complete({ phase: options.phase, version: info.version, ...(deviceSnapshots ? { deviceSnapshots } : {}), ...(incidentWorkspace ? { incidentWorkspace } : {}), encryptedTokenPersisted: true, tokenForgotten: true, encryptedAiKeyPersisted: true, aiKeyForgotten: true, customNotePersisted: true, customNoteRemoved: true, vectorIndexReady: true, noAutomaticJobs: true });
+    let runbooks = null;
+    if (supportsRunbooks) {
+      const library = await api.invoke('tools:runbookList');
+      assert(library.runbooks.length === 1 && library.issues.length === 0, 'Custom runbook did not survive restart');
+      const saved = await api.invoke('tools:runbookGet', library.runbooks[0].id);
+      assert(saved.definition.name === 'Synthetic package smoke procedure' && saved.definition.steps[0].kind === 'checklist', 'Restored runbook definition changed');
+      await api.invoke('tools:runbookRemove', saved.id);
+      assert((await api.invoke('tools:runbookList')).runbooks.length === 0, 'Synthetic procedure remained after removal');
+      runbooks = { persistedAcrossRestart: true, syntheticProcedureRemoved: true };
+    }
+    await complete({ phase: options.phase, version: info.version, ...(deviceSnapshots ? { deviceSnapshots } : {}), ...(incidentWorkspace ? { incidentWorkspace } : {}), ...(runbooks ? { runbooks } : {}), encryptedTokenPersisted: true, tokenForgotten: true, encryptedAiKeyPersisted: true, aiKeyForgotten: true, customNotePersisted: true, customNoteRemoved: true, vectorIndexReady: true, noAutomaticJobs: true });
   } else throw new Error('Unknown package smoke phase');
 })()

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.12.0 — 2026-10-21
+
+- Run reviewed gateway, slow-application, and phone-audio procedures with explicit typed targets.
+- Collect sequential DNS, ping, TCP, and fixed device-inventory observations with pass/fail/unknown evidence, deadlines, cancellation, and result export.
+- Open explicitly selected existing SIP/RTP captures for manual steps without inventing a diagnosis or passing the step automatically.
+- Import, review, save, update, export, and remove custom JSON procedures in a local library.
+- Protect unsaved definitions and await owned probe/file cleanup during closing and updating.
+- Prevent updater installation while a known remote-capture or runbook cleanup failure still needs retry.
+
+See the [runbook guide](docs/RUNBOOKS.md) and [release notes](docs/releases/0.12.0.md).
+
 ## 0.11.0 — 2026-10-21
 
 - Collect bounded Linux packet captures through a separate channel of an existing SSH session, with explicit interface, filter, duration, and packet limits.

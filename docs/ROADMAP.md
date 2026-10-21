@@ -9,7 +9,7 @@ Each phase ships separately with its own version, source commit, tests, Windows 
 | 3 | 0.9.0 | RTP analysis, G.711 playback, and WAV export alongside SIP calls | Complete; 564 tests and packaged checks passed |
 | 4 | 0.10.0 | Incident workspaces, evidence timeline, notes, and reports | Complete; 595 tests and packaged checks passed |
 | 5 | 0.11.0 | Bounded remote packet capture through SSH | Complete; 641 tests and packaged checks passed |
-| 6 | 0.12.0 | Diagnostic runbooks and saved procedures | Planned |
+| 6 | 0.12.0 | Diagnostic runbooks and saved procedures | Complete; 671 tests and packaged checks passed |
 | 7 | 0.13.0 | Comparison of working and failing captures | Planned |
 
 ## Scope

@@ -180,8 +180,10 @@ async function resolveHost(host) {
 // ---------------------------------------------------------------- ping
 
 /** One ICMP echo using the system ping binary. Resolves {ok, ms, ttl, error}. */
-function pingOnce(host, { timeout = 1000, size = 32 } = {}) {
+function pingOnce(host, { timeout = 1000, size = 32, signal } = {}) {
+  if (signal && !net.isIP(host)) return Promise.reject(new Error('Cancellable ping requires an already resolved IP address'));
   return new Promise((resolve) => {
+    if (signal?.aborted) return resolve({ ok: false, error: 'cancelled' });
     let args;
     if (IS_WIN) args = ['-n', '1', '-w', String(timeout), '-l', String(size), host];
     else if (IS_MAC) args = ['-c', '1', '-W', String(timeout), '-s', String(size), host];
@@ -189,20 +191,28 @@ function pingOnce(host, { timeout = 1000, size = 32 } = {}) {
     const started = process.hrtime.bigint();
     let out = '';
     let done = false;
+    let forcedError = null;
     const child = spawn('ping', args, { windowsHide: true });
     const finish = (r) => {
       if (done) return;
       done = true;
       clearTimeout(killer);
+      signal?.removeEventListener('abort', cancel);
       resolve(r);
     };
+    const cancel = () => { forcedError = 'cancelled'; try { child.kill('SIGKILL'); } catch {} };
     const killer = setTimeout(() => {
-      child.kill();
-      finish({ ok: false, error: 'timeout' });
+      if (signal) { forcedError = 'timeout'; try { child.kill('SIGKILL'); } catch {} }
+      else { child.kill(); finish({ ok: false, error: 'timeout' }); }
     }, timeout + 3000);
-    child.stdout.on('data', (d) => (out += d));
-    child.on('error', (e) => finish({ ok: false, error: e.message }));
+    signal?.addEventListener('abort', cancel, { once: true });
+    child.stdout.on('data', (d) => { if (out.length < 65536) out += d.toString().slice(0, 65536 - out.length); });
+    child.on('error', (e) => {
+      if (signal && child.pid) { forcedError = e.message; try { child.kill('SIGKILL'); } catch {} }
+      else finish({ ok: false, error: e.message });
+    });
     child.on('close', () => {
+      if (forcedError) return finish({ ok: false, error: forcedError });
       const elapsed = Number(process.hrtime.bigint() - started) / 1e6;
       // A reply line has a round-trip time (IPv6 replies on Windows carry no TTL).
       const line = out.split(/\r?\n/).find((l) => /(time|zeit|tiempo|temps|tempo)?\s*[=<]\s*\d+(?:[.,]\d+)?\s*ms/i.test(l) && !/unreachable|expired|nicht erreichbar/i.test(l));
@@ -259,17 +269,23 @@ const HTTP_PORTS = new Set([80, 81, 591, 3000, 5000, 8000, 8008, 8080, 8081, 808
 const TLS_PORTS = new Set([443, 465, 636, 853, 990, 993, 995, 4443, 5986, 6443, 8443, 8883, 9443, 10443]);
 
 /** TCP connect probe. state: open | closed | filtered | unreachable */
-function probePort(host, port, { timeout = 1000, banner = false } = {}) {
+function probePort(host, port, { timeout = 1000, banner = false, signal } = {}) {
+  if (signal && (banner || !net.isIP(host))) return Promise.reject(new Error('Cancellable TCP probes require an already resolved IP address and no banner request'));
   return new Promise((resolve) => {
+    if (signal?.aborted) return resolve({ state: 'unknown', error: 'cancelled', ms: 0 });
     const started = Date.now();
     const sock = new net.Socket();
     let settled = false;
     const done = (r) => {
       if (settled) return;
       settled = true;
+      signal?.removeEventListener('abort', cancel);
+      if (signal) sock.once('close', () => resolve({ ms: Date.now() - started, ...r }));
       sock.destroy();
-      resolve({ ms: Date.now() - started, ...r });
+      if (!signal) resolve({ ms: Date.now() - started, ...r });
     };
+    const cancel = () => done({ state: 'unknown', error: 'cancelled' });
+    signal?.addEventListener('abort', cancel, { once: true });
     sock.setTimeout(timeout);
     sock.once('timeout', () => done({ state: 'filtered' }));
     sock.once('error', (e) => {
@@ -528,8 +544,13 @@ function fmtRecord(type, r) {
   }
 }
 
-async function dnsLookup({ name, type = 'A', server = '' }) {
-  const resolver = new dns.promises.Resolver({ timeout: 4000, tries: 2 });
+async function dnsLookup({ name, type = 'A', server = '', signal, timeout = 4000, tries = 2, resolver: ownedResolver }) {
+  if (signal && type === 'SYSTEM') throw new Error('Cancellable DNS requires a dedicated DNS Resolver, not SYSTEM lookup');
+  if (signal?.aborted) throw new Error('DNS lookup cancelled');
+  const resolver = ownedResolver || new dns.promises.Resolver({ timeout, tries });
+  const cancel = () => resolver.cancel();
+  signal?.addEventListener('abort', cancel, { once: true });
+  try {
   if (server) resolver.setServers([server]);
   const q = String(name).trim();
   const records = [];
@@ -565,6 +586,7 @@ async function dnsLookup({ name, type = 'A', server = '' }) {
   );
   records.sort((a, b) => DNS_TYPES.indexOf(a.type) - DNS_TYPES.indexOf(b.type));
   return { records, errors, ms: Date.now() - started, server: server || resolver.getServers()[0] };
+  } finally { signal?.removeEventListener('abort', cancel); }
 }
 
 // ---------------------------------------------------------------- whois

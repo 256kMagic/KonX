@@ -61,7 +61,7 @@ function fixture() {
   const capture = { sessions: new Map(), startRequests: new Map(), builtin: { sessions: new Map(), startRequests: new Map() }, stopAll() { calls.push('stop-capture'); } };
   const knowledge = { busy: false, close() { calls.push('close-knowledge'); return Promise.resolve(); } };
   const remote = {
-    hasOpenHandles: false, hasPendingCleanup: false, capacityChecks: [],
+    hasOpenHandles: false, hasPendingCleanup: false, hasResultPendingCleanup: false, capacityChecks: [],
     run: async () => undefined,
     remember: async report => { remote.hasOpenHandles = true; const { file, ...publicReport } = report; return { ...publicReport, captureId: 'fixture-capture-id', fileName: 'fixture.pcap' }; },
     read: async id => ({ name: id + '.pcap', bytes: Buffer.from('fixture') }),
@@ -69,6 +69,14 @@ function fixture() {
     close: async () => { remote.hasOpenHandles = false; },
     closePending: async () => { remote.hasPendingCleanup = false; },
   };
+  const runbook = {
+    hasOwnership: false, hasPendingCleanup: false,
+    run: async () => undefined, templates: () => [], list: async () => ({ runbooks: [], issues: [] }),
+    get: async id => ({ id, definition: { name: 'Fixture procedure' } }), save: async params => params, remove: async id => ({ removed: true, id }),
+    importFile: async file => ({ name: 'Imported fixture', file }), exportFile: async (_id, file) => file,
+    close: async () => { runbook.hasOwnership = false; runbook.hasPendingCleanup = false; },
+  };
+  const dialogs = { open: async () => ({ canceled: true, filePaths: [] }), save: async () => ({ canceled: true }) };
   const handoff = {
     async commit() { calls.push('commit-helper'); },
     async cancel() { calls.push('cancel-helper'); },
@@ -84,11 +92,24 @@ function fixture() {
     './remote-capture': { run: (...args) => remote.run(...args), closePending: () => remote.closePending(), get hasPendingCleanup() { return remote.hasPendingCleanup; } },
     './remote-results': { RemoteCaptureResults: class {
       get hasOpenHandles() { return remote.hasOpenHandles; }
+      get hasPendingCleanup() { return remote.hasResultPendingCleanup; }
       assertCapacity(pending) { remote.capacityChecks.push(pending); if (remote.capacityError) throw remote.capacityError; }
       remember(report) { return remote.remember(report); }
       read(id) { return remote.read(id); }
       remove(id) { return remote.remove(id); }
       close() { return remote.close(); }
+    } },
+    './runbooks': { run: (...args) => runbook.run(...args), getTemplates: () => runbook.templates() },
+    './runbook-store': { RunbookStore: class {
+      get hasOwnership() { return runbook.hasOwnership || runbook.hasPendingCleanup; }
+      get hasPendingCleanup() { return runbook.hasPendingCleanup; }
+      list() { return runbook.list(); }
+      get(id) { return runbook.get(id); }
+      save(params) { return runbook.save(params); }
+      remove(id) { return runbook.remove(id); }
+      importFile(file) { return runbook.importFile(file); }
+      exportFile(id, file) { return runbook.exportFile(id, file); }
+      close() { return runbook.close(); }
     } },
     './mist': { MistClient: class {} }, './ai': { AIClient: class {} },
     './notepad': { NotepadStore: class {}, FileWatcher: class {} },
@@ -111,7 +132,8 @@ function fixture() {
     require(name) {
       if (name === 'electron') return {
         app, BrowserWindow, Menu: { setApplicationMenu() {} }, safeStorage: {}, shell: {}, clipboard: {},
-        dialog: { showMessageBoxSync(_window, options) { calls.push(options?.type === 'error' ? 'shutdown-error' : 'connection-prompt'); return promptChoice; } },
+        dialog: { showMessageBoxSync(_window, options) { calls.push(options?.type === 'error' ? 'shutdown-error' : 'connection-prompt'); return promptChoice; },
+          showOpenDialog: (...args) => dialogs.open(...args), showSaveDialog: (...args) => dialogs.save(...args) },
         ipcMain: { handle: (name, callback) => handlers.set(name, callback), on() {} },
       };
       if (Object.hasOwn(modules, name)) return modules[name];
@@ -123,7 +145,7 @@ function fixture() {
   vm.runInContext(fs.readFileSync(filename, 'utf8'), context, { filename });
   ready();
   return {
-    app, calls, sent, manager, behavior, handoff, connections, remote,
+    app, calls, sent, manager, behavior, handoff, connections, remote, runbook, dialogs,
     get jobs() { return vm.runInContext('toolJobs', context); },
     get controller() { return vm.runInContext('updates', context); },
     get window() { return window; },

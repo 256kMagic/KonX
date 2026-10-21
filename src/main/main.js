@@ -17,6 +17,8 @@ const deviceAnalysis = require('./device-analysis');
 const deviceCollector = require('./device-collector');
 const remoteCapture = require('./remote-capture');
 const { RemoteCaptureResults } = require('./remote-results');
+const runbooks = require('./runbooks');
+const { RunbookStore } = require('./runbook-store');
 const { SnapshotStore, compareSnapshots } = require('./device-snapshots');
 const { IncidentStore } = require('./incidents');
 const { MistClient } = require('./mist');
@@ -49,13 +51,14 @@ let knowledge;
 let snapshots;
 let incidents;
 let remoteResults;
+let runbookStore;
 let updates;
 const toolJobs = new Map();
 let remoteReservations = 0;
-let remoteShuttingDown = false;
+let toolsShuttingDown = false;
 
-function remoteJobs() { return [...toolJobs.values()].filter(signal => signal.kind === 'remote-capture'); }
-function hasRemoteOwnership() { return remoteReservations > 0 || remoteJobs().length > 0 || !!remoteResults?.hasOpenHandles || !!remoteCapture.hasPendingCleanup; }
+function ownedToolJobs() { return [...toolJobs.values()].filter(signal => ['remote-capture', 'runbook'].includes(signal.kind)); }
+function hasToolOwnership() { return remoteReservations > 0 || ownedToolJobs().length > 0 || !!remoteResults?.hasOpenHandles || !!remoteCapture.hasPendingCleanup || !!runbookStore?.hasOwnership; }
 
 function send(channel, ...args) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, ...args);
@@ -120,7 +123,7 @@ function createWindow() {
     // Native close must retain the window and SSH transport until capture jobs
     // and their registered file handles have finished cleanup. A failed close
     // can then be shown to the user instead of silently exiting headlessly.
-    if (hasRemoteOwnership()) {
+    if (hasToolOwnership()) {
       e.preventDefault();
       app.quit();
       return;
@@ -338,6 +341,7 @@ function registerIpc() {
   let jobSeq = 0;
   const runners = {
     device: (params, emit, signal) => deviceCollector.run(params, emit, signal, connections),
+    runbook: (params, emit, signal) => runbooks.run(params, emit, signal, connections),
     'remote-capture': async (params, emit, signal) => {
       const report = await remoteCapture.run(params, (type, data) => { if (type !== 'report') emit(type, data); }, signal, connections, app.getPath('userData'));
       if (report) emit('report', await remoteResults.remember(report));
@@ -357,8 +361,8 @@ function registerIpc() {
     if (requestedId !== undefined && (typeof requestedId !== 'string' || !requestedId || requestedId.length > 128)) throw new Error('Invalid tool job ID');
     const id = requestedId ?? ++jobSeq;
     if (jobs.has(id)) throw new Error('Tool job is already running');
+    if (['remote-capture', 'runbook'].includes(kind) && (toolsShuttingDown || updateShutdownPending)) throw new Error('KonX is closing. Wait before starting another tool.');
     if (kind === 'remote-capture') {
-      if (remoteShuttingDown || updateShutdownPending) throw new Error('KonX is closing. Wait before starting another remote capture.');
       if (remoteCapture.hasPendingCleanup) throw new Error('Remote capture cleanup is pending. Quit KonX to retry cleanup before starting another capture.');
       remoteResults.assertCapacity(remoteReservations);
       remoteReservations++;
@@ -384,6 +388,28 @@ function registerIpc() {
   handle('tools:deviceConnections', () => deviceCollector.listConnections(connections));
   handle('tools:remoteCaptureRead', (id) => remoteResults.read(id));
   handle('tools:remoteCaptureRemove', (id) => remoteResults.remove(id));
+  const requireRunbookReady = () => {
+    if (toolsShuttingDown || updateShutdownPending || !win || win.isDestroyed()) throw new Error('KonX is closing. Wait before using saved procedures.');
+  };
+  const runbookOperation = operation => (...args) => { requireRunbookReady(); return operation(...args); };
+  handle('tools:runbookTemplates', () => runbooks.getTemplates());
+  handle('tools:runbookList', runbookOperation(() => runbookStore.list()));
+  handle('tools:runbookGet', runbookOperation(id => runbookStore.get(id)));
+  handle('tools:runbookSave', runbookOperation(params => runbookStore.save(params)));
+  handle('tools:runbookRemove', runbookOperation(id => runbookStore.remove(id)));
+  handle('tools:runbookImport', runbookOperation(async () => {
+    const result = await dialog.showOpenDialog(win, { title: 'Import diagnostic runbook', properties: ['openFile'], filters: [{ name: 'Runbook JSON', extensions: ['json'] }] });
+    if (result.canceled || !result.filePaths[0]) return null;
+    requireRunbookReady();
+    return runbookStore.importFile(result.filePaths[0]);
+  }));
+  handle('tools:runbookExport', runbookOperation(async id => {
+    await runbookStore.get(id);
+    const result = await dialog.showSaveDialog(win, { title: 'Export saved diagnostic runbook', defaultPath: 'konx-runbook.json', filters: [{ name: 'Runbook JSON', extensions: ['json'] }] });
+    if (result.canceled || !result.filePath) return null;
+    requireRunbookReady();
+    return runbookStore.exportFile(id, result.filePath);
+  }));
   handle('tools:snapshotSave', (params) => snapshots.save(params));
   handle('tools:incidentCreate', (params) => incidents.create(params));
   handle('tools:incidentList', () => incidents.list());
@@ -588,6 +614,7 @@ app.whenReady().then(() => {
   snapshots = new SnapshotStore(app.getPath('userData'));
   incidents = new IncidentStore(app.getPath('userData'));
   remoteResults = new RemoteCaptureResults(app.getPath('userData'));
+  runbookStore = new RunbookStore(app.getPath('userData'));
   mist = new MistClient({ dir: app.getPath('userData'), crypt });
   knowledge = new KnowledgeLibrary({ dir: app.getPath('userData') });
   ai = new AIClient({ dir: app.getPath('userData'), crypt, knowledge });
@@ -623,6 +650,9 @@ app.whenReady().then(() => {
       if (sftp.queue.active.size || sftp.queue.jobs.some((job) => ['queued', 'running'].includes(job.status))) reasons.push('Finish or cancel file transfers before updating.');
       if (capture.sessions.size || capture.startRequests.size || capture.builtin.sessions.size || capture.builtin.startRequests.size) reasons.push('Stop packet capture before updating.');
       if (toolJobs.size) reasons.push('Stop running tools and AI requests before updating.');
+      if (remoteCapture.hasPendingCleanup) reasons.push('Quit KonX to retry pending remote capture file cleanup before updating.');
+      if (remoteResults.hasPendingCleanup) reasons.push('Quit KonX to retry pending remote capture result cleanup before updating.');
+      if (runbookStore.hasPendingCleanup) reasons.push('Quit KonX to retry pending runbook file cleanup before updating.');
       if (pendingPrompts.size) reasons.push('Finish the open connection prompts before updating.');
       if (knowledge.busy) reasons.push('Wait for the knowledge library to finish its current operation.');
       return reasons;
@@ -635,43 +665,43 @@ app.whenReady().then(() => {
   createWindow();
 });
 
-// Let downloads and remote capture owners finish before Electron exits. A
-// committed installer retains its payload, but still waits for capture handles.
+// Let downloads, capture and runbook owners finish before Electron exits. A
+// committed installer retains its payload, but still waits for owned resources.
 let updateShutdownPending = false;
 let updateShutdownComplete = false;
 app.on('before-quit', (event) => {
-  if (!updates && !hasRemoteOwnership()) return;
+  if (!updates && !hasToolOwnership()) return;
   if (updateShutdownComplete) {
     // Consume this single retry. If a close prompt cancels it, a future quit
     // still has to cancel any downloads started in the meantime.
     updateShutdownComplete = false;
-    remoteShuttingDown = false;
+    toolsShuttingDown = false;
     return;
   }
-  if (updates?.committed && !hasRemoteOwnership()) return;
+  if (updates?.committed && !hasToolOwnership()) return;
   event.preventDefault();
   if ((updates?.installing && !updates.committed) || updateShutdownPending) return;
   updateShutdownPending = true;
-  remoteShuttingDown = true;
+  toolsShuttingDown = true;
   const finishOwners = async () => {
-    const jobs = remoteJobs();
+    const jobs = ownedToolJobs();
     for (const signal of jobs) {
       signal.stopped = true;
       try { signal.onStop?.(); } catch { /* The task remains owned and awaited. */ }
     }
     // Preserve the existing ordinary updater cleanup behavior; only failures
-    // from the newly owned remote resources block exit and require retry.
+    // from owned capture/runbook resources block exit and require retry.
     let updateCleanup;
     try { updateCleanup = updates && !updates.committed ? Promise.resolve(updates.shutdown()).catch(() => {}) : Promise.resolve(); }
     catch { updateCleanup = Promise.resolve(); }
     await Promise.allSettled(jobs.map(signal => signal.task));
-    const remoteErrors = [];
-    for (const cleanup of [() => remoteCapture.closePending(), () => remoteResults?.close()]) {
-      try { await cleanup(); } catch (error) { remoteErrors.push(error.message); }
+    const cleanupErrors = [];
+    for (const cleanup of [() => remoteCapture.closePending(), () => remoteResults?.close(), () => runbookStore?.close()]) {
+      try { await cleanup(); } catch (error) { cleanupErrors.push(error.message); }
     }
-    if (remoteResults?.hasOpenHandles || remoteCapture.hasPendingCleanup) remoteErrors.push('Remote capture handles are still open.');
+    if (remoteResults?.hasOpenHandles || remoteCapture.hasPendingCleanup || runbookStore?.hasOwnership) cleanupErrors.push('Capture or runbook resources still require cleanup.');
     await updateCleanup;
-    if (remoteErrors.length) throw new Error(remoteErrors.join('\n'));
+    if (cleanupErrors.length) throw new Error(cleanupErrors.join('\n'));
   };
   finishOwners().then(() => {
     updateShutdownPending = false;
@@ -679,10 +709,10 @@ app.on('before-quit', (event) => {
     app.quit();
   }, error => {
     updateShutdownPending = false;
-    remoteShuttingDown = false;
+    toolsShuttingDown = false;
     dialog.showMessageBoxSync(win && !win.isDestroyed() ? win : undefined, {
       type: 'error', buttons: ['OK'], title: 'KonX could not finish closing',
-      message: 'Remote capture cleanup did not finish. KonX has stayed open.',
+      message: 'Tool cleanup did not finish. KonX has stayed open.',
       detail: `${error.message}\nTry quitting again to retry cleanup.`,
     });
   });

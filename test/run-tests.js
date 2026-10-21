@@ -497,6 +497,9 @@ const fakeCrypt = {
   await require('./remote-results-tests.cjs').runRemoteResultTests(test);
   await require('./remote-lifecycle-tests.cjs').runRemoteLifecycleTests(test);
   await require('./remote-ui-tests.cjs').runRemoteUiTests(test);
+  await require('./runbook-tests.cjs').runRunbookTests(test);
+  await require('./runbook-lifecycle-tests.cjs').runRunbookLifecycleTests(test);
+  await require('./runbook-ui-tests.cjs').runRunbookUiTests(test);
 
   const failed = results.filter((r) => !r[0]);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

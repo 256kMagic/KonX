@@ -18,6 +18,7 @@ async function main() {
     ['docs/RTP_MEDIA.md', 'RTP_MEDIA.md'],
     ['docs/INCIDENT_WORKSPACES.md', 'INCIDENT_WORKSPACES.md'],
     ['docs/REMOTE_CAPTURE.md', 'REMOTE_CAPTURE.md'],
+    ['docs/RUNBOOKS.md', 'RUNBOOKS.md'],
     ['CHANGELOG.md', 'CHANGELOG.md'], [`docs/releases/${version}.md`, 'RELEASE_NOTES.md'],
   ];
   for (const file of [...binaries.map((name) => `dist/${name}`), ...documents.map(([source]) => source)]) {

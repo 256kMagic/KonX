@@ -15,6 +15,7 @@ class RemoteCaptureResults {
     this.entries = new Map(); this.paths = new Map(); this.pendingClose = new Set(); this.queue = Promise.resolve();
   }
   get hasOpenHandles() { return this.entries.size > 0 || this.pendingClose.size > 0; }
+  get hasPendingCleanup() { return this.pendingClose.size > 0; }
   assertCapacity(pending = 0) {
     if (!Number.isInteger(pending) || pending < 0 || pending > MAX_RESULTS) throw Error('Invalid pending capture count');
     const owned = new Set([...this.entries.values()].map(entry => entry.handle));
