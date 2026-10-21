@@ -1,0 +1,47 @@
+/* All AI and library content scrolls inside the workspace tab. */
+.ai-view { min-width: 0; }
+.ai-view .tool-head { flex: 0 0 auto; min-width: 0; }
+.ai-view .tool-title { flex-wrap: wrap; }
+.ai-view .tool-title .sub { overflow-wrap: anywhere; }
+.ai-workspace { flex: 1; min-height: 0; min-width: 0; overflow: auto; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr); gap: 16px; padding: 14px 16px 22px; align-items: start; }
+.ai-assistant, .ai-library { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.ai-library { border-left: 1px solid var(--border); padding-left: 16px; }
+.ai-view h3, .ai-view h4, .ai-view p { margin: 0; }
+.ai-view .hint { line-height: 1.5; overflow-wrap: anywhere; }
+.ai-view .field { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.ai-view .input { width: 100%; min-width: 0; max-width: 100%; }
+.ai-view textarea { resize: vertical; min-height: 76px; line-height: 1.5; }
+.ai-view .ai-question { min-height: 85px; }
+.ai-view .ai-context { min-height: 110px; font: 12px/1.5 var(--mono); }
+.ai-form, .ai-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; min-width: 0; }
+.ai-form { align-items: flex-end; }
+.ai-form .field { flex: 1 1 170px; }
+.ai-form .btn { margin-bottom: 0; }
+.ai-connection, .ai-context-details { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); min-width: 0; }
+.ai-connection > :not(summary), .ai-context-details > :not(summary) { margin-top: 10px; }
+.ai-connection summary, .ai-context-details summary { cursor: pointer; color: var(--text-strong); font-weight: 600; }
+.ai-key-status, .ai-status, .ai-library-status { color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
+.ai-check { display: inline-flex; align-items: center; gap: 7px; min-height: 32px; cursor: pointer; }
+.ai-check input { flex: 0 0 auto; }
+.ai-context-preview { max-height: 200px; min-height: 35px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; font: 12px/1.5 var(--mono); color: var(--muted); margin-bottom: 0; border-top: 1px solid var(--border); padding-top: 9px; }
+.ai-answer, .ai-document-content { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; line-height: 1.65; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); min-height: 100px; }
+.ai-answer { max-height: 650px; overflow: auto; }
+.ai-sources { display: flex; flex-direction: column; gap: 6px; }
+.ai-source { border: 1px solid var(--border); border-radius: var(--radius); color: var(--accent); background: var(--panel-2); text-align: left; padding: 8px 10px; cursor: pointer; overflow-wrap: anywhere; }
+.ai-source:hover { background: var(--panel-3); }
+.ai-limitations { display: flex; flex-direction: column; gap: 5px; }
+.ai-section-title { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.ai-local-badge { color: var(--muted); font-size: 11px; border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; }
+.ai-library-list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow: auto; min-height: 40px; }
+.ai-library-item { display: flex; flex-direction: column; gap: 4px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel-2); color: var(--text); text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.ai-library-item:hover { background: var(--panel-3); }
+.ai-library-item span { color: var(--muted); font-size: 11px; }
+.ai-document { min-width: 0; display: flex; flex-direction: column; gap: 9px; }
+.ai-document-content { max-height: 560px; overflow: auto; }
+.ai-note-editor { display: flex; flex-direction: column; gap: 9px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); }
+.ai-view button:focus-visible, .ai-view summary:focus-visible, .ai-view [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 1120px) {
+  .ai-workspace { grid-template-columns: minmax(0, 1fr); padding: 10px; }
+  .ai-library { padding: 14px 0 0; border-left: 0; border-top: 1px solid var(--border); }
+  .ai-library-list { max-height: 230px; }
+}
