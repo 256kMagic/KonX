@@ -91,11 +91,18 @@ async function main() {
     const saved = JSON.parse(savedText);
     assert(saved.version === 1 && typeof saved.tokenEnc === 'string' && saved.tokenEnc.length > 32, 'Expected an encrypted Mist credential on disk');
     assert(!savedText.includes(TOKEN) && !savedText.includes(Buffer.from(TOKEN).toString('base64')), 'Synthetic Mist credential was written without encryption');
+    const aiText = fs.readFileSync(path.join(profile, 'ai.json'), 'utf8');
+    const aiSaved = JSON.parse(aiText);
+    assert(typeof aiSaved.providers?.nyquest?.keyEnc === 'string' && aiSaved.providers.nyquest.keyEnc.length > 32, 'Expected encrypted AI key on disk');
+    assert(!aiText.includes(TOKEN) && !aiText.includes(Buffer.from(TOKEN).toString('base64')), 'Synthetic AI credential was written without encryption');
     result.ciphertextStored = true;
+    result.aiCiphertextStored = true;
     result.phases.push(await launch(executable, root, run, profile, version, 'forget'));
     const forgotten = JSON.parse(fs.readFileSync(path.join(profile, 'mist.json'), 'utf8'));
     assert(forgotten.version === 1 && !Object.hasOwn(forgotten, 'tokenEnc'), 'Encrypted token remained on disk after Forget token');
+    assert(!Object.hasOwn(JSON.parse(fs.readFileSync(path.join(profile, 'ai.json'), 'utf8')).providers.nyquest, 'keyEnc'), 'AI key remained on disk after Forget');
     result.tokenRemovedFromDisk = true;
+    result.aiKeyRemovedFromDisk = true;
     result.passed = true;
   } catch (error) {
     result.error = error.stack || String(error);

@@ -10,6 +10,8 @@ Connect to a switch, move files over SFTP, edit its configuration, and investiga
 
 **0.3.0 test build:** Security Suite, Wi-Fi Tools, Mist/Marvis monitoring and troubleshooting, and local JavaScript error logs are now available in the latest source/test build. See the [0.3.0 notes](docs/releases/0.3.0.md). The public download links below still refer to the published 0.2.0 release.
 
+**0.4.0 test build:** adds **AI & Knowledge**, with encrypted keys for OpenAI, Claude, Gemini, Nyquest, and a custom OpenAI-compatible endpoint; an offline background SQLite vector index; 46 bundled articles and an editable reference library; and **Explain with AI** in tool tabs. See the [0.4.0 notes](docs/releases/0.4.0.md) and [AI and knowledge guide](docs/AI_KNOWLEDGE_GUIDE.md). Older 0.3.0 installations do not include AI. The public download links below still refer to 0.2.0.
+
 ![KonX terminal workspace](docs/screenshots/terminal.png)
 
 ## Download and install
@@ -57,6 +59,7 @@ See the [release notes](CHANGELOG.md) and [user guide](docs/USER_GUIDE.md) for w
 - **Investigate:** open Packet Capture to record traffic or inspect an existing capture, or choose a network tool from the home screen.
 - **Assess security (0.3.0):** open Security Suite for Windows posture and remote exposure, TLS/SSH, web headers, device configuration, and saved-capture checks. Review evidence, compare local baselines, and export JSON/HTML reports. See the [Security Suite guide](docs/SECURITY_SUITE.md) for scope and workflows.
 - **Wireless and Mist (0.3.0):** inspect local Wi-Fi adapters, cached BSSIDs, signal and channels, or save an encrypted Mist token for AP/client monitoring and direct Marvis troubleshooting. See the [Wi-Fi and Mist guide](docs/WIRELESS_MIST_GUIDE.md).
+- **Understand results (0.4.0):** choose **Explain with AI** in a tool tab, preview the result context, and ask a configured AI provider for an explanation with local references. Search the offline library or maintain your own reference notes without an AI key. See the [AI and knowledge guide](docs/AI_KNOWLEDGE_GUIDE.md).
 
 The [user guide](docs/USER_GUIDE.md) covers connection settings, credentials, imports, transfers, editing, capture filters, and troubleshooting in detail.
 

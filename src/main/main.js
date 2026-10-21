@@ -14,6 +14,8 @@ const nettools = require('./nettools');
 const security = require('./security');
 const wifi = require('./wifi');
 const { MistClient } = require('./mist');
+const { AIClient } = require('./ai');
+const { KnowledgeLibrary } = require('./knowledge');
 const importers = require('./importers');
 const serial = require('./serial');
 const { CaptureManager, readCaptureFile } = require('./capture');
@@ -32,6 +34,8 @@ let capture;
 let npStore;
 let npWatcher;
 let mist;
+let ai;
+let knowledge;
 const toolJobs = new Map();
 
 function send(channel, ...args) {
@@ -298,6 +302,7 @@ function registerIpc() {
     security: security.run,
     wifi: wifi.run,
     mist: (params, emit, signal) => mist.run(params, emit, signal),
+    ai: (params, emit, signal) => ai.run(params, emit, signal),
     ping: nettools.pingMonitor,
     sweep: nettools.sweep,
     portscan: nettools.portScan,
@@ -309,7 +314,7 @@ function registerIpc() {
     if (requestedId !== undefined && (typeof requestedId !== 'string' || !requestedId || requestedId.length > 128)) throw new Error('Invalid tool job ID');
     const id = requestedId ?? ++jobSeq;
     if (jobs.has(id)) throw new Error('Tool job is already running');
-    const signal = { stopped: false, onStop: null };
+    const signal = { stopped: false, onStop: null, kind };
     jobs.set(id, signal);
     const emit = (type, data) => send('tools:event', id, type, data);
     Promise.resolve()
@@ -329,6 +334,31 @@ function registerIpc() {
   });
   handle('tools:mistConfig', () => mist.getConfig());
   handle('tools:mistConfigure', (params) => mist.configure(params));
+  handle('tools:aiConfig', () => ai.getConfig());
+  handle('tools:aiConfigure', (params) => {
+    const config = ai.configure(params);
+    for (const signal of jobs.values()) {
+      if (signal.kind !== 'ai') continue;
+      signal.stopped = true;
+      try { signal.onStop?.(); } catch { /* Cancel the other AI jobs too. */ }
+    }
+    return config;
+  });
+  handle('tools:aiPreview', (params) => ai.preview(params?.context));
+  handle('tools:knowledgeStatus', () => knowledge.status());
+  handle('tools:knowledgeList', (params) => knowledge.list(params));
+  handle('tools:knowledgeGet', (id) => knowledge.get(id));
+  handle('tools:knowledgeSave', (article) => knowledge.save(article));
+  handle('tools:knowledgeRemove', (id) => knowledge.remove(id));
+  handle('tools:knowledgeRebuild', () => knowledge.rebuild());
+  handle('tools:knowledgeOpenSource', async (id) => {
+    const article = await knowledge.get(id);
+    if (!article?.sourceUrl) throw new Error('This article has no source link.');
+    let url;
+    try { url = new URL(article.sourceUrl); } catch { throw new Error('This article has no source link.'); }
+    if (url.protocol !== 'https:' || url.username || url.password) throw new Error('Article sources must use HTTPS without embedded credentials.');
+    await shell.openExternal(url.href);
+  });
   handle('tools:dns', (params) => nettools.dnsLookup(params));
   handle('tools:whois', (params) => nettools.whois(params));
   handle('tools:wol', (params) => nettools.wakeOnLan(params));
@@ -434,6 +464,8 @@ app.whenReady().then(() => {
   };
   store = new Store(app.getPath('userData'), crypt);
   mist = new MistClient({ dir: app.getPath('userData'), crypt });
+  knowledge = new KnowledgeLibrary({ dir: app.getPath('userData') });
+  ai = new AIClient({ dir: app.getPath('userData'), crypt, knowledge });
   connections = new ConnectionManager({ emit: send, ask, store, defaultLogDir });
   sftp = new SftpManager({
     emit: send,
@@ -460,5 +492,6 @@ app.on('window-all-closed', () => {
   connections && connections.closeAll();
   sftp && sftp.closeAll();
   capture && capture.stopAll();
+  knowledge && knowledge.close()?.catch?.(() => {});
   app.quit();
 });

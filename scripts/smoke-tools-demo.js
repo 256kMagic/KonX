@@ -23,7 +23,7 @@
   const info = await api.invoke('app:info');
   assert(info.version === options.version && app.info.version === options.version, 'Unexpected application version');
   assert(info.encryption, 'Windows credential encryption must be available');
-  for (const kind of ['security', 'wifi', 'mist']) assert(TOOLS.some((tool) => tool.kind === kind), 'Missing tool entry: ' + kind);
+  for (const kind of ['security', 'wifi', 'mist', 'ai']) assert(TOOLS.some((tool) => tool.kind === kind), 'Missing tool entry: ' + kind);
   assert(app.jobs.size === 0, 'Fresh app unexpectedly started a tool job');
   const security = app.openTool('security');
   assert(security.audit.options.length === 8, 'Expected eight security assessments');
@@ -35,6 +35,14 @@
   assert(mist.region.options.length === 12 && mist.config.regions.length === 12, 'Mist cloud regions are missing');
   assert(mist.token.type === 'password', 'Mist credential input must mask its value');
   assert(app.jobs.size === 0, 'Opening tool tabs unexpectedly started a job');
+  const ai = app.openTool('ai');
+  await until(() => !ai.configBusy && ai.config, 'AI connection settings');
+  assert(ai.provider.options.length === 5 && ai.key.type === 'password', 'Five AI providers and a masked key input are required');
+  const knowledge = await api.invoke('tools:knowledgeStatus');
+  assert(knowledge.state === 'ready' && knowledge.documents >= 30 && knowledge.chunks > 0, 'Packaged background knowledge database is not ready');
+  assert(knowledge.algorithm === 'Local TF-IDF cosine vectors', 'Unexpected vector index algorithm');
+  assert((await api.invoke('tools:knowledgeList', { query: 'RSSI' })).length > 0, 'Offline reference search found no signal guidance');
+  const noteTitle = 'Package smoke synthetic reference';
 
   if (options.phase === 'save') {
     assert(!mist.config.hasToken && mist.testButton.disabled, 'Fresh profile must have no API token');
@@ -63,7 +71,21 @@
     assert(mist.token.value === '' && !mist.testButton.disabled && !mist.forgetButton.disabled, 'Mist controls did not update after saving');
     const publicConfig = await api.invoke('tools:mistConfig');
     assert(publicConfig.hasToken && !JSON.stringify(publicConfig).includes(options.token) && !Object.hasOwn(publicConfig, 'tokenEnc'), 'Mist settings exposed credential material');
-    await complete({ phase: options.phase, version: info.version, tools: 3, assessments: 8, mistRegions: 12, configChecks: report.checks.length, redactedExports: true, encryptedTokenSaved: true, noAutomaticJobs: app.jobs.size === 0 });
+    app.activate(ai);
+    await until(() => !ai.configBusy, 'AI settings after activation');
+    ai.provider.value = 'nyquest'; ai.provider.dispatchEvent(new Event('change'));
+    ai.key.value = options.token; ai.saveButton.click();
+    await until(() => !ai.configBusy, 'synthetic AI credential save');
+    assert(ai.config.provider === 'nyquest' && ai.config.hasKey && ai.key.value === '', 'AI credential was not saved securely');
+    assert(!JSON.stringify(await api.invoke('tools:aiConfig')).includes(options.token), 'AI settings exposed a saved key');
+    ai.context.value = 'RSSI -67 dBm\npassword=synthetic_context_secret'; ai.context.dispatchEvent(new Event('input'));
+    await ai.previewContext();
+    assert(!ai.preview.textContent.includes('synthetic_context_secret') && ai.preview.textContent.includes('Redacted'), 'AI preview did not redact the test secret');
+    assert(!ai.shareContext.checked && !ai.shareContext.disabled, 'Context must require explicit selection after preview');
+    const article = await api.invoke('tools:knowledgeSave', { title: noteTitle, vendor: 'Synthetic fixture', content: 'Wireless RSSI observations are cached evidence. Verify the adapter and collection time.' });
+    await ai.readDocument(article.id);
+    assert(ai.documentContent.textContent.includes('cached evidence'), 'Packaged local article did not render');
+    await complete({ phase: options.phase, version: info.version, tools: 4, assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
   } else if (options.phase === 'forget') {
     assert(mist.config.hasToken && !mist.testButton.disabled, 'Encrypted Mist token did not survive app restart');
     assert(mist.token.value === '', 'Saved credential must not be returned to the input');
@@ -72,8 +94,17 @@
     assert(!mist.config.hasToken && mist.testButton.disabled && mist.forgetButton.disabled, 'Mist token removal did not update controls');
     const config = await api.invoke('tools:mistConfig');
     assert(!config.hasToken && !JSON.stringify(config).includes(options.token), 'Mist token remained after removal');
-    app.activate(security);
+    app.activate(ai);
+    await until(() => !ai.configBusy, 'AI settings after activation');
+    assert(ai.config.provider === 'nyquest' && ai.config.hasKey && ai.key.value === '', 'Encrypted AI key did not survive restart');
+    ai.forgetButton.click(); await until(() => !ai.configBusy, 'synthetic AI credential removal');
+    assert(!ai.config.hasKey && !JSON.stringify(await api.invoke('tools:aiConfig')).includes(options.token), 'AI credential remained after Forget');
+    const notes = await api.invoke('tools:knowledgeList', { query: noteTitle });
+    const note = notes.find((article) => article.title === noteTitle && article.builtin === false);
+    assert(note, 'Custom knowledge note did not survive restart');
+    await api.invoke('tools:knowledgeRemove', note.id);
+    assert(!(await api.invoke('tools:knowledgeGet', note.id)), 'Custom note remained after removal');
     assert(app.jobs.size === 0, 'Smoke left running jobs');
-    await complete({ phase: options.phase, version: info.version, encryptedTokenPersisted: true, tokenForgotten: true, noAutomaticJobs: true });
+    await complete({ phase: options.phase, version: info.version, encryptedTokenPersisted: true, tokenForgotten: true, encryptedAiKeyPersisted: true, aiKeyForgotten: true, customNotePersisted: true, customNoteRemoved: true, vectorIndexReady: true, noAutomaticJobs: true });
   } else throw new Error('Unknown package smoke phase');
 })()

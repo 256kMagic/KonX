@@ -1,6 +1,8 @@
 # KonX User Guide
 
-This guide covers KonX 0.2.x and the 0.3.0 test build for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, and network troubleshooting tools in one window. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0.
+This guide covers KonX 0.2.x and the 0.3.0/0.4.0 test builds for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, and network troubleshooting tools in one window. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
+
+Version 0.4.0 adds [AI & Knowledge](AI_KNOWLEDGE_GUIDE.md): provider API keys, explanations of selected tool output, and an offline reference library backed by a background SQLite vector index. Older 0.3.0 builds do not include this feature.
 
 For downloads, build instructions, and project information, see the [README](../README.md) and [GitHub releases](https://github.com/256kMagic/KonX/releases).
 
@@ -20,6 +22,7 @@ For downloads, build instructions, and project information, see the [README](../
 - [Network tools](#network-tools)
 - [Security Suite](SECURITY_SUITE.md)
 - [Wi-Fi and Mist/Marvis](WIRELESS_MIST_GUIDE.md)
+- [AI and knowledge library (0.4.0)](AI_KNOWLEDGE_GUIDE.md)
 - [Settings](#settings)
 - [Keyboard reference](#keyboard-reference)
 - [Application data and backups](#application-data-and-backups)
@@ -602,6 +605,9 @@ KonX's normal Windows profile is under `%APPDATA%\KonX`. Installed and portable 
 | `settings.json` | Appearance, terminal, transfer, button-bar, and Notepad preferences |
 | `sessions.json` | Saved sessions, folders, and encrypted secret values |
 | `known_hosts.json` | Accepted SSH fingerprints |
+| `mist.json` | Mist cloud selection and Windows-encrypted API token (0.3.0+) |
+| `ai.json` | AI provider/model settings and Windows-encrypted API keys (0.4.0+) |
+| `knowledge/library.sqlite` and SQLite journal files | Offline reference articles, custom notes, chunks, and local vector index (0.4.0+) |
 | `notepad/session.json` | Editor document list and restore information |
 | `notepad/backup/*.txt` | UTF-8 recovery text for unsaved editor work |
 | Chromium/Electron profile files | UI state such as recent sessions and expanded folders |
