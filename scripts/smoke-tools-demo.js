@@ -46,10 +46,12 @@
   const versionParts = info.version.split('.').map(Number);
   const supportsDeviceInspector = versionParts[0] > 0 || versionParts[1] >= 7;
   const supportsSnapshots = versionParts[0] > 0 || versionParts[1] >= 8;
+  const supportsRtp = versionParts[0] > 0 || versionParts[1] >= 9;
 
   if (options.phase === 'save') {
     let deviceInspector = null;
     let deviceSnapshots = null;
+    let rtpMedia = null;
     if (supportsDeviceInspector) {
       assert(TOOLS.some((tool) => tool.kind === 'device'), 'Device Inspector entry is missing');
       const device = app.openTool('device');
@@ -81,6 +83,28 @@
         configurationAndRoutesCompared: true, aiSummaryOnly: true, noNetworkCollection: app.jobs.size === 0 };
       await app.closeTab(snapshots);
       assert(!app.byId.has(snapshots.id) && app.jobs.size === 0, 'Snapshot smoke did not close cleanly');
+    }
+    if (supportsRtp) {
+      const { makeRtpDemo } = await import('./js/capture/sample-rtp.mjs');
+      const { analyzeSipCalls } = await import('./js/capture/sip.mjs');
+      const { analyzeRtp, buildRtpAudio, encodeWav } = await import('./js/capture/rtp.mjs');
+      const capture = app.openTool('capture'), demo = makeRtpDemo();
+      await capture.loadBytes(demo.bytes, demo.name);
+      const sip = analyzeSipCalls(capture.packets), media = analyzeRtp(capture.packets, { sipCalls: sip.calls });
+      assert(capture.packets.length === 401 && sip.calls.length === 1 && media.streams.length === 2, 'Packaged RTP demo did not decode');
+      assert(media.streams.some(stream => stream.sequenceGaps === 3 && stream.outOfOrderPackets === 1 && stream.duplicatePackets === 1), 'Packaged RTP capture findings are missing');
+      const audio = buildRtpAudio(media.streams[0]), wav = encodeWav(audio);
+      assert(audio.samples.length === 32000 && wav.length === 64044, 'Packaged G.711 WAV reconstruction failed');
+      const opened = capture.openRtpMedia();
+      await until(() => document.querySelector('.rtp-workspace'), 'packaged RTP viewer');
+      assert(document.querySelectorAll('.rtp-stream').length === 2, 'Packaged RTP stream list is missing');
+      [...document.querySelectorAll('.rtp-workspace button')].find(button => button.textContent === 'Build waveform').click();
+      assert(document.querySelector('.rtp-wave') && document.querySelector('.rtp-silence'), 'Packaged audio waveform or gap markers are missing');
+      document.querySelector('.modal > header .x').click(); await opened;
+      assert(!document.querySelector('.rtp-workspace'), 'Packaged RTP viewer failed to close');
+      rtpMedia = { packets: capture.packets.length, calls: sip.calls.length, streams: media.streams.length, rtcp: media.rtcp.length,
+        samples: audio.samples.length, wavBytes: wav.length, waveformAndGaps: true, noPlayback: true, noNetworkCollection: app.jobs.size === 0 };
+      await app.closeTab(capture);
     }
     assert(!mist.config.hasToken && mist.testButton.disabled, 'Fresh profile must have no API token');
     app.activate(security);
@@ -122,7 +146,7 @@
     const article = await api.invoke('tools:knowledgeSave', { title: noteTitle, vendor: 'Synthetic fixture', content: 'Wireless RSSI observations are cached evidence. Verify the adapter and collection time.' });
     await ai.readDocument(article.id);
     assert(ai.documentContent.textContent.includes('cached evidence'), 'Packaged local article did not render');
-    await complete({ phase: options.phase, version: info.version, tools: supportsSnapshots ? 6 : supportsDeviceInspector ? 5 : 4, ...(deviceInspector ? { deviceInspector } : {}), ...(deviceSnapshots ? { deviceSnapshots } : {}), assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
+    await complete({ phase: options.phase, version: info.version, tools: supportsRtp ? 7 : supportsSnapshots ? 6 : supportsDeviceInspector ? 5 : 4, ...(deviceInspector ? { deviceInspector } : {}), ...(deviceSnapshots ? { deviceSnapshots } : {}), ...(rtpMedia ? { rtpMedia } : {}), assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
   } else if (options.phase === 'forget') {
     assert(mist.config.hasToken && !mist.testButton.disabled, 'Encrypted Mist token did not survive app restart');
     assert(mist.token.value === '', 'Saved credential must not be returned to the input');

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.0 — 2026-10-21
+
+- Open RTP Media from Packet Capture or a SIP call, with directional streams, SDP associations, jitter, gaps, duplicate/reordered packets, and source-frame navigation.
+- Inspect RTCP sender and receiver reports without inventing unknown clock conversions or listener quality scores.
+- Build G.711 waveforms, play one or two directions explicitly, and export PCM16 WAV files. Paired playback uses capture timestamps; gaps remain marked silence.
+- Load a synthetic SIP/RTP tone demo directly in the media view.
+- Stop audio when the media dialog closes or its capture is replaced. Keep unsupported, encrypted, ambiguous, and limited observations explicit.
+
+See the [RTP media guide](docs/RTP_MEDIA.md) and [release notes](docs/releases/0.9.0.md).
+
 ## 0.8.0 — 2026-10-21
 
 - Save named, immutable device snapshots and reopen them from local history.

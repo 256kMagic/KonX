@@ -36,7 +36,7 @@ const messageLabel = (message) => message.type === 'response'
   : message.method || message.startLine || 'Unknown SIP message';
 
 /** Display only the supplied capture snapshot. Captured text is never markup. */
-export async function showSipCalls(analysis, { onExportCall, onExportReport } = {}) {
+export async function showSipCalls(analysis, { onExportCall, onExportReport, initialCallKey = null, allowMedia = false } = {}) {
   let close;
   let alive = true;
   let exporting = false;
@@ -48,7 +48,7 @@ export async function showSipCalls(analysis, { onExportCall, onExportReport } = 
   let framePage = 0;
   let focusedEndpoints = null;
   let filtered = analysis.calls;
-  let selectedCall = filtered[0] || null;
+  let selectedCall = filtered.find(call => call.id === initialCallKey) || filtered[0] || null;
   let endpoints = [];
   const searchCache = new Map();
   const list = h('div.sip-call-list', { 'aria-label': 'SIP calls' });
@@ -151,7 +151,8 @@ export async function showSipCalls(analysis, { onExportCall, onExportReport } = 
         h('button.btn.sm', {
           disabled: exporting || typeof onExportReport !== 'function',
           onclick: () => exportSelected(onExportReport, 'Call report saved'),
-        }, icon('file'), 'Export JSON report')),
+        }, icon('file'), 'Export JSON report'),
+        allowMedia ? h('button.btn.sm', { onclick: () => close({ action: 'media', callKey: call.id }) }, icon('activity'), 'RTP Media') : null),
       h('div.hint', 'PCAPNG saves original signaling packets. Shared TCP packets may also contain other messages; RTP media is not included.'),
       metadata([['Call-ID', call.callId], ['From', call.from], ['To', call.to],
         ['First observed', timestamp(call.startTime)], ['Last observed', timestamp(call.endTime)],

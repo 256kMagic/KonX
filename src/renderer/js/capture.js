@@ -9,6 +9,8 @@ import { showTraffic } from './capture/traffic-view.js';
 import { analyzeSipCalls } from './capture/sip.mjs';
 import { showSipCalls } from './capture/sip-view.js';
 import { buildSipCallCapture, buildSipCallReport } from './capture/sip-export.mjs';
+import { showRtpMedia } from './capture/rtp-view.js';
+import { makeRtpDemo } from './capture/sample-rtp.mjs';
 
 const ROW_H = 22;
 const MAX_PACKETS = 1000000;
@@ -95,7 +97,8 @@ export class CaptureTab {
     this.autoScrollCheckbox = h('input', { type: 'checkbox', checked: this.autoScroll, onchange: (e) => this.setAutoScroll(e.target.checked) });
     const names = h('input', { type: 'checkbox', checked: true, onchange: (e) => ((this.resolveNames = e.target.checked), this.list.render()) });
     this.sipButton = h('button.btn.sm', { title: 'Reconstruct SIP calls from all captured packets', onclick: () => this.openSipCalls() }, icon('route'), 'SIP Calls');
-    const frow = h('div.cap-frow', this.filterBox, ...chips, this.sipButton, h('label.check', this.autoScrollCheckbox, 'Auto-scroll'), h('label.check', names, 'Names'));
+    this.rtpButton = h('button.btn.sm', { title: 'Inspect RTP streams, jitter and G.711 audio', onclick: () => this.openRtpMedia() }, icon('activity'), 'RTP Media');
+    const frow = h('div.cap-frow', this.filterBox, ...chips, this.sipButton, this.rtpButton, h('label.check', this.autoScrollCheckbox, 'Auto-scroll'), h('label.check', names, 'Names'));
 
     this.list = new PacketList(this);
     this.notice = h('div.cap-notice.hidden');
@@ -495,6 +498,7 @@ export class CaptureTab {
 
   clear(ask) {
     const go = () => {
+      this.rtpAbort?.abort();
       this.packets = [];
       this.view = [];
       this.analyzer.reset();
@@ -763,13 +767,14 @@ export class CaptureTab {
     }
   }
 
-  async openSipCalls() {
+  async openSipCalls(callKey = null) {
     if (this.sipOpen) return;
     this.sipOpen = true;
     this.sipButton.disabled = true;
     const packets = this.packets;
     const snapshot = packets.slice();
     const sourceName = this.fileName || 'Live capture snapshot';
+    let media = null;
     try {
       // Yield for the busy control to paint before bounded, on-demand analysis.
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -780,10 +785,13 @@ export class CaptureTab {
         if (path) toast('SIP call exported', 'ok');
       };
       const result = await showSipCalls(analysis, {
+        initialCallKey: callKey,
+        allowMedia: true,
         onExportCall: (call) => save('pcapng', buildSipCallCapture(snapshot, call)),
         onExportReport: (call) => save('json', buildSipCallReport(call, { ...analysis, sourceName })),
       });
       if (!result || this.disposed || this.packets !== packets) return;
+      if (result.action === 'media') media = { callKey: result.callKey, packets, snapshot, sipCalls: analysis.calls };
       if (result.action === 'packet') {
         const index = packets.findIndex((packet) => packet.no === result.frame);
         if (index < 0) return;
@@ -798,6 +806,55 @@ export class CaptureTab {
     } finally {
       this.sipOpen = false;
       this.sipButton.disabled = false;
+    }
+    if (media && !this.disposed && this.packets === packets) await this.openRtpMedia(media.callKey, media);
+  }
+
+  async openRtpMedia(callKey = null, context = null) {
+    if (this.rtpOpen || this.disposed) return;
+    this.rtpOpen = true;
+    this.rtpButton.disabled = true;
+    const packets = context?.packets || this.packets;
+    const snapshot = context?.snapshot || packets.slice();
+    const controller = new AbortController();
+    this.rtpAbort = controller;
+    const current = () => !this.disposed && this.packets === packets && !controller.signal.aborted;
+    let next = null;
+    try {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      if (!current()) return;
+      const sipCalls = context?.sipCalls || analyzeSipCalls(snapshot).calls;
+      const result = await showRtpMedia(snapshot, {
+        sipCalls, callKey, signal: controller.signal, allowDemo: true,
+        onExportWav: (name, bytes) => {
+          if (!current()) throw new Error('The source capture was replaced or closed.');
+          return api.invoke('cap:saveBody', name, bytes);
+        },
+      });
+      if (!result || !current()) return;
+      if (result.action === 'packet') {
+        const index = packets.findIndex(packet => packet.no === result.frame);
+        if (index < 0) return;
+        this.setAutoScroll(false);
+        if (!this.view.includes(index)) this.setFilter('');
+        this.select(index);
+        this.list.ensureVisible(this.view.indexOf(index));
+      } else if (result.action === 'demo' || result.action === 'call') next = result;
+    } catch (error) { toast(errMsg(error), 'err'); }
+    finally {
+      controller.abort();
+      if (this.rtpAbort === controller) this.rtpAbort = null;
+      this.rtpOpen = false;
+      this.rtpButton.disabled = false;
+    }
+    if (next?.action === 'demo' && !this.disposed) {
+      if (packets.length && !(await confirmDialog('Replace this capture with the synthetic RTP demo? Save any packets you need first.', { okLabel: 'Load demo' }))) return;
+      if (this.disposed || this.packets !== packets) return;
+      const demo = makeRtpDemo();
+      await this.loadBytes(demo.bytes, demo.name);
+      if (!this.disposed) await this.openRtpMedia();
+    } else if (next?.action === 'call' && !this.disposed && this.packets === packets) {
+      await this.openSipCalls(next.callKey);
     }
   }
 
@@ -975,6 +1032,7 @@ export class CaptureTab {
 
   dispose() {
     this.disposed = true;
+    this.rtpAbort?.abort();
     this.acceptLivePackets = false;
     this.captureGeneration = (this.captureGeneration || 0) + 1;
     api.invoke('cap:stop', this.id).catch(() => {});

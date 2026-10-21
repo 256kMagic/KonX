@@ -28,7 +28,7 @@ async function saveCaptureBody(defaultName, bytes, { chooseFile, writeFile }) {
   // even if the caller replaces or changes its preview while the dialog is open.
   const snapshot = Buffer.from(bytes);
   const result = await chooseFile({
-    title: 'Save recovered HTTP body',
+    title: 'Save recovered content',
     defaultPath: bodyFilename(defaultName),
     filters: [{ name: 'All files', extensions: ['*'] }],
   });

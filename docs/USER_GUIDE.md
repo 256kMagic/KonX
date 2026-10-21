@@ -1,12 +1,14 @@
 # KonX User Guide
 
-This guide covers KonX 0.8.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one window. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
+This guide covers KonX 0.9.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one window. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
 
 Version 0.4.0 adds [AI & Knowledge](AI_KNOWLEDGE_GUIDE.md): provider API keys, explanations of selected tool output, and an offline reference library backed by a background SQLite vector index. Older 0.3.0 builds do not include this feature.
 
 Version 0.5.0 adds six animated application themes, with a compact top header and effects behind terminal and editor output. Classic Dark and Light application themes and the existing terminal schemes remain available. See [Appearance and motion](#appearance-and-motion).
 
 Version 0.8.0 adds [Device Snapshots](DEVICE_SNAPSHOTS.md): named local history, optional configuration/route collection, and before/after change checks. [Device Inspector](DEVICE_INSPECTOR.md), introduced in 0.7.0, remains available. See [Updating KonX](UPDATING.md) and the [release notes](releases/0.8.0.md).
+
+Version 0.9.0 adds [RTP media and audio](RTP_MEDIA.md). RTP stream analysis, clickable jitter and packet evidence, G.711 playback, WAV export, and a synthetic media demo. See the [release notes](releases/0.9.0.md).
 
 For downloads, build instructions, and project information, see the [README](../README.md) and [GitHub releases](https://github.com/256kMagic/KonX/releases).
 
@@ -25,6 +27,7 @@ For downloads, build instructions, and project information, see the [README](../
 - [SIP calls and signaling ladders](#sip-calls-and-signaling-ladders)
 - [Device Inspector and switch-port tracing](DEVICE_INSPECTOR.md)
 - [Device snapshots and change checks](DEVICE_SNAPSHOTS.md)
+- [RTP media and audio](RTP_MEDIA.md)
 - [Network tools](#network-tools)
 - [Security Suite](SECURITY_SUITE.md)
 - [Wi-Fi and Mist/Marvis](WIRELESS_MIST_GUIDE.md)
@@ -39,7 +42,7 @@ Examples use reserved documentation addresses such as `192.0.2.10`, `198.51.100.
 
 ## Install, run, and update
 
-Download a Windows x64 executable from the [0.8.0 release](https://github.com/256kMagic/KonX/releases/tag/v0.8.0).
+Download a Windows x64 executable from the [0.9.0 release](https://github.com/256kMagic/KonX/releases/tag/v0.9.0).
 
 | Download | Use it when | How to start |
 | --- | --- | --- |
@@ -48,7 +51,7 @@ Download a Windows x64 executable from the [0.8.0 release](https://github.com/25
 
 The portable executable still uses a Windows user profile for settings, saved sessions, and editor recovery. It does **not** automatically place all data beside the executable or make encrypted credentials transferable between computers. See [Application data and backups](#application-data-and-backups).
 
-**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.8.0.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
+**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.9.0.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
 
 For updates from **installed 0.6.2 or later**, or **portable 0.6.0 or later**:
 
