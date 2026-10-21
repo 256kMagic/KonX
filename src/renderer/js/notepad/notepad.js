@@ -20,13 +20,16 @@ export class NotepadTab {
     this.title = 'Notepad';
     this.icon = 'edit';
     this.state = 'idle';
+    this.disposed = false;
+    this.visibilityGeneration = 0;
+    this.restoring = true;
     this.docs = [];
     this.current = null;
     this.closed = [];
     this.opts = { wordWrap: false, minimap: true, whitespace: false, fontSize: null, sendDelay: 150, ...(app.settings.notepad || {}) };
     this.build();
     this.ready = this.init().catch((e) => {
-      this.host.replaceChildren(h('div.np-loading', `The editor could not start: ${errMsg(e)}`));
+      if (!this.disposed) this.host.replaceChildren(h('div.np-loading', `The editor could not start: ${errMsg(e)}`));
       throw e;
     });
   }
@@ -93,7 +96,9 @@ export class NotepadTab {
   }
 
   async init() {
-    const monaco = (this.monaco = await loadMonaco());
+    const monaco = await loadMonaco();
+    if (this.disposed) return;
+    this.monaco = monaco;
     this.host.replaceChildren();
     this.editor = monaco.editor.create(this.host, {
       model: null,
@@ -134,8 +139,10 @@ export class NotepadTab {
       api.on('np:found', (job, rows) => this.findPanel && this.findPanel.add(job, rows)),
       api.on('np:findDone', (job, s) => this.findPanel && this.findPanel.done(job, s)),
     ];
-    addEventListener('beforeunload', () => this.flush());
+    this.beforeUnload = () => this.flush();
+    addEventListener('beforeunload', this.beforeUnload);
     await this.restore();
+    this.restoring = false;
   }
 
   theme() {
@@ -218,14 +225,14 @@ export class NotepadTab {
   }
 
   activate(doc) {
-    if (!doc || !this.editor) return;
+    if (this.disposed || !doc || !this.editor) return;
     if (this.diffEditor) this.closeCompare();
     if (this.current && this.current !== doc) this.current.viewState = this.editor.saveViewState();
     this.current = doc;
     this.editor.setModel(doc.model);
     this.editor.updateOptions({ readOnly: !!doc.readOnly });
     if (doc.viewState) this.editor.restoreViewState(doc.viewState);
-    this.editor.focus();
+    this.focus();
     this.renderTabs();
     this.updateStatus();
     this.app.setTabTitle(this, `Notepad — ${doc.title}`);
@@ -289,11 +296,12 @@ export class NotepadTab {
   }
 
   reveal(line, col = 1, len = 0) {
+    if (this.disposed) return;
     const m = this.monaco;
     const range = new m.Range(line, col, line, col + len);
     this.editor.setSelection(range);
     this.editor.revealRangeInCenter(range);
-    this.editor.focus();
+    this.focus();
   }
 
   encodeDoc(d) {
@@ -526,14 +534,14 @@ export class NotepadTab {
   // ------------------------------------------------------------ editing helpers
 
   run(cmd) {
-    this.editor.focus();
+    this.focus();
     this.editor.trigger('konx', cmd, null);
   }
 
   action(id) {
     const a = this.editor && this.editor.getAction(id);
     if (a) {
-      this.editor.focus();
+      this.focus();
       a.run();
     } else if (this.editor) this.editor.trigger('konx', id, null);
   }
@@ -567,7 +575,7 @@ export class NotepadTab {
     ed.pushUndoStop();
     ed.executeEdits('konx', edits);
     ed.pushUndoStop();
-    ed.focus();
+    this.focus();
   }
 
   /** The selection, or the whole document when nothing is selected. */
@@ -581,7 +589,7 @@ export class NotepadTab {
   insertText(text) {
     const ed = this.editor;
     ed.executeEdits('konx', ed.getSelections().map((s) => ({ range: s, text, forceMoveMarkers: true })));
-    ed.focus();
+    this.focus();
   }
 
   toggleOpt(name) {
@@ -716,7 +724,7 @@ export class NotepadTab {
     this.diffHost.classList.add('hidden');
     this.diffBar.classList.add('hidden');
     this.host.classList.remove('hidden');
-    this.editor.focus();
+    this.focus();
   }
 
   // ------------------------------------------------------------ tabs + status
@@ -783,6 +791,7 @@ export class NotepadTab {
   }
 
   updateStatus() {
+    if (this.disposed) return;
     const d = this.current;
     if (!d || !this.editor) return;
     const pos = this.editor.getPosition() || { lineNumber: 1, column: 1 };
@@ -820,6 +829,7 @@ export class NotepadTab {
   // ------------------------------------------------------------ session + backups
 
   backupDirty() {
+    if (this.disposed) return;
     for (const d of this.docs) {
       const dirty = this.isDirty(d);
       if (dirty || (d.untitled && d.model.getValueLength())) {
@@ -860,26 +870,29 @@ export class NotepadTab {
   }
 
   saveSession() {
-    if (!this.monaco) return;
+    if (this.disposed || this.restoring || !this.monaco) return;
     this.backupDirty();
     api.invoke('np:session:set', this.sessionData()).catch(() => {});
   }
 
   flush() {
-    if (!this.monaco) return;
+    if (this.disposed || this.restoring || !this.monaco) return;
     this.backupDirty();
     api.invoke('np:session:set', this.sessionData()).catch(() => {});
   }
 
   async restore() {
     const s = await api.invoke('np:session:get').catch(() => ({ docs: [] }));
+    if (this.disposed) return;
     for (const e of s.docs || []) {
       let text = null;
       let meta = {};
       if (e.dirty || e.untitled || e.remote) text = await api.invoke('np:backup:read', e.id);
+      if (this.disposed) return;
       if (e.path) {
         try {
           const f = await api.invoke('np:read', e.path);
+          if (this.disposed) return;
           meta = { mtime: f.mtime };
           if (text == null) {
             const dec = T.decodeBytes(f.bytes);
@@ -890,6 +903,7 @@ export class NotepadTab {
           if (text == null) continue; // file gone and nothing unsaved
         }
       }
+      if (this.disposed) return;
       if (text == null && !e.untitled) continue;
       if (e.remote && text == null) continue;
       const d = this.createDoc({
@@ -1064,17 +1078,23 @@ export class NotepadTab {
 
   // ------------------------------------------------------------ tab interface
 
-  show() {
+  show({ focus = true } = {}) {
+    if (this.disposed) return;
     this.active = true;
-    if (this.editor) setTimeout(() => this.editor.focus(), 0);
+    const generation = ++this.visibilityGeneration;
+    if (focus && this.editor) setTimeout(() => {
+      if (generation === this.visibilityGeneration) this.focus();
+    }, 0);
   }
 
   hide() {
     this.active = false;
+    this.visibilityGeneration++;
     this.flush();
   }
 
   focus() {
+    if (this.disposed || !this.active || this.app.active !== this) return;
     if (this.editor) this.editor.focus();
   }
 
@@ -1086,8 +1106,14 @@ export class NotepadTab {
   }
 
   dispose() {
+    if (this.disposed) return;
     // Closing the Notepad keeps the session (and unsaved work) for next time, like Notepad++.
     this.flush();
+    this.disposed = true;
+    this.active = false;
+    this.visibilityGeneration++;
+    clearTimeout(this.statusTimer);
+    if (this.beforeUnload) removeEventListener('beforeunload', this.beforeUnload);
     (this.unwatch || []).forEach((u) => u());
     if (this.diffEditor) this.diffEditor.dispose();
     if (this.editor) this.editor.dispose();

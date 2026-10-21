@@ -1,6 +1,6 @@
 # KonX User Guide
 
-This guide covers KonX 0.13.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one window. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
+This guide covers KonX 0.14.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one window. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
 
 Version 0.4.0 adds [AI & Knowledge](AI_KNOWLEDGE_GUIDE.md): provider API keys, explanations of selected tool output, and an offline reference library backed by a background SQLite vector index. Older 0.3.0 builds do not include this feature.
 
@@ -17,6 +17,8 @@ Version 0.11.0 adds [Remote packet capture](REMOTE_CAPTURE.md). Capture bounded 
 Version 0.12.0 adds [Troubleshooting runbooks](RUNBOOKS.md): reviewed diagnostic procedures, typed targets, per-step evidence, and a saved custom runbook library. See the [release notes](releases/0.12.0.md).
 
 Version 0.13.0 adds [Capture comparison](CAPTURE_COMPARISON.md): working/failing capture comparisons with DNS, TCP, and HTTP observations linked to retained source packets. See the [release notes](releases/0.13.0.md).
+
+Version 0.14.0 adds [Workspace layouts](WORKSPACE_LAYOUTS.md). Four new layouts alongside Classic keep color themes independent while arranging existing sessions and tools for different ways of working. See the [release notes](releases/0.14.0.md).
 
 For downloads, build instructions, and project information, see the [README](../README.md) and [GitHub releases](https://github.com/256kMagic/KonX/releases).
 
@@ -40,6 +42,7 @@ For downloads, build instructions, and project information, see the [README](../
 - [Remote packet capture](REMOTE_CAPTURE.md)
 - [Troubleshooting runbooks](RUNBOOKS.md)
 - [Capture comparison](CAPTURE_COMPARISON.md)
+- [Workspace layouts](WORKSPACE_LAYOUTS.md)
 - [Network tools](#network-tools)
 - [Security Suite](SECURITY_SUITE.md)
 - [Wi-Fi and Mist/Marvis](WIRELESS_MIST_GUIDE.md)
@@ -54,7 +57,7 @@ Examples use reserved documentation addresses such as `192.0.2.10`, `198.51.100.
 
 ## Install, run, and update
 
-Download a Windows x64 executable from the [0.13.0 release](https://github.com/256kMagic/KonX/releases/tag/v0.13.0).
+Download a Windows x64 executable from the [0.14.0 release](https://github.com/256kMagic/KonX/releases/tag/v0.14.0).
 
 | Download | Use it when | How to start |
 | --- | --- | --- |
@@ -63,7 +66,7 @@ Download a Windows x64 executable from the [0.13.0 release](https://github.com/2
 
 The portable executable still uses a Windows user profile for settings, saved sessions, and editor recovery. It does **not** automatically place all data beside the executable or make encrypted credentials transferable between computers. See [Application data and backups](#application-data-and-backups).
 
-**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.13.0.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
+**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.14.0.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
 
 For updates from **installed 0.6.2 or later**, or **portable 0.6.0 or later**:
 
@@ -74,7 +77,7 @@ For updates from **installed 0.6.2 or later**, or **portable 0.6.0 or later**:
 
 Installed copies retain their installation folder and mode. Portable copies retain their filename and location; the containing folder must be writable. Both continue to use the existing Windows profile. No update is applied just because you close KonX, and no release checks run in the background. See [Updating KonX](UPDATING.md) for cancellation, failures, and release preparation.
 
-Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.13.0 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
+Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.14.0 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
 
 Npcap is optional for packet capture; SSH, SFTP, Notepad, and the other tools do not require it. Updating KonX does not install or update Npcap.
 
@@ -565,7 +568,7 @@ Click the gear icon, make changes, and choose **Save**.
 
 | Page | Controls |
 | --- | --- |
-| **Appearance** | Application theme; Animate theme effects; terminal color scheme, font, size, cursor shape, blink |
+| **Appearance** | Workspace layout; application theme; Animate theme effects; terminal color scheme, font, size, cursor shape, blink |
 | **Terminal** | Scrollback; right-click behavior; copy on select; multi-line paste confirmation; remote tab titles; default log folder |
 | **File Transfer** | Initial local folder; conflict policy; simultaneous transfers; hidden files |
 | **Known Hosts** | Saved SSH host keys and removal |
@@ -574,6 +577,8 @@ Click the gear icon, make changes, and choose **Save**.
 Defaults include a dark theme, terminal font size 14, block cursor, 10,000 scrollback lines, copy on select, a context menu on right-click, multi-line paste confirmation, Ask on SFTP conflicts, and two simultaneous transfers. Per-session color scheme/font size can override terminal defaults in **Terminal & Log**.
 
 ### Appearance and motion
+
+In 0.14.0 or later, **Workspace layout** selects the physical arrangement of the app independently of its theme. Choose **Docked Workbench**, **Incident Desk**, **Operations Wall**, **Focus Workspace**, or **Classic** using the structural previews, then **Save**. Existing profiles keep Classic by default. Switching layouts retains open sessions, tools, captures, and drafts; the focused pane remains the command target. See the [workspace layout guide](WORKSPACE_LAYOUTS.md) for pane selection, focus, expansion, and restart behavior.
 
 In 0.5.0 or later, open **Settings → Appearance**, choose an **Application theme**, and choose **Save**. Existing Dark and Light themes keep the classic appearance. Six additional themes add glow and animation:
 

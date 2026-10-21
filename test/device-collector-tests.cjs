@@ -1,7 +1,8 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
-const { Server, Client, utils } = require('ssh2');
+const { Server, Client } = require('ssh2');
+const { sshHostKey } = require('./lib/ssh-host-key.cjs');
 const { run, listConnections, collectDevice } = require('../src/main/device-collector');
 const { INVENTORY_COMMANDS: COMMANDS, analyzeDevices } = require('../src/main/device-analysis');
 
@@ -28,7 +29,7 @@ function mockShell({ reply, delayOpen = 0, prompt = 'fixture#', openError = null
 }
 
 async function liveFixture() {
-  const key = utils.generateKeyPairSync('ed25519').private;
+  const key = sshHostKey();
   const clients = new Set(); const commands = []; let shells = 0;
   const server = new Server({ hostKeys: [key] }, (client) => {
     clients.add(client); client.on('close', () => clients.delete(client)); client.on('error', () => {});

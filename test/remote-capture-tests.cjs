@@ -5,7 +5,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { EventEmitter } = require('node:events');
 const { PassThrough } = require('node:stream');
-const { Server, Client, utils } = require('ssh2');
+const { Server, Client } = require('ssh2');
+const { sshHostKey } = require('./lib/ssh-host-key.cjs');
 const { validate, commandFor, CompletePcap, PcapFile, run, captureOnClient } = require('../src/main/remote-capture');
 const remoteCaptureOwner = require('../src/main/remote-capture');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -48,7 +49,7 @@ function mockChannel({ start, delayOpen = 0, openError } = {}) {
 }
 async function liveFixture(handler) {
   const peers = new Set(), commands = [], signals = [];
-  const server = new Server({ hostKeys: [utils.generateKeyPairSync('ed25519').private] }, peer => {
+  const server = new Server({ hostKeys: [sshHostKey()] }, peer => {
     peers.add(peer); peer.on('close', () => peers.delete(peer)); peer.on('error', () => {});
     peer.on('authentication', c => c.method === 'password' && c.username === 'fixture' && c.password === 'fixture' ? c.accept() : c.reject());
     peer.on('ready', () => peer.on('session', accept => {

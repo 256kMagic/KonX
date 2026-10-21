@@ -30,6 +30,7 @@ class JsonFile {
 
 const DEFAULT_SETTINGS = {
   uiTheme: 'dark',
+  uiLayout: 'classic',
   themeAnimations: true,
   fontFamily: '"Cascadia Mono", Consolas, "Courier New", monospace',
   fontSize: 14,

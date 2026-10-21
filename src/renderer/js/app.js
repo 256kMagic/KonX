@@ -10,6 +10,7 @@ import { toolContext } from './tool-context.mjs';
 import { applyApplicationTheme } from './theme-effects.js';
 import { updateKonx } from './updates.js';
 import { incidentEvidence } from './incident-evidence.mjs';
+import { WorkspaceLayout } from './workspace-layout.js';
 
 const RECENT_KEY = 'konx.recent';
 
@@ -145,6 +146,7 @@ class App {
     this.active = null;
     this.cmdHistory = [];
     this.buildLayout();
+    this.workspaceLayout = new WorkspaceLayout(this);
     this.sessions = new SessionTree(this);
     this.sideSessions.replaceWith(this.sessions.el);
     await this.sessions.load();
@@ -226,7 +228,7 @@ class App {
         document.documentElement.style.setProperty('--sidebar-w', w + 'px');
         this.settings.sidebarWidth = w;
         this.scheduleTabLayout(true);
-        this.active && this.active.refit && this.active.refit();
+        this.workspaceLayout?.refit();
       };
       const up = () => {
         removeEventListener('mousemove', move);
@@ -263,8 +265,10 @@ class App {
     this.renderButtonBar();
     this.cmdInput = h('input', { type: 'text', placeholder: 'Command window — type a command and press Enter to send it', spellcheck: false });
     this.cmdAll = h('input', { type: 'checkbox' });
+    this.cmdAll.addEventListener('change', () => this.workspaceLayout?.updateContext());
     this.cmdInput.addEventListener('keydown', (e) => this.onCmdKey(e));
-    this.cmdwin = h('div#cmdwin.hidden', icon('command'), this.cmdInput, h('label', this.cmdAll, 'Send to all terminal tabs'));
+    this.cmdTarget = h('span.workspace-command-target');
+    this.cmdwin = h('div#cmdwin.hidden', icon('command'), this.cmdInput, this.cmdTarget, h('label', this.cmdAll, 'Send to all terminal tabs'));
     this.main = h('div#main', this.tabstrip, this.views, this.buttonbar, this.cmdwin);
     this.status = h('div#statusbar');
     this.root = h('div#app', this.toolbar, this.sidebar, this.main, this.status);
@@ -277,7 +281,7 @@ class App {
   toggleSidebar() {
     this.root.classList.toggle('no-sidebar');
     this.scheduleTabLayout(true);
-    setTimeout(() => this.active && this.active.refit && this.active.refit(), 50);
+    this.workspaceLayout?.refresh();
   }
 
   toggle(which) {
@@ -289,7 +293,7 @@ class App {
       api.invoke('settings:set', { showButtonBar: this.settings.showButtonBar });
     }
     if (which === 'cmdwin' && !el.classList.contains('hidden')) this.cmdInput.focus();
-    setTimeout(() => this.active && this.active.refit && this.active.refit(), 30);
+    this.workspaceLayout?.refit();
   }
 
   updateButtonBarToggle() {
@@ -357,7 +361,7 @@ class App {
   }
 
   sendToTerminals(text, all) {
-    const targets = all ? this.tabs.filter((t) => t.kind === 'terminal' && t.state === 'connected') : this.active && this.active.kind === 'terminal' ? [this.active] : [];
+    const targets = all ? this.tabs.filter((t) => t.kind === 'terminal' && t.state === 'connected') : this.active?.kind === 'terminal' && this.active.state === 'connected' ? [this.active] : [];
     if (!targets.length) return toast('No connected terminal tab');
     targets.forEach((t) => t.sendText(text));
     if (!all && this.active.focus) this.active.focus();
@@ -388,24 +392,21 @@ class App {
     this.tabs.push(tab);
     this.byId.set(tab.id, tab);
     if (tab.sftpId) this.byId.set(tab.sftpId, tab);
-    this.views.append(tab.el);
+    this.workspaceLayout.mount(tab);
     this.renderTabs();
     this.activate(tab);
     return tab;
   }
 
-  activate(tab) {
-    if (this.active && this.active !== tab) {
-      this.active.el.classList.remove('active');
-      this.active.hide();
-    }
+  activate(tab, { focus = true } = {}) {
+    if (!tab || !this.tabs.includes(tab)) return;
+    this.workspaceLayout.cancelFocus();
     this.active = tab;
     tab.activity = false;
-    tab.el.classList.add('active');
-    tab.show();
+    this.workspaceLayout.activate(tab);
     this.renderTabs(true);
     this.updateStatus(tab);
-    setTimeout(() => tab.focus && tab.focus(), 0);
+    if (focus) this.workspaceLayout.focusTarget(tab);
   }
 
   async closeTab(tab) {
@@ -416,6 +417,7 @@ class App {
     }
     const i = this.tabs.indexOf(tab);
     if (i < 0) return;
+    this.workspaceLayout.detach(tab);
     this.tabs.splice(i, 1);
     this.byId.delete(tab.id);
     tab.el.remove();
@@ -502,6 +504,7 @@ class App {
     // Background activity and title updates must not undo manual tab scrolling.
     this.tabbar.scrollLeft = scrollLeft;
     this.scheduleTabLayout(revealActive);
+    this.workspaceLayout?.refresh();
   }
 
   tabMenu(x, y, t) {
@@ -549,6 +552,7 @@ class App {
       h('span.seg', `${open} connected`),
       h('span.seg', `${this.info.name} ${this.info.version}`)
     );
+    this.workspaceLayout?.updateContext();
   }
 
   showHome() {
@@ -614,7 +618,7 @@ class App {
     let t = this.tabs.find((x) => x.kind === 'notepad');
     if (t) this.activate(t);
     else t = this.addTab(new NotepadTab(this));
-    return t.ready.then(() => t);
+    return t.ready.then(() => { if (t.disposed || !this.tabs.includes(t)) throw new Error('Notepad was closed before its editor finished loading.'); return t; });
   }
 
   openTool(kind, params = {}) {
@@ -652,10 +656,12 @@ class App {
 
   registerJob(id, tab) {
     this.jobs.set(id, tab);
+    this.workspaceLayout?.updateContext();
   }
 
   unregisterJob(id) {
     this.jobs.delete(id);
+    this.workspaceLayout?.updateContext();
   }
 
   async editSession(s) {
@@ -684,10 +690,16 @@ class App {
   }
 
   async saveSettings(patch) {
-    this.settings = await api.invoke('settings:set', patch);
-    this.applyTheme();
-    for (const t of this.tabs) if (t.applySettings) t.applySettings(this.settings);
-    this.renderButtonBar();
+    const prior = this.settings, next = await api.invoke('settings:set', patch);
+    const changed = Object.keys(next).filter(key => JSON.stringify(prior[key]) !== JSON.stringify(next[key]));
+    this.settings = next;
+    // A structural selection need not reapply terminal/editor colors or fonts.
+    if (changed.some(key => key !== 'uiLayout')) {
+      this.applyTheme();
+      for (const t of this.tabs) if (t.applySettings) t.applySettings(this.settings);
+      this.renderButtonBar();
+    }
+    this.workspaceLayout.set(this.settings.uiLayout);
   }
 
   // ------------------------------------------------------------ events from main

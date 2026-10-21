@@ -1,6 +1,7 @@
 'use strict';
 // Test-only local SSH peer. Never invokes an OS shell or captures live traffic.
-const { Server, utils } = require('ssh2');
+const { Server } = require('ssh2');
+const { sshHostKey } = require('./ssh-host-key.cjs');
 function samplePcap() {
   const h = Buffer.alloc(24); h.writeUInt32LE(0xa1b2c3d4, 0); h.writeUInt16LE(2, 4); h.writeUInt16LE(4, 6); h.writeUInt32LE(65535, 16); h.writeUInt32LE(1, 20);
   const frame = Buffer.from('02000000000202000000000108004500002e123440004011a477c0000201c000020213c413c4001a00004b6f6e582073796e746865746963205353482074657374', 'hex');
@@ -13,7 +14,7 @@ function samplePcap() {
 }
 async function startRemoteSshFixture({ slow = false, bytes = samplePcap() } = {}) {
   const peers = new Set(), commands = [], signals = [], timers = new Set();
-  const server = new Server({ hostKeys: [utils.generateKeyPairSync('ed25519').private] }, peer => {
+  const server = new Server({ hostKeys: [sshHostKey()] }, peer => {
     peers.add(peer); peer.on('close', () => peers.delete(peer)); peer.on('error', () => {});
     peer.on('authentication', ctx => ctx.method === 'password' && ctx.username === 'fixture' && ctx.password === 'fixture' ? ctx.accept() : ctx.reject());
     peer.on('ready', () => peer.on('session', accept => {

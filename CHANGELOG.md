@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.14.0 — 2026-10-21
+
+- Add four physical workspace arrangements to Appearance: Workbench, Incident Desk, Operations Wall, and Focus Workspace, with structural previews and Classic as the existing-profile default.
+- Select layout independently of application colors, animation, reduced motion, and terminal palette overrides.
+- Arrange the same open tool/session instances into panes, with explicit selection, command focus, and expansion.
+- Preserve captured data, drafts, ongoing connections, close confirmations, and updater blockers across layout changes.
+- Prevent background connection notifications and delayed visibility callbacks from stealing keyboard focus.
+- Keep toolbar actions visible at the minimum window width and make compact tool panes scrollable and expandable.
+- Stabilize local SSH test identities with native RSA/PKCS1 serialization after reproducing malformed keys from the fixture's previous Ed25519 generator.
+
+See the [workspace layout guide](docs/WORKSPACE_LAYOUTS.md) and [release notes](docs/releases/0.14.0.md).
+
 ## 0.13.0 — 2026-10-21
 
 - Compare working and failing capture files or retained snapshots of stopped capture tabs, with a synthetic demo.

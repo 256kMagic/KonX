@@ -5,7 +5,8 @@ const net = require('net');
 const http = require('http');
 const https = require('https');
 const tls = require('tls');
-const { Server, utils } = require('ssh2');
+const { Server } = require('ssh2');
+const { sshHostKey } = require('./lib/ssh-host-key.cjs');
 const { scanTls, scanSsh, scanWeb, scanExposure } = require('../src/main/security/network');
 
 // Public, disposable, localhost-only TLS fixture. Never use this key outside tests.
@@ -115,7 +116,7 @@ async function runSecurityNetworkTests(test) {
 
   await test('SSH audit reports the key and negotiated algorithms without any authentication attempt', async () => {
     let authentications = 0;
-    const server = new Server({ hostKeys: [utils.generateKeyPairSync('ed25519').private], ident: 'KonX_Local_Test' }, (client) => {
+    const server = new Server({ hostKeys: [sshHostKey()], ident: 'KonX_Local_Test' }, (client) => {
       client.on('error', () => {});
       client.on('authentication', (ctx) => { authentications++; ctx.reject(); });
     });

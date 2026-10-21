@@ -25,6 +25,8 @@ export class TerminalTab {
     this.protocol = meta.protocol || 'ssh';
     this.state = 'idle';
     this.info = null;
+    this.disposed = false;
+    this.visibilityGeneration = 0;
 
     const s = app.settings;
     this.term = new Terminal({
@@ -63,6 +65,7 @@ export class TerminalTab {
       if (t && this.app.settings.useRemoteTitle) this.app.setTabTitle(this, t);
     });
     const copySel = debounce(() => {
+      if (this.disposed) return;
       const sel = this.term.getSelection();
       if (sel && this.app.settings.copyOnSelect) api.invoke('clipboard:write', sel);
     }, 120);
@@ -89,25 +92,28 @@ export class TerminalTab {
   // ------------------------------------------------------------ connection lifecycle
 
   async connect() {
+    if (this.disposed) return;
     this._hideOverlay();
     this.state = 'connecting';
     this.app.tabStateChanged(this);
     this.refit();
     const r = await api.invoke('conn:open', this.id, this.spec, { cols: this.term.cols, rows: this.term.rows }).catch((e) => ({ ok: false, error: errMsg(e) }));
+    if (this.disposed) return;
     if (!r.ok && this.state !== 'disconnected') this.onStatus({ state: 'disconnected', message: r.error });
   }
 
   onData(buf) {
+    if (this.disposed) return;
     this.term.write(buf);
     if (!this.active) this.app.tabActivity(this);
   }
 
   onStatus(st) {
+    if (this.disposed) return;
     this.state = st.state;
     if (st.info) this.info = st.info;
     if (st.state === 'connected') {
       this._hideOverlay();
-      this.term.focus();
     }
     if (st.state === 'disconnected') {
       this.term.write(`\r\n\x1b[90m[${st.message || 'Disconnected'}]\x1b[0m\r\n`);
@@ -117,8 +123,10 @@ export class TerminalTab {
   }
 
   reconnect() {
+    if (this.disposed) return;
     this.term.write('\r\n');
     this.connect();
+    this.focus();
   }
 
   disconnect() {
@@ -157,24 +165,29 @@ export class TerminalTab {
 
   // ------------------------------------------------------------ view
 
-  show() {
+  show({ focus = true } = {}) {
+    if (this.disposed) return;
     this.active = true;
+    const generation = ++this.visibilityGeneration;
     requestAnimationFrame(() => {
+      if (this.disposed || !this.active || generation !== this.visibilityGeneration) return;
       this.refit();
-      this.term.focus();
+      if (focus) this.focus();
     });
   }
 
   hide() {
     this.active = false;
+    this.visibilityGeneration++;
   }
 
   focus() {
+    if (this.disposed || !this.active || this.app.active !== this) return;
     this.term.focus();
   }
 
   refit() {
-    if (!this.active || !this.wrap.offsetParent) return;
+    if (this.disposed || !this.active || !this.wrap.offsetParent) return;
     try {
       this.fit.fit();
     } catch {}
@@ -245,9 +258,10 @@ export class TerminalTab {
           { label: `Paste ${lines.length} lines`, value: true, primary: true },
         ],
       });
-      this.term.focus();
+      this.focus();
       if (!ok) return;
     }
+    if (this.disposed) return;
     this.term.paste(text);
   }
 
@@ -303,7 +317,7 @@ export class TerminalTab {
       this.findbar = null;
       this.search.clearDecorations && this.search.clearDecorations();
       this.term.clearSelection();
-      this.term.focus();
+      this.focus();
     };
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') (e.shiftKey ? prev : next)();
@@ -369,6 +383,9 @@ export class TerminalTab {
   }
 
   dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.hide();
     this.ro.disconnect();
     api.invoke('conn:close', this.id);
     this.term.dispose();

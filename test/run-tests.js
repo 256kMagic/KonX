@@ -265,7 +265,7 @@ const fakeCrypt = {
     const r = await cm.open('s1', { sessionId: session.id }, { cols: 100, rows: 30 });
     assert.ok(r.ok, r.error);
     assert.strictEqual(asks[0].kind, 'hostkey');
-    assert.strictEqual(asks[0].keyType, 'ssh-ed25519');
+    assert.strictEqual(asks[0].keyType, 'ssh-rsa');
     assert.match(asks[0].fingerprint, /^SHA256:/);
     assert.ok(store.hostKeyFor('127.0.0.1', port));
     assert.ok(r.info.cipher, 'cipher reported');
@@ -297,7 +297,7 @@ const fakeCrypt = {
   });
   await test('ssh: a changed host key is flagged and rejected on cancel', async () => {
     asks.length = 0;
-    store.saveHostKey('127.0.0.1', port, { keyType: 'ssh-ed25519', fingerprint: 'SHA256:not-the-real-key' });
+    store.saveHostKey('127.0.0.1', port, { keyType: 'ssh-rsa', fingerprint: 'SHA256:not-the-real-key' });
     answers = ['reject'];
     const r = await cm.open('s3', { sessionId: session.id }, {});
     assert.strictEqual(r.ok, false);
@@ -504,6 +504,10 @@ const fakeCrypt = {
   await (await import('./capture-metadata-tests.mjs')).runCaptureMetadataTests(test);
   await require('./capture-file-reader-tests.cjs').runCaptureFileReaderTests(test);
   await require('./compare-ui-tests.cjs').runComparisonUiTests(test);
+  await require('./workspace-layout-ui-tests.cjs').runWorkspaceLayoutUiTests(test);
+  await require('./workspace-layout-model-tests.cjs').runWorkspaceLayoutModelTests(test);
+  await require('./ssh-host-key-tests.cjs').runSshHostKeyTests(test);
+  await require('./layout-focus-tests.cjs').runLayoutFocusTests(test);
 
   const failed = results.filter((r) => !r[0]);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

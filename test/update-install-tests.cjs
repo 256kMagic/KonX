@@ -326,7 +326,8 @@ ConvertTo-Json -InputObject @($results) -Compress`);
       } finally { fs.readFile = readFile; }
       assert.equal(failures, 3);
       await helper.cancel();
-      assert.equal((await terminal(helper.statusPath)).phase, 'cancelled');
+      const status = await terminal(helper.statusPath);
+      assert.equal(status.phase, 'cancelled', JSON.stringify(status));
       await end(p);
     });
     await test('updater real helper preserves the last status while a Windows reader temporarily blocks replacement', async () => {

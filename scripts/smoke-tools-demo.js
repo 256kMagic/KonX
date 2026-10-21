@@ -51,8 +51,20 @@
   const supportsRemoteCapture = versionParts[0] > 0 || versionParts[1] >= 11;
   const supportsRunbooks = versionParts[0] > 0 || versionParts[1] >= 12;
   const supportsComparison = versionParts[0] > 0 || versionParts[1] >= 13;
+  const supportsLayouts = versionParts[0] > 0 || versionParts[1] >= 14;
 
   if (options.phase === 'save') {
+    if (supportsLayouts) {
+      const originalTabs = [...app.tabs], theme = app.settings.uiTheme, palette = app.settings.colorScheme;
+      for (const uiLayout of ['workbench', 'incident-desk', 'operations-wall', 'focus', 'classic']) {
+        await app.saveSettings({ uiLayout });
+        assert(app.workspaceLayout.get().layout === uiLayout, 'Packaged layout did not apply: ' + uiLayout);
+        assert(originalTabs.every(tab => app.tabs.includes(tab) && app.byId.get(tab.id) === tab), 'Layout replaced an existing tool');
+        assert(app.settings.uiTheme === theme && app.settings.colorScheme === palette, 'Layout changed theme or terminal palette');
+      }
+      await app.saveSettings({ uiLayout: 'focus' });
+      assert(app.jobs.size === 0, 'Layout started a tool job');
+    }
     let deviceInspector = null;
     let deviceSnapshots = null;
     let rtpMedia = null;
@@ -220,6 +232,7 @@
     assert(ai.documentContent.textContent.includes('cached evidence'), 'Packaged local article did not render');
     await complete({ phase: options.phase, version: info.version, tools: supportsComparison ? 11 : supportsRunbooks ? 10 : supportsRemoteCapture ? 9 : supportsIncidents ? 8 : supportsRtp ? 7 : supportsSnapshots ? 6 : supportsDeviceInspector ? 5 : 4, ...(deviceInspector ? { deviceInspector } : {}), ...(deviceSnapshots ? { deviceSnapshots } : {}), ...(rtpMedia ? { rtpMedia } : {}), ...(incidentWorkspace ? { incidentWorkspace } : {}), ...(remoteCapture ? { remoteCapture } : {}), ...(runbooks ? { runbooks } : {}), ...(captureComparison ? { captureComparison } : {}), assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
   } else if (options.phase === 'forget') {
+    if (supportsLayouts) assert(app.settings.uiLayout === 'focus' && app.workspaceLayout.get().layout === 'focus', 'Workspace layout did not survive packaged restart');
     assert(mist.config.hasToken && !mist.testButton.disabled, 'Encrypted Mist token did not survive app restart');
     assert(mist.token.value === '', 'Saved credential must not be returned to the input');
     mist.forgetButton.click();

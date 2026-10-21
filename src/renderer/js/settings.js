@@ -2,9 +2,38 @@
 import { h, api, modal, buildFields, DataTable, contextMenu, confirmDialog, fmtDate } from './ui.js';
 import { SCHEMES, APP_THEMES } from './themes.js';
 import { createUpdatesPane } from './updates.js';
+import { APP_LAYOUTS, normalizeLayout } from './workspace-layouts.mjs';
+
+function workspaceLayoutPicker(value) {
+  const selected = normalizeLayout(value);
+  const parts = {
+    classic: [['nav', 'Sessions'], ['tabs', 'Tabs'], ['main', 'Active tool']],
+    workbench: [['nav', 'Sessions'], ['tabs', 'Tabs'], ['main', 'Active tool'], ['companion', 'Companion'], ['context', 'Context'], ['jobs', 'Jobs']],
+    'incident-desk': [['side', 'Sessions'], ['nav', 'Cases'], ['tabs', 'Tabs'], ['main', 'Active tool'], ['context', 'Dossier'], ['jobs', 'Timeline']],
+    'operations-wall': [['nav', 'Sessions'], ['tabs', 'Open views'], ['main', 'Terminal'], ['companion', 'Capture'], ['context', 'Device'], ['jobs', 'Runbook']],
+    focus: [['main', 'Full-width tool'], ['tabs', 'Workspace dock']],
+  };
+  const inputs = [];
+  const cards = Object.entries(APP_LAYOUTS).map(([id, layout]) => {
+    const input = h('input', { type: 'radio', name: 'uiLayout', value: id, checked: id === selected });
+    inputs.push(input);
+    return h('label.layout-choice', { 'data-layout-choice': id },
+      h('span.layout-choice-heading', input, h('strong', layout.label)),
+      h('span.layout-mini', { 'data-preview-layout': id, 'aria-hidden': 'true' },
+        h('span.layout-mini-toolbar'), parts[id].map(([part, label]) => h('span.layout-mini-' + part, label))),
+      h('span.layout-choice-description', layout.description));
+  });
+  return {
+    el: h('section.layout-picker', h('h3', 'Workspace layout'),
+      h('p.hint', 'Choose how sessions and tools share the window. Layouts use your existing application theme and terminal colors. Changes apply when you save.'),
+      h('div.layout-choices', { role: 'radiogroup', 'aria-label': 'Workspace layout' }, cards)),
+    read: () => normalizeLayout(inputs.find(input => input.checked)?.value),
+  };
+}
 
 export async function settingsDialog(app) {
   const s = app.settings;
+  const layouts = workspaceLayoutPicker(s.uiLayout);
   const appearance = buildFields([
     { name: 'uiTheme', label: 'Application theme', type: 'select', options: Object.entries(APP_THEMES).map(([k, v]) => [k, v.label]) },
     { name: 'colorScheme', label: 'Terminal color scheme', type: 'select', options: Object.entries(SCHEMES).map(([k, v]) => [k, v.label]), hint: 'Follow application theme adds matching colors and backgrounds. Saved session palettes take priority.' },
@@ -50,12 +79,12 @@ export async function settingsDialog(app) {
   hosts.el.style.height = '300px';
   hosts.setRows(await api.invoke('hostkeys:list'));
 
-  const readSettings = () => JSON.stringify({ ...appearance.read(), ...terminal.read(), ...transfer.read() });
+  const readSettings = () => JSON.stringify({ uiLayout: layouts.read(), ...appearance.read(), ...terminal.read(), ...transfer.read() });
   const initialSettings = readSettings();
   let settingsOpen = true;
   const updates = createUpdatesPane(app, { blockers: () => settingsOpen && readSettings() !== initialSettings ? ['Save or cancel your Settings changes.'] : [] });
   const panes = {
-    Appearance: h('div.mpane.active', h('div.grid2', appearance.els)),
+    Appearance: h('div.mpane.active', layouts.el, h('div.grid2', appearance.els)),
     Terminal: h('div.mpane', h('div.grid2', terminal.els)),
     'File Transfer': h('div.mpane', h('div.grid2', transfer.els)),
     'Known Hosts': h('div.mpane', h('div.hint', 'SSH host keys you have accepted. Right-click to remove one.'), hosts.el),
@@ -72,7 +101,7 @@ export async function settingsDialog(app) {
   const r = await modal({
     title: 'Settings',
     icon: 'settings',
-    width: 680,
+    width: 760,
     body: [h('div.mtabs', btns), ...Object.values(panes)],
     buttons: [
       { label: 'Cancel', value: null },
@@ -80,7 +109,7 @@ export async function settingsDialog(app) {
     ],
   }).finally(() => { settingsOpen = false; updates.dispose(); });
   if (!r) return;
-  const patch = { ...appearance.read(), ...terminal.read(), ...transfer.read() };
+  const patch = { uiLayout: layouts.read(), ...appearance.read(), ...terminal.read(), ...transfer.read() };
   patch.fontSize = Number(patch.fontSize) || 14;
   patch.scrollback = Number(patch.scrollback) || 10000;
   patch.sftpConcurrency = Math.min(8, Math.max(1, Number(patch.sftpConcurrency) || 2));

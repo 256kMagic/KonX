@@ -6,12 +6,13 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { Server, utils } = require('ssh2');
+const { sshHostKey } = require('./lib/ssh-host-key.cjs');
 
 const { STATUS_CODE, flagsToString } = utils.sftp;
 
 function startServer({ port = 2222, root, user = 'test', password = 'test', hostname = 'lab-sw1' } = {}) {
   root = root || fs.mkdtempSync(path.join(os.tmpdir(), 'tl-sftp-'));
-  const hostKey = utils.generateKeyPairSync('ed25519').private;
+  const hostKey = sshHostKey();
   const server = new Server({ hostKeys: [hostKey] }, (client) => {
     client.on('authentication', (ctx) => {
       if (ctx.method === 'password' && ctx.username === user && ctx.password === password) return ctx.accept();
