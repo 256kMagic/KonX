@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.4.0 — 2026-10-20 (test build)
+
+### Added
+
+- AI & Knowledge workspace with separate Windows-encrypted API keys and editable models for OpenAI, Claude, Gemini, Nyquest, and a custom OpenAI-compatible Chat Completions endpoint.
+- Background local SQLite knowledge database with versioned reference articles, overlapping chunks, persistent TF-IDF cosine vectors, local retrieval, and custom note creation, editing, removal, and index rebuilds. Library search and reading work without an AI key.
+- Explain with AI actions in tool tabs, bounded result snapshots, explicit redacted-context previews, opt-in sharing, source articles alongside answers, cancellation, and configuration revision guards. No automatic tool execution or collection of saved sessions, documents, or packet payloads.
+
+See the [0.4.0 test-build notes](docs/releases/0.4.0.md), [AI and knowledge guide](docs/AI_KNOWLEDGE_GUIDE.md), and [architecture notes](docs/design/ai-knowledge.md). Older 0.3.0 builds do not include AI.
+
+Validation: 427 automated tests pass, including 43 new AI/provider, offline knowledge, integration, and real Electron workflow checks. All five provider protocols use simulated responses; encryption, SQLite/vector persistence, packaged-ASAR workers, cancellation, scoped sharing, failure states, and responsive layout are exercised without a live AI key or paid generation.
+
+## 0.3.0 — 2026-10-20 (test build)
+
+### Added
+
+- Wi-Fi Tools with native Windows adapter/connection details, cached BSSID survey, signal and channel views, security observations, filtering, and JSON export.
+- Mist & Marvis workspace with encrypted API-token storage, regional endpoint selection, authorized organization/site discovery, AP/client snapshots, and direct Marvis device/site troubleshooting.
+- Cancellation of active tool jobs during application shutdown, including Wi-Fi inventory children and Mist requests.
+- Security Suite tab with local Windows posture checks and a remote Windows TCP-exposure profile.
+- TLS/certificate, pre-authentication SSH, web-header, and single-host service-exposure assessments.
+- Offline Cisco-style configuration and saved PCAP/PCAPNG security findings with redacted line/frame evidence.
+- Result filters, evidence and recommendations, explicit unknown states and scope limits, local opt-in baselines, and JSON/HTML report exports.
+- Bounded collection and cancellation when stopped or closed, plus unit, loopback-network, synthetic-file, and real Electron workflow regression coverage.
+- Local JavaScript error logs, including startup failures, uncaught main-process errors, and unhandled-rejection warnings. The original Electron error handling remains active; logs rotate at 128 KiB and individual entries are bounded to 16 KiB.
+
+See the [0.3.0 test-build notes](docs/releases/0.3.0.md), [Security Suite guide](docs/SECURITY_SUITE.md), and [Wi-Fi/Mist guide](docs/WIRELESS_MIST_GUIDE.md). These tools are included in 0.3.0; the published 0.2.0 executables and older 0.2.1 test build do not include them.
+
+Validation: 384 automated tests pass, including 36 Wi-Fi/Mist checks, 56 security checks, and 13 diagnostics/boot checks using synthetic inputs, loopback services, and isolated real Electron processes. Wireless coverage includes native WLAN layouts, a nested child loading from an ASAR archive, encrypted token storage, fixed regional HTTPS requests, cancellation, redaction, cloud scope/revision changes, exports, and minimum-window layout. Mist tests use synthetic credentials and mocked cloud responses; no live Mist account was queried. Error-logging tests cover fatal exceptions, warning-only rejections, startup failures, rotation, size limits, and failed log writes. A separate local Windows smoke test completed all 14 posture checks at the current user's permission level; inaccessible firmware/encryption checks remained unknown.
+
 ## 0.2.1 — 2026-10-20 (test build)
 
 ### Fixed

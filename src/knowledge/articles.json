@@ -1,0 +1,375 @@
+{
+  "version": 1,
+  "reviewedAt": "2026-10-20",
+  "description": "Original KonX operational explanations with links to primary references. Bundled guidance is not a copy of vendor manuals and does not establish the state of a user's network.",
+  "articles": [
+    {
+      "id": "builtin:security-windows",
+      "title": "Local Windows security posture: interpreting the assessment",
+      "vendor": "Microsoft",
+      "tags": ["security", "windows", "defender", "firewall", "bitlocker", "unknown"],
+      "sourceUrl": "https://learn.microsoft.com/en-us/windows/security",
+      "content": "Choose Security Suite > Local Windows to collect the supported posture checks on this computer. This is a settings assessment, not an antivirus malware scan. A passing observation applies only to the named check and collection time. Unknown means KonX could not establish a result, often because a component is unavailable or access is denied. Read the evidence before changing policy. Check the relevant Windows management console and your organization's baseline when a result needs investigation; the assessment does not apply remediations automatically."
+    },
+    {
+      "id": "builtin:security-windows-remote",
+      "title": "Remote Windows exposure: an open port is an observation",
+      "vendor": "Microsoft",
+      "tags": ["security", "windows", "remote", "rdp", "smb", "winrm", "ports"],
+      "sourceUrl": "https://learn.microsoft.com/en-us/windows-server/remote/remote-desktop-services/remotepc/remote-desktop-allow-access",
+      "content": "The remote Windows assessment checks selected service ports from this computer's network position. Reachable RDP, SMB, or WinRM deserves comparison with the intended management path. A successful TCP connection does not establish authentication strength, patch level, Windows edition, or a vulnerability. A timeout can result from filtering, routing, or an offline host. Verify the destination and scope, repeat from an appropriate authorized network location, and confirm host firewall and service policy with its administrator. KonX does not log in or change the remote system."
+    },
+    {
+      "id": "builtin:security-tls",
+      "title": "TLS assessment: certificates, hostname, and negotiated security",
+      "vendor": "IETF",
+      "tags": ["security", "tls", "https", "certificate", "expiry", "hostname"],
+      "sourceUrl": "https://www.rfc-editor.org/rfc/rfc8446",
+      "content": "Use the TLS assessment for a hostname and TLS port. Inspect the certificate name, validity dates, trust result, and negotiated protocol separately. Connecting by an IP address can produce a hostname mismatch even when the intended DNS name works. One successful negotiation describes that connection; it does not enumerate every cipher or prove the entire application is secure. Confirm the intended server name and local clock, then compare the certificate chain with the service owner's expected deployment before replacing certificates or weakening verification."
+    },
+    {
+      "id": "builtin:security-ssh",
+      "title": "SSH pre-authentication assessment and host-key trust",
+      "vendor": "IETF",
+      "tags": ["security", "ssh", "banner", "host-key", "algorithms", "fingerprint"],
+      "sourceUrl": "https://www.rfc-editor.org/rfc/rfc4253",
+      "content": "The SSH assessment inspects information available before user authentication, such as the banner and offered algorithms. It does not test passwords or prove a server version is vulnerable. A banner may be customized or backported software may retain an older version string. Keep this assessment separate from the terminal's host-key decision. Verify a new or changed fingerprint through a trusted management source before accepting it. Correlate findings with the device's actual software release and the vendor's applicable advisory."
+    },
+    {
+      "id": "builtin:security-web",
+      "title": "Web header assessment: interpret policies in application context",
+      "vendor": "Mozilla",
+      "tags": ["security", "web", "http", "headers", "hsts", "csp"],
+      "sourceUrl": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Strict-Transport-Security",
+      "content": "The web assessment observes the response and selected security headers for the supplied URL. HSTS directs a supporting browser to use HTTPS for a host after it has received the policy securely. A missing header is a review item, not proof that the site has been compromised. Redirects, reverse proxies, APIs, and error pages can return different policies. Check the final destination, status, and application requirements before proposing changes; an unsuitable policy can break legitimate browser behavior. KonX does not crawl or penetration-test the application."
+    },
+    {
+      "id": "builtin:security-exposure",
+      "title": "Service exposure assessment and network vantage point",
+      "vendor": "Microsoft",
+      "tags": ["security", "exposure", "tcp", "ports", "firewall", "filtered"],
+      "sourceUrl": "https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/",
+      "content": "A service exposure report shows what selected TCP endpoints appear to accept from this computer. Open means a connection was accepted; closed generally means a refusal was observed; a timeout remains ambiguous. Port numbers and banners suggest a service but are not an identity guarantee. Compare exposure with the intended users, management networks, and firewall rules. A local test cannot prove internet exposure, and an external test cannot prove internal isolation. Record the source network and collection time when sharing a result."
+    },
+    {
+      "id": "builtin:security-config",
+      "title": "Cisco-style configuration review: snippet and syntax limits",
+      "vendor": "Cisco",
+      "tags": ["security", "config", "cisco", "ios", "ssh", "aaa", "snmp"],
+      "sourceUrl": "https://sec.cloudapps.cisco.com/security/center/resources/IOS_XE_hardening",
+      "content": "Paste or open a Cisco-style configuration in Security Suite to review the supported management and cleartext settings. A snippet can omit inherited defaults, interfaces, AAA dependencies, and applied access lists. Treat missing evidence as unknown rather than assuming a secure default. Give the assessment a stable device label before comparing baselines. Confirm the platform and software version in the vendor documentation: Cisco IOS syntax is not a universal parser for Junos, Aruba, or FortiOS. Protect configuration files because they may contain credentials and internal addressing."
+    },
+    {
+      "id": "builtin:security-capture",
+      "title": "Saved-capture security review and evidence limits",
+      "vendor": "KonX",
+      "tags": ["security", "capture", "cleartext", "pcap", "evidence"],
+      "sourceUrl": "https://github.com/256kMagic/KonX",
+      "content": "The Security Suite capture assessment examines a supported saved capture for the specific implemented observations. Its result covers packets present in that file, not the whole network. Cleartext credentials or protocols may expose sensitive data, but a lack of detected evidence does not establish that encryption is used everywhere. Packet loss, truncation, capture placement, and encrypted payloads limit visibility. Use Packet Capture to inspect the cited packets and timing. Remove sensitive traffic before sharing a report or submitting material to an AI provider."
+    },
+    {
+      "id": "builtin:wifi-cache",
+      "title": "Wi-Fi snapshot: Windows cached networks and location permission",
+      "vendor": "Microsoft",
+      "tags": ["wifi", "wlan", "cache", "ssid", "bssid", "location", "permissions"],
+      "sourceUrl": "https://learn.microsoft.com/en-us/windows/win32/api/wlanapi/nf-wlanapi-wlangetnetworkbsslist",
+      "content": "Wi-Fi Tools reads a bounded snapshot of the Windows WLAN cache and adapter connection information. It does not trigger an active RF survey or join nearby networks. A cached SSID or BSSID can be stale, and hidden or unsupported networks may be absent. Empty results can reflect radio state, driver support, WLAN service state, or Windows location permission. Check those conditions in Windows before concluding that no access points exist. Refresh after Windows has updated its own observations; KonX does not collect Wi-Fi passwords."
+    },
+    {
+      "id": "builtin:wifi-signal",
+      "title": "Wi-Fi signal: RSSI, signal percentage, and SNR",
+      "vendor": "Microsoft",
+      "tags": ["wifi", "rssi", "snr", "signal", "dbm", "noise", "coverage"],
+      "sourceUrl": "https://learn.microsoft.com/en-us/windows/win32/api/wlanapi/ns-wlanapi-wlan_bss_entry",
+      "content": "RSSI is received signal power commonly expressed in dBm; a value closer to zero indicates stronger received power. Windows signal percentage is a separate quality representation, not a measured speed. SNR compares signal with a noise floor in dB. KonX cannot establish SNR when the API supplies no noise measurement; do not manufacture it from RSSI. Compare repeated observations at the affected client's location and time, then correlate with retransmissions and client experience. Strong signal alone does not establish low contention, low latency, or successful authentication."
+    },
+    {
+      "id": "builtin:wifi-channels",
+      "title": "Wi-Fi channels and why AP counts do not measure utilization",
+      "vendor": "HPE Aruba Networking",
+      "tags": ["wifi", "channels", "band", "2.4ghz", "5ghz", "6ghz", "interference"],
+      "sourceUrl": "https://www.arubanetworks.com/assets/vrd/VRD_Optimizing-WLAN-for-Roaming-Devices.pdf",
+      "content": "KonX groups observed BSSIDs by reported band and channel. This is a view of cached advertisements, not spectrum utilization, airtime, channel width, or non-Wi-Fi interference. Several quiet APs may consume less airtime than one busy AP. Channel plans also depend on local regulatory rules, radio capabilities, client support, and channel widths. Use a proper survey or the WLAN vendor's radio telemetry before changing channels or power. Compare the affected client's band, position, and time rather than selecting a channel solely by the lowest AP count."
+    },
+    {
+      "id": "builtin:wifi-security",
+      "title": "Wi-Fi advertised authentication and encryption",
+      "vendor": "KonX",
+      "tags": ["wifi", "security", "authentication", "wpa", "encryption", "limitations"],
+      "sourceUrl": "https://github.com/256kMagic/KonX",
+      "content": "Wi-Fi Tools displays the authentication and cipher information Windows reports. An open network observation deserves context, such as a guest service or an authenticated overlay, but does not prove the traffic is safe. An advertised WPA mode does not demonstrate certificate validation, password quality, segmentation, or actual client policy. Unknown values remain unknown. KonX does not test passphrases, capture handshakes for cracking, deauthenticate clients, associate to networks, or change WLAN settings. Confirm enterprise policy in the access point and endpoint management systems."
+    },
+    {
+      "id": "builtin:mist-setup",
+      "title": "Mist API setup: cloud region, token, organization, and site",
+      "vendor": "Juniper Mist",
+      "tags": ["mist", "api", "token", "region", "organization", "site", "permissions"],
+      "sourceUrl": "https://www.juniper.net/documentation/us/en/software/mist/mist-aiops/topics/concept/marvis-api-troubleshooting.html",
+      "content": "Select the Mist cloud region that hosts your organization and enter the API token in Mist & Marvis settings. Start by loading account access and sites, then choose the intended organization and site. A 401 or 403 can indicate a token, permission, or regional mismatch; it does not identify which one by itself. Use an observer token with the needed access for monitoring. KonX stores its saved token with Windows-backed encryption and keeps it out of the renderer. It does not upload your local Wi-Fi snapshot to Mist."
+    },
+    {
+      "id": "builtin:mist-monitoring",
+      "title": "Mist AP and wireless-client monitoring: scope and freshness",
+      "vendor": "Juniper Mist",
+      "tags": ["mist", "ap", "clients", "telemetry", "monitoring", "site"],
+      "sourceUrl": "https://api-class.mist.com/rest/read/alerting/marvis/",
+      "content": "Use Mist & Marvis to retrieve AP and wireless-client observations for the selected site. The cloud view and your computer's local WLAN cache describe different sources and may have different timestamps. Check site selection, result limits, and update time before treating a list as complete or current. Missing data can reflect role restrictions, licensing, sampling, or an offline device. KonX's monitoring workflow reads information; it does not change radio settings, device configuration, or client associations. Correlate cloud observations with the affected client and time window."
+    },
+    {
+      "id": "builtin:mist-marvis",
+      "title": "Marvis troubleshooting: site or MAC, evidence, and recommendations",
+      "vendor": "Juniper Mist",
+      "tags": ["mist", "marvis", "troubleshoot", "wireless", "wired", "wan", "mac"],
+      "sourceUrl": "https://www.juniper.net/documentation/us/en/software/mist/mist-aiops/topics/concept/marvis-api-troubleshooting.html",
+      "content": "KonX calls the structured Marvis troubleshooting API for a chosen site or device MAC, issue type, and time window. It is not the Mist portal's freeform conversational interface. Juniper documents a valid observer token and an organization-level Marvis subscription as prerequisites. Read the returned category, reason, description, and recommendation alongside the selected scope. A recommendation is guidance to validate, not a configuration change KonX has performed. Choose wired or WAN explicitly when investigating those domains, and confirm the device MAC belongs to the affected endpoint."
+    },
+    {
+      "id": "builtin:capture-basics",
+      "title": "Packet Capture: engine, adapter, filters, and visibility",
+      "vendor": "KonX",
+      "tags": ["capture", "etw", "ndis", "npcap", "adapter", "filter", "pcapng"],
+      "sourceUrl": "https://github.com/256kMagic/KonX",
+      "content": "Select the adapter and capture engine before recording. The built-in Windows ETW/NDIS engine requests administrator permission for its helper and does not capture loopback. Optional Npcap has its own driver, license, and permission requirements. A display filter hides rows without changing the original packets; a capture filter limits collection. KonX implements its supported filter syntax rather than all Wireshark expressions. Captures show traffic visible at that adapter; absent packets, dropped events, and encryption limit conclusions. Open saved supported captures without starting a live session."
+    },
+    {
+      "id": "builtin:tcp-analysis",
+      "title": "TCP analysis: retransmissions, duplicate ACKs, resets, and gaps",
+      "vendor": "IETF",
+      "tags": ["capture", "tcp", "retransmission", "duplicate-ack", "reset", "sequence", "loss"],
+      "sourceUrl": "https://www.rfc-editor.org/rfc/rfc9293",
+      "content": "TCP sequence and acknowledgment numbers help relate bytes within one connection. KonX can flag retransmissions and reconstruct supported streams, but missing capture packets can resemble network loss. A reset ends a connection; it does not by itself identify an application defect or attack. Compare direction, sequence ranges, timing, and the handshake before assigning a cause. Follow the stream and inspect source packets around any gap or conflicting overlap. A capture from both endpoints can help separate transport behavior from loss at the capture location."
+    },
+    {
+      "id": "builtin:dns-capture",
+      "title": "Captured DNS: answers, NXDOMAIN, SERVFAIL, and timing",
+      "vendor": "IETF",
+      "tags": ["capture", "dns", "nxdomain", "servfail", "resolver", "ttl"],
+      "sourceUrl": "https://www.rfc-editor.org/rfc/rfc1035",
+      "content": "Pair a DNS response with its question, server, record type, and time. NXDOMAIN reports that the queried name does not exist in that resolver's answer; SERVFAIL indicates failure to complete resolution. Neither is automatically proof of malicious activity. Retries without a visible response can reflect loss, filtering, or incomplete capture coverage. TTL controls caching and is not a round-trip duration. KonX's names learned from captured DNS are observations from that file and may differ from today's resolver result. Encrypted DNS payloads may not be inspectable."
+    },
+    {
+      "id": "builtin:dhcp-capture",
+      "title": "DHCP capture: lease negotiation and apparent conflicts",
+      "vendor": "IETF",
+      "tags": ["capture", "dhcp", "lease", "discover", "offer", "request", "ack", "conflict"],
+      "sourceUrl": "https://www.rfc-editor.org/rfc/rfc2131",
+      "content": "For DHCPv4, examine Discover, Offer, Request, and Acknowledgment messages with the client identifier, transaction, server, and offered address. Renewals can follow a different visible sequence. Multiple offers can be legitimate when redundant servers are designed that way. A conflict observation needs confirmation against leases, ARP traffic, and endpoint configuration before removing a device. An incomplete capture can omit the negotiation start or server response. Compare timestamps, gateway, DNS options, and lease lifetime with the intended subnet. DHCPv4 evidence does not establish IPv6 addressing behavior."
+    },
+    {
+      "id": "builtin:sip-calls",
+      "title": "SIP Calls: signaling ladders, responses, and SDP",
+      "vendor": "IETF",
+      "tags": ["capture", "sip", "voip", "invite", "sdp", "call-id", "ladder"],
+      "sourceUrl": "https://www.rfc-editor.org/rfc/rfc3261",
+      "content": "Open SIP Calls for observed plaintext SIP signaling over supported UDP or TCP traffic. Follow INVITE, provisional and final responses, ACK, and BYE using the call identity, direction, and timing. SDP advertises proposed media addresses and codecs; it does not prove media reached either endpoint. A busy response can represent normal call handling. KonX links ladder messages back to original packets and exports call signaling. A shared TCP packet can include messages from other calls. SIP over TLS remains encrypted unless readable signaling is available in the capture."
+    },
+    {
+      "id": "builtin:rtp-voice",
+      "title": "VoIP media: RTP, packet loss, jitter, and signaling limits",
+      "vendor": "IETF",
+      "tags": ["capture", "voip", "rtp", "srtp", "jitter", "voice", "audio"],
+      "sourceUrl": "https://www.rfc-editor.org/rfc/rfc3550",
+      "content": "SIP signaling and RTP media are separate flows. A successful SIP dialog does not establish two-way audio. RTP sequence numbers and timestamps support media timing analysis, while jitter concerns variation in arrival timing. KonX's current SIP view inspects signaling and advertised SDP; it does not reconstruct RTP audio, play calls, or decrypt SRTP. For one-way audio, first compare the advertised media destinations with the actual permitted path and capture visibility. Do not claim a calculated voice quality score from a signaling-only capture."
+    },
+    {
+      "id": "builtin:http-streams",
+      "title": "Readable HTTP/1 streams, pairing, bodies, and encryption",
+      "vendor": "Mozilla",
+      "tags": ["capture", "http", "https", "stream", "chunked", "gzip", "json"],
+      "sourceUrl": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Overview",
+      "content": "KonX reconstructs supported HTTP/1 conversations from captured TCP bytes, pairs requests and responses when the evidence permits, and can decode supported chunked or compressed bodies. Gaps, conflicting overlaps, truncation, and starting midstream can make a body incomplete. Review those warnings before exporting decoded content. Status codes describe a response, not a complete root cause. HTTPS encrypts application content, so packet visibility alone does not make headers or JSON readable. Preserve the original packets when sharing an interpretation and avoid treating a partial preview as the full transferred file."
+    },
+    {
+      "id": "builtin:ping-monitor",
+      "title": "Ping monitor: loss, latency, jitter, and service availability",
+      "vendor": "Microsoft",
+      "tags": ["ping", "icmp", "latency", "jitter", "loss", "monitor"],
+      "sourceUrl": "https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/ping",
+      "content": "Ping Monitor tracks ICMP replies, latency, loss, and variation for selected hosts. Compare a local gateway, an authorized upstream target, and the affected service host over the same interval. A missing ICMP response does not prove a host or application is down because devices may filter or deprioritize these probes. A successful ping does not establish DNS, TCP, TLS, or application success. Save the time range and history when investigating intermittent trouble, then use the relevant service test to narrow the failing layer."
+    },
+    {
+      "id": "builtin:traceroute",
+      "title": "Traceroute: intermediate timeouts and path changes",
+      "vendor": "Microsoft",
+      "tags": ["traceroute", "tracert", "routing", "hops", "ttl", "timeout"],
+      "sourceUrl": "https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/tracert",
+      "content": "Traceroute uses limited-hop probes to obtain replies from devices along a path. An intermediate timeout can mean the router does not return the expected reply; if later hops respond, it does not by itself demonstrate forwarding loss there. Round-trip times include the reply path, which may differ from the forward path. Load balancing can also change observed hops. Compare repeated traces and endpoint performance before escalating a specific router. A path observed from your computer does not establish the path from another site or in the reverse direction."
+    },
+    {
+      "id": "builtin:port-scanner",
+      "title": "Port Scanner: open, refused, timed out, banners, and TLS",
+      "vendor": "IETF",
+      "tags": ["ports", "scanner", "tcp", "open", "closed", "filtered", "banner"],
+      "sourceUrl": "https://www.rfc-editor.org/rfc/rfc9293",
+      "content": "Select the intended host range, port set, timeout, and concurrency before scanning systems you manage. An accepted TCP connection indicates a reachable listener from this location. Refusal and timeout are different observations; a timeout alone does not locate a firewall. Optional banners and TLS information can help identify a service but should be checked against inventory. A conventional port assignment does not prove the running application. Reduce scope and concurrency if the target or network is sensitive, and verify application health separately after discovering a listener."
+    },
+    {
+      "id": "builtin:dns-lookup",
+      "title": "DNS Lookup: compare names, record types, and resolvers",
+      "vendor": "Microsoft",
+      "tags": ["dns", "lookup", "resolver", "a", "aaaa", "mx", "txt", "srv"],
+      "sourceUrl": "https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/nslookup",
+      "content": "DNS Lookup asks for the selected record type, optionally using a specified resolver. A and AAAA answers describe IPv4 and IPv6 addresses; MX, TXT, SRV, and other types answer different questions. Compare the same fully qualified name and record type against the relevant internal or external resolver. Split DNS and caching can legitimately produce different answers. A successful answer does not establish that the returned address is reachable or the application works. Record the resolver, answer, and time before flushing caches or changing DNS settings."
+    },
+    {
+      "id": "builtin:whois",
+      "title": "Whois: registration information is not endpoint attribution",
+      "vendor": "IETF",
+      "tags": ["whois", "domain", "registration", "ip", "ownership"],
+      "sourceUrl": "https://www.rfc-editor.org/rfc/rfc3912",
+      "content": "Whois retrieves registration text from a server using the WHOIS protocol. Responses and referrals depend on the registry and may be redacted, rate-limited, or unavailable. Registration data can help locate a responsible network or domain contact but does not identify the human controlling a connection, prove a host's location, or establish malicious intent. Distinguish an address allocation from the application using that address. Review the responding authority and query time, and use the relevant registry's current published lookup service when the result is incomplete."
+    },
+    {
+      "id": "builtin:subnet-calculator",
+      "title": "Subnet calculator: prefixes, address ranges, and reachability",
+      "vendor": "IETF",
+      "tags": ["subnet", "cidr", "prefix", "ipv4", "ipv6", "mask", "broadcast"],
+      "sourceUrl": "https://www.rfc-editor.org/rfc/rfc4632",
+      "content": "The subnet calculator derives address boundaries from the supplied address and prefix. Prefix length describes how many leading bits identify the network; it is not a device count observed by KonX. Calculated membership does not establish VLAN placement, gateway configuration, routing, or actual reachability. IPv4 broadcast and conventional host calculations have special cases, and IPv6 does not use IPv4 broadcast semantics. Compare a calculated range with the configured endpoint mask and route before starting a sweep. Use the smallest appropriate range for your investigation."
+    },
+    {
+      "id": "builtin:network-sweep",
+      "title": "Network Sweep: discovery, TCP fallback, and incomplete inventories",
+      "vendor": "KonX",
+      "tags": ["sweep", "discovery", "cidr", "range", "tcp", "arp", "inventory"],
+      "sourceUrl": "https://github.com/256kMagic/KonX",
+      "content": "Network Sweep probes the selected CIDR, range, or list and can enrich observations with reverse DNS, local ARP data, and TCP fallback. A responding endpoint is discovered from this computer at that moment; a silent endpoint may still exist. Reverse DNS can be outdated, and a MAC may be unavailable across a router. Sweep results are not a complete asset inventory or an operating-system fingerprint. Confirm the selected scope and compare against the authoritative inventory, DHCP leases, and switch tables before treating an address as unused."
+    },
+    {
+      "id": "builtin:local-interfaces",
+      "title": "Local interfaces: addresses, adapters, and choosing a test path",
+      "vendor": "Microsoft",
+      "tags": ["interfaces", "adapter", "ipv4", "ipv6", "vpn", "address"],
+      "sourceUrl": "https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/ipconfig",
+      "content": "The local interface view lists addresses and adapter information reported by the operating system. A computer may have Ethernet, Wi-Fi, VPN, virtual, and loopback interfaces simultaneously. An assigned address does not establish internet access or identify which route a test will use. Check the intended adapter and network context before selecting a capture interface or sweep range. If a test changes after a VPN connects, compare the applicable routes and DNS configuration. KonX's interface listing does not renew leases, reset adapters, or change routing."
+    },
+    {
+      "id": "builtin:arp-cache",
+      "title": "ARP cache: local neighbor mappings and duplicate-address clues",
+      "vendor": "Microsoft",
+      "tags": ["arp", "mac", "neighbor", "cache", "duplicate-ip", "layer2"],
+      "sourceUrl": "https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/arp",
+      "content": "ARP maps an IPv4 address to a link-layer address on a local segment. KonX reads the local cache; entries are time-dependent and may be absent or stale. A routed destination usually corresponds to the next-hop neighbor rather than the remote host's MAC. A changed mapping can have legitimate causes such as failover or replacement, so correlate repeated changes with DHCP and switch evidence before calling it spoofing. ARP is not IPv6 neighbor discovery. The displayed cache is a clue for local connectivity, not a complete network inventory."
+    },
+    {
+      "id": "builtin:wake-on-lan",
+      "title": "Wake-on-LAN: magic packet delivery versus a confirmed wake",
+      "vendor": "Microsoft",
+      "tags": ["wake-on-lan", "wol", "magic-packet", "broadcast", "power"],
+      "sourceUrl": "https://learn.microsoft.com/en-us/troubleshoot/windows-client/setup-upgrade-and-drivers/wake-on-lan-feature",
+      "content": "Wake-on-LAN sends a magic packet for the supplied MAC address to the selected broadcast destination and UDP port. Sending successfully does not confirm that the computer woke. Firmware, network adapter settings, power state, remaining power, and network delivery all affect the result. Broadcast traffic may not cross routers. Confirm the target MAC and intended subnet, then verify a wake with a separate reachability or management check. Support varies by hardware and Windows power transition; KonX does not change firmware or endpoint power settings."
+    },
+    {
+      "id": "builtin:ssh-terminal",
+      "title": "SSH terminal: connection stages and changed fingerprints",
+      "vendor": "OpenSSH",
+      "tags": ["ssh", "terminal", "authentication", "key", "fingerprint", "connection"],
+      "sourceUrl": "https://www.openssh.org/manual.html",
+      "content": "SSH connection failures occur at different stages: name resolution, TCP connection, host-key trust, algorithm negotiation, user authentication, or shell startup. Read the specific error rather than retrying credentials for every failure. Verify a changed host-key fingerprint through a trusted management channel before accepting it. Passwords, private keys, and device output belong in the appropriate connection workflow, not an AI prompt. KonX terminal commands run with the remote account's privileges; review a command and target before entering it, especially when it changes configuration."
+    },
+    {
+      "id": "builtin:telnet-terminal",
+      "title": "Telnet terminal: legacy access and cleartext limits",
+      "vendor": "IETF",
+      "tags": ["telnet", "terminal", "cleartext", "legacy", "connection"],
+      "sourceUrl": "https://www.rfc-editor.org/rfc/rfc854",
+      "content": "Telnet provides a terminal session using a legacy protocol whose base transport does not protect credentials or command output with encryption. Use SSH where the device supports it. If a legacy device requires Telnet, confirm the intended host and use the controlled management path specified by your organization. A successful TCP connection is not the same as a successful login or usable terminal negotiation. KonX does not upgrade the device's Telnet service to SSH. Do not include credentials from a terminal transcript when asking AI to explain a failure."
+    },
+    {
+      "id": "builtin:serial-terminal",
+      "title": "Serial console: COM port, baud rate, and garbled output",
+      "vendor": "Microsoft",
+      "tags": ["serial", "console", "com", "baud", "parity", "flow-control"],
+      "sourceUrl": "https://learn.microsoft.com/en-us/windows/win32/devio/communications-resources",
+      "content": "A serial console uses a local COM port and matching device parameters rather than an IP connection. Confirm the adapter driver, cable, port, baud rate, data bits, parity, stop bits, and flow control against the device manual. Garbled text often suggests mismatched settings; no output can also reflect cable wiring, a busy port, or device state. A console can have privileged access even when the network is unavailable. KonX requires working serial hardware and its optional serial binding; changing a displayed connection setting does not repair the device configuration."
+    },
+    {
+      "id": "builtin:sftp-files",
+      "title": "SFTP: remote files, transfers, and edit upload recovery",
+      "vendor": "OpenSSH",
+      "tags": ["sftp", "files", "transfer", "upload", "download", "remote-edit"],
+      "sourceUrl": "https://www.openssh.org/manual.html",
+      "content": "SFTP transfers files through an SSH subsystem using the remote account's permissions. Confirm the pane, host, and destination before uploading or deleting. A completed local edit does not by itself confirm a successful remote upload; inspect the upload result and retain the local recovery copy if the connection fails. Permission denied and no-such-file errors require checking the remote path and account, not weakening host-key verification. Keep a known-good copy before replacing device configuration files, and verify the transferred file with an appropriate comparison or hash when needed."
+    },
+    {
+      "id": "builtin:notepad",
+      "title": "Notepad: configuration editing, comparisons, hashes, and backups",
+      "vendor": "KonX",
+      "tags": ["notepad", "editor", "configuration", "compare", "hash", "save", "backup"],
+      "sourceUrl": "https://github.com/256kMagic/KonX",
+      "content": "Use Notepad to inspect or edit local text and remote files opened through SFTP, compare documents, and calculate supported hashes. Check the displayed path and save status before closing a changed document. A content hash supports equality checking but does not prove a file's author or safety. An editor backup is recovery material, not evidence that the original file or remote upload was saved. Configuration text may contain keys, passwords, communities, and internal topology; remove those before copying excerpts to an external AI service."
+    },
+    {
+      "id": "builtin:vendor-cisco",
+      "title": "Cisco IOS and IOS XE: start with platform and management context",
+      "vendor": "Cisco",
+      "tags": ["vendor", "cisco", "ios", "ios-xe", "management", "ssh"],
+      "sourceUrl": "https://www.cisco.com/c/en/us/td/docs/switches/lan/c9000/sec-crypto/ssh/secure-shell-configuration-guide/m-secure-shell.html",
+      "content": "Identify the exact Cisco platform, software train, interface, and management context before interpreting output or proposing syntax. Similar commands can differ across IOS, IOS XE, NX-OS, and appliance families. Start with relevant read-only show output and compare it to the platform's command reference. SSH support and policy depend on the specific release and deployment. KonX's Cisco-style config checks cover selected patterns; they do not validate a complete configuration or certify a hardening baseline. Review backups, dependencies, and the management return path before applying any suggested change."
+    },
+    {
+      "id": "builtin:vendor-juniper",
+      "title": "Juniper Junos: operational output and configuration mode",
+      "vendor": "Juniper",
+      "tags": ["vendor", "juniper", "junos", "operational", "configuration", "interfaces"],
+      "sourceUrl": "https://www.juniper.net/documentation/us/en/software/junos/cli/topics/topic-map/getting-started.html",
+      "content": "Junos separates operational and configuration modes. Interpret the prompt before entering a command, and use the documentation for the actual Junos platform and release. For troubleshooting, start with narrowly scoped operational output about the affected interface, route, or log and preserve timestamps. A configuration candidate is not the same as the active committed state. KonX provides the terminal transport and text analysis; its Cisco-style security checker does not parse Junos configuration semantics. Require explicit review of a proposed change and its rollback path before committing it on a device."
+    },
+    {
+      "id": "builtin:vendor-microsoft",
+      "title": "Microsoft Windows: correlate endpoint policy with network evidence",
+      "vendor": "Microsoft",
+      "tags": ["vendor", "microsoft", "windows", "policy", "bitlocker", "endpoint"],
+      "sourceUrl": "https://learn.microsoft.com/en-us/windows/security/operating-system-security/data-protection/bitlocker/",
+      "content": "Windows endpoint controls protect different layers. For example, volume encryption protects stored data under its documented conditions; it does not demonstrate network isolation or application patching. Correlate KonX's local posture observations with the endpoint's actual management policy and component status. A restricted account can leave checks unknown. Remote port reachability cannot reveal a disk encryption state or Defender policy. When explaining a result, keep observed evidence, interpretation, and the next verification step distinct instead of assigning the entire computer a single secure or insecure label."
+    },
+    {
+      "id": "builtin:vendor-aruba",
+      "title": "HPE Aruba Networking: client telemetry and local Wi-Fi observations",
+      "vendor": "HPE Aruba Networking",
+      "tags": ["vendor", "aruba", "central", "wireless", "client", "health"],
+      "sourceUrl": "https://arubanetworking.hpe.com/techdocs/central/latest/content/nms/clients/client-details-wireless.htm",
+      "content": "Use the appropriate Aruba Central or device documentation for the deployed platform when interpreting client telemetry. A vendor's calculated client health score is not interchangeable with Windows signal percentage or RSSI. Match the client MAC, SSID, site, and time window before comparing the cloud or controller view with a local KonX Wi-Fi snapshot. KonX does not include an Aruba Central API integration in this version. Its vendor guidance can explain concepts, but it cannot retrieve live Aruba counters or establish the vendor's root-cause conclusion without supplied evidence."
+    },
+    {
+      "id": "builtin:vendor-fortinet",
+      "title": "Fortinet FortiGate: packet visibility, interfaces, and offload context",
+      "vendor": "Fortinet",
+      "tags": ["vendor", "fortinet", "fortigate", "fortios", "capture", "offload"],
+      "sourceUrl": "https://docs.fortinet.com/document/fortigate/7.0.3/administration-guide/680228",
+      "content": "FortiGate troubleshooting depends on the FortiOS release, VDOM, interface, traffic path, and hardware acceleration. A device-side capture may have visibility limits when traffic is offloaded. Consult the matching Fortinet manual before interpreting an absent packet or altering offload; such a change can affect production performance. KonX can inspect supported saved captures and provide a terminal session but does not implement FortiOS policy validation or automatic remediation. Compare an endpoint capture with the relevant device evidence, and distinguish observed packets from an assumed firewall decision."
+    },
+    {
+      "id": "builtin:ai-grounding",
+      "title": "AI explanations: library grounding, uncertainty, and selected context",
+      "vendor": "KonX",
+      "tags": ["ai", "assistant", "knowledge", "library", "vectors", "privacy", "evidence"],
+      "sourceUrl": "https://github.com/256kMagic/KonX",
+      "content": "KonX's offline Knowledge Library works without an AI key. It stores bundled explanations and user-authored articles in a local SQLite database and searches persistent local TF-IDF cosine vectors. This is lexical retrieval, not neural semantic understanding or a live vendor database. AI can use retrieved excerpts to explain tools and suggest checks, but it must not invent observations or claim it ran a tool. Inspect the source references and verify advice against the actual vendor and release. Only submit selected context that you intend the configured AI provider to receive."
+    },
+    {
+      "id": "builtin:ai-providers",
+      "title": "AI provider settings: keys, models, custom endpoints, and errors",
+      "vendor": "KonX",
+      "tags": ["ai", "openai", "claude", "anthropic", "gemini", "nyquest", "custom", "api-key"],
+      "sourceUrl": "https://github.com/256kMagic/KonX",
+      "content": "Select OpenAI, Claude, Gemini, Nyquest, or the supported custom API option in AI settings and enter that provider's API key inside KonX. Confirm the exact model and, for a custom service, the compatible API URL. Provider authentication, model access, quotas, and billing are separate from a consumer chat subscription. A 401, 403, 404, or 429 needs the specific provider response and configuration to interpret correctly. Do not paste API keys into chat or knowledge articles. Choosing a provider does not connect that provider directly to your devices or Mist account."
+    },
+    {
+      "id": "builtin:ai-nyquest",
+      "title": "Nyquest AI setup: personal API keys and automatic model routing",
+      "vendor": "Nyquest",
+      "tags": ["ai", "nyquest", "pat", "api-key", "model", "routing", "stateless"],
+      "sourceUrl": "https://docs.nyquest.ai/developer-api/openai-compatibility",
+      "content": "Nyquest documents an OpenAI-compatible chat endpoint at https://api.nyquest.ai/v1/chat/completions using a personal API key as a Bearer credential. Its nyquest/auto model selects a model through Nyquest's router; explicit model IDs must match the accessible catalog. Create a personal key in the Nyquest app under Settings > API Keys. PAT chat requests are stateless, so KonX must supply the conversation and relevant library context for each request rather than relying on Nyquest web-chat memory. Check the served model and your account's applicable access when troubleshooting a request."
+    },
+    {
+      "id": "builtin:ai-nyquest-key-scope",
+      "title": "Nyquest personal API key scope and revocation",
+      "vendor": "Nyquest",
+      "tags": ["ai", "nyquest", "pat", "credentials", "permissions", "revoke"],
+      "sourceUrl": "https://docs.nyquest.ai/developer-api/personal-api-keys",
+      "content": "Nyquest's current personal API keys inherit the creating user's full account privileges; its documentation does not offer per-key read-only or chat-only scoping. KonX's AI workflow uses the key for chat requests, but this does not reduce the credential's provider-side privileges. Create a recognizable key for this installation, keep it out of transcripts and library articles, and revoke it in the provider's settings if exposed or no longer needed. Removing a saved key from KonX removes the local credential; it does not revoke the key at Nyquest."
+    }
+  ]
+}

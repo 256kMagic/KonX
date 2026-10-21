@@ -2,8 +2,16 @@
 // subnet calculator, Wake-on-LAN and interface / ARP info.
 import { h, icon, api, DataTable, contextMenu, toast, errMsg, fmtMs, csv, buildFields } from './ui.js';
 import { CaptureTab } from './capture.js';
+import { createSecurityTool } from './security.js';
+import { createWifiTool } from './wifi.js';
+import { createMistTool } from './mist.js';
+import { AITab } from './ai.js';
 
 export const TOOLS = [
+  { kind: 'ai', label: 'AI & Knowledge', icon: 'insight', desc: 'Ask an AI to explain results and browse the offline tool and vendor reference library' },
+  { kind: 'wifi', label: 'Wi-Fi Tools', icon: 'wifi', desc: 'Wireless adapters, visible access points, signal, channel crowding and security observations' },
+  { kind: 'mist', label: 'Mist & Marvis', icon: 'cloud', desc: 'Connect to Juniper Mist for AP/client monitoring and Marvis troubleshooting' },
+  { kind: 'security', label: 'Security Suite', icon: 'shield', desc: 'Windows assessment, TLS/SSH auditing, service exposure, web headers, configuration and capture review' },
   { kind: 'capture', label: 'Packet Capture', icon: 'capture', desc: 'Capture and decode traffic with plain-English insights, or open .pcap files' },
   { kind: 'ping', label: 'Ping Monitor', icon: 'activity', desc: 'Continuous ping of one or many hosts with loss, jitter and history' },
   { kind: 'sweep', label: 'Network Sweep', icon: 'radar', desc: 'Find live hosts on a subnet or range, with names and MACs' },
@@ -49,6 +57,7 @@ export function hostMenuItems(app, host, port) {
     '-',
     { label: 'Ping', icon: 'activity', action: () => app.openTool('ping', { hosts: host }) },
     { label: 'Port scan', icon: 'target', action: () => app.openTool('portscan', { targets: host }) },
+    { label: 'Security review', icon: 'shield', action: () => app.openTool('security', { host }) },
     { label: 'Traceroute', icon: 'route', action: () => app.openTool('traceroute', { host }) },
     { label: 'DNS lookup', icon: 'globe', action: () => app.openTool('dns', { name: host }) },
     { label: 'Capture traffic', icon: 'capture', action: () => app.openTool('capture', { filter: `host ${host}`, captureFilter: `host ${host}` }) },
@@ -993,6 +1002,10 @@ class NetInfoTool extends ToolView {
 const CLASSES = { capture: CaptureTab, ping: PingTool, sweep: SweepTool, portscan: PortScanTool, traceroute: TraceTool, dns: DnsTool, whois: WhoisTool, subnet: SubnetTool, wol: WolTool, netinfo: NetInfoTool };
 
 export function createTool(app, kind, params = {}) {
+  if (kind === 'ai') return new AITab(app, params);
+  if (kind === 'wifi') return createWifiTool(app, params);
+  if (kind === 'mist') return createMistTool(app, params);
+  if (kind === 'security') return createSecurityTool(app, params);
   const def = TOOLS.find((t) => t.kind === kind);
   if (kind === 'capture') return new CaptureTab(app, params);
   return new CLASSES[kind](app, def, params);
