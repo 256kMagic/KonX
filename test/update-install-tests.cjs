@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
+const fsSync = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
@@ -12,6 +13,7 @@ const execute = promisify(execFile);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const digest = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 const powershell = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+const registrationId = 'e1e4513c-47e1-589d-a8c8-61851534c8b6';
 
 async function eventually(read, predicate, timeout = 15000) {
   const until = Date.now() + timeout;
@@ -72,21 +74,45 @@ async function runUpdateInstallTests(test) {
     child.stdin.end();
     await exited;
   };
-  const registrations = async (directory, action, key) => {
-    const name = key || 'KonXUpdateFixture-' + crypto.randomBytes(8).toString('hex');
-    const registryPath = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\' + name;
+  const registrations = async (directory, action, name) => {
+    assert.match(name, /^[a-f0-9-]{36}$/);
+    assert.notEqual(name, registrationId, 'tests must never modify the real application registration');
+    const installPath = 'HKCU\\Software\\' + name;
+    const uninstallPath = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\' + name;
     if (action === 'remove') {
-      await execute('reg.exe', ['delete', registryPath, '/f'], { windowsHide: true });
-      registryKeys.delete(registryPath);
-    } else {
-      registryKeys.add(registryPath);
-      for (const [value, data] of [['DisplayName', 'KonX'], ['InstallLocation', directory]]) {
-        await execute('reg.exe', ['add', registryPath, '/v', value, '/t', 'REG_SZ', '/d', data, '/f'], { windowsHide: true });
+      for (const registryPath of [installPath, uninstallPath]) {
+        await execute('reg.exe', ['delete', registryPath, '/f'], { windowsHide: true });
+        registryKeys.delete(registryPath);
       }
+    } else {
+      for (const registryPath of [installPath, uninstallPath]) {
+        await assert.rejects(execute('reg.exe', ['query', registryPath], { windowsHide: true }), 'the fixture registration must not already exist');
+        registryKeys.add(registryPath);
+      }
+      await execute('reg.exe', ['add', installPath, '/v', 'InstallLocation', '/t', 'REG_SZ', '/d', directory, '/f'], { windowsHide: true });
+      for (const [value, data] of [['DisplayName', 'KonX'], ['UninstallString', `"${path.join(directory, 'Uninstall KonX.exe')}" /currentuser`]]) {
+        await execute('reg.exe', ['add', uninstallPath, '/v', value, '/t', 'REG_SZ', '/d', data, '/f'], { windowsHide: true });
+      }
+      await assert.rejects(execute('reg.exe', ['query', uninstallPath, '/v', 'InstallLocation'], { windowsHide: true }));
     }
     return name;
   };
   try {
+    await test('updater installation identity follows the bundled builder split registration contract', async () => {
+      const { UUID } = require('builder-util-runtime');
+      const { build } = require('../package.json');
+      assert.equal(build.nsis?.guid || UUID.v5(build.appId, UUID.parse('50e065bc-3134-11e6-9bab-38c9862bdaf3')), registrationId);
+      const helper = await fs.readFile(path.join(__dirname, '../src/main/update-helper.ps1'), 'utf8');
+      assert.ok(helper.includes(`$registrationId = '${registrationId}'`));
+      const templates = path.join(path.dirname(require.resolve('app-builder-lib/package.json')), 'templates/nsis');
+      const layout = await fs.readFile(path.join(templates, 'multiUser.nsh'), 'utf8');
+      const writer = await fs.readFile(path.join(templates, 'include/installer.nsh'), 'utf8');
+      assert.ok(layout.includes('INSTALL_REGISTRY_KEY "Software\\${APP_GUID}"'));
+      assert.ok(layout.includes('UNINSTALL_REGISTRY_KEY "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${UNINSTALL_APP_KEY}"'));
+      assert.ok(writer.includes('WriteRegStr SHELL_CONTEXT "${INSTALL_REGISTRY_KEY}" InstallLocation "$INSTDIR"'));
+      assert.ok(writer.includes('WriteRegStr SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}" UninstallString'));
+      assert.ok(!writer.includes('"${UNINSTALL_REGISTRY_KEY}" InstallLocation'));
+    });
     await test('updater installation refuses development, unsupported and unpacked targets', async () => {
       assert.equal(getInstallTarget({ isPackaged: false }).mode, 'unsupported');
       assert.equal(getInstallTarget({ isPackaged: true, platform: 'linux' }).mode, 'unsupported');
@@ -103,6 +129,109 @@ async function runUpdateInstallTests(test) {
       assert.equal(getInstallTarget({ ...args, portablePath: 'relative.exe' }).mode, 'unsupported');
     });
     if (process.platform !== 'win32') return;
+    await test('updater normal Electron recognizes a physical ASAR installation and rejects an actual archive-named directory', async () => {
+      const directory = path.join(root, 'electron physical target');
+      const contents = path.join(directory, 'archive-input');
+      const resources = path.join(directory, 'resources');
+      await fs.mkdir(contents, { recursive: true });
+      await fs.mkdir(resources);
+      for (const name of ['update-install.js', 'update-helper.ps1']) await fs.copyFile(path.join(__dirname, '../src/main', name), path.join(contents, name));
+      await fs.writeFile(path.join(directory, 'KonX.exe'), 'fixture only, never executed');
+      await fs.writeFile(path.join(directory, 'Uninstall KonX.exe'), 'fixture only, never executed');
+      const invalid = path.join(directory, 'invalid');
+      await fs.mkdir(path.join(invalid, 'resources', 'app.asar'), { recursive: true });
+      await fs.writeFile(path.join(invalid, 'KonX.exe'), 'fixture only, never executed');
+      await fs.writeFile(path.join(invalid, 'Uninstall KonX.exe'), 'fixture only, never executed');
+      const archive = path.join(resources, 'app.asar');
+      await require('@electron/asar').createPackage(contents, archive);
+      const script = path.join(directory, 'probe.cjs');
+      const result = path.join(directory, 'result.json');
+      await fs.writeFile(script, `const {app} = require('electron');
+const fs = require('fs'), physical = require('original-fs'), path = require('path');
+const directory = __dirname, archive = path.join(directory, 'resources', 'app.asar');
+app.setPath('userData', path.join(directory, 'profile'));
+app.setPath('sessionData', path.join(directory, 'profile'));
+app.disableHardwareAcceleration();
+app.whenReady().then(() => {
+  const {getInstallTarget} = require(archive + '/update-install.js');
+  const args = {isPackaged:true, platform:'win32', arch:'x64', execPath:path.join(directory,'KonX.exe'), portablePath:''};
+  const result = {virtualDirectory:fs.lstatSync(archive).isDirectory(), physicalFile:physical.lstatSync(archive).isFile(), installed:getInstallTarget(args)};
+  result.directory = getInstallTarget({...args, execPath:path.join(directory,'invalid','KonX.exe')});
+  physical.writeFileSync(path.join(directory,'result.json'), JSON.stringify(result));
+  app.quit();
+}).catch(error => { console.error(error); app.exit(1); });`);
+      const env = { ...process.env };
+      delete env.ELECTRON_RUN_AS_NODE;
+      await execute(require('electron'), [script], { windowsHide: true, env, timeout: 20000 });
+      const actual = JSON.parse(await fs.readFile(result, 'utf8'));
+      assert.equal(actual.virtualDirectory, true, 'exercise Electron ASAR virtualization, not plain Node');
+      assert.equal(actual.physicalFile, true);
+      assert.equal(actual.installed.mode, 'installed', actual.installed.reason);
+      assert.equal(actual.directory.mode, 'unsupported');
+    });
+    await test('updater paired registration selects the exact scope and rejects missing, conflicting and malformed ownership', async () => {
+      const directory = path.join(root, 'registry target');
+      const other = path.join(root, 'another installation');
+      const command = (location, mode) => `"${path.join(location, 'Uninstall KonX.exe')}" /${mode}`;
+      const pair = (hive, location = directory) => ({
+        [`${hive}:\\Software\\${registrationId}`]: { InstallLocation: location },
+        [`${hive}:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${registrationId}`]: {
+          DisplayName: 'KonX', UninstallString: command(location, hive === 'HKCU' ? 'currentuser' : 'allusers'),
+        },
+      });
+      const installKey = `HKCU:\\Software\\${registrationId}`;
+      const uninstallKey = `HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${registrationId}`;
+      const foreignId = crypto.randomUUID();
+      const altered = (key, patch) => { const value = pair('HKCU'); value[key] = { ...value[key], ...patch }; return value; };
+      const cases = [
+        { name: 'current user', registry: pair('HKCU'), mode: 'currentuser' },
+        { name: 'all users without HKCU registration', registry: pair('HKLM'), mode: 'allusers' },
+        { name: 'same identity at other directory', registry: { ...pair('HKCU'), ...pair('HKLM', other) }, mode: 'currentuser' },
+        { name: 'same target in both scopes', registry: { ...pair('HKCU'), ...pair('HKLM') } },
+        { name: 'missing install key', registry: { [uninstallKey]: pair('HKCU')[uninstallKey] } },
+        { name: 'missing uninstall key', registry: { [installKey]: { InstallLocation: directory } } },
+        { name: 'wrong paired directory', registry: altered(installKey, { InstallLocation: other }) },
+        { name: 'drive-relative directory', registry: altered(installKey, { InstallLocation: 'C:KonX' }) },
+        { name: 'non-string directory', registry: altered(installKey, { InstallLocation: [directory] }) },
+        { name: 'wrong application name', registry: altered(uninstallKey, { DisplayName: 'Another application' }) },
+        { name: 'non-string application name', registry: altered(uninstallKey, { DisplayName: ['KonX', 'KonX'] }) },
+        { name: 'non-string uninstall command', registry: altered(uninstallKey, { UninstallString: [command(directory, 'currentuser')] }) },
+        { name: 'opposite scope flag', registry: altered(uninstallKey, { UninstallString: command(directory, 'allusers') }) },
+        { name: 'wrong uninstaller path', registry: altered(uninstallKey, { UninstallString: command(other, 'currentuser') }) },
+        { name: 'extra command arguments', registry: altered(uninstallKey, { UninstallString: command(directory, 'currentuser') + ' --delete-app-data' }) },
+        { name: 'unquoted command path', registry: altered(uninstallKey, { UninstallString: path.join(directory, 'Uninstall KonX.exe') + ' /currentuser' }) },
+        { name: 'arbitrary application GUID', registry: Object.fromEntries(Object.entries(pair('HKCU')).map(([key, value]) => [key.replace(registrationId, foreignId), value])) },
+      ];
+      const input = path.join(root, 'registry-cases.json');
+      const script = path.join(root, 'registry-cases.ps1');
+      await fs.writeFile(input, JSON.stringify({ directory, cases }));
+      // Execute the production function. Only the Windows registry provider is
+      // substituted, so HKLM/ambiguity coverage needs no elevated registry writes.
+      await fs.writeFile(script, `param([string]$Source, [string]$InputFile)
+$ErrorActionPreference = 'Stop'
+$ast = [Management.Automation.Language.Parser]::ParseFile($Source, [ref]$null, [ref]$null)
+$definition = @($ast.FindAll({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Get-InstallMode' }, $true))
+if ($definition.Count -ne 1) { throw 'Expected one production registration function' }
+. ([scriptblock]::Create($definition[0].Extent.Text))
+function Test-Path { param([string]$LiteralPath) return $script:registry.ContainsKey($LiteralPath) }
+function Get-ItemProperty { param([string]$LiteralPath, [string]$ErrorAction) return $script:registry[$LiteralPath] }
+$inputData = Get-Content -LiteralPath $InputFile -Raw | ConvertFrom-Json
+$results = foreach ($case in $inputData.cases) {
+  $script:registry = @{}
+  foreach ($property in $case.registry.PSObject.Properties) { $script:registry[$property.Name] = $property.Value }
+  try { @{ name = $case.name; mode = (Get-InstallMode $inputData.directory) } }
+  catch { @{ name = $case.name; error = $_.Exception.Message } }
+}
+ConvertTo-Json -InputObject @($results) -Compress`);
+      const { stdout } = await execute(powershell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, '-Source', path.join(__dirname, '../src/main/update-helper.ps1'), '-InputFile', input], { windowsHide: true, timeout: 15000 });
+      const results = JSON.parse(stdout);
+      for (let index = 0; index < cases.length; index++) {
+        const expected = cases[index], actual = results[index];
+        assert.equal(actual.name, expected.name);
+        if (expected.mode) assert.equal(actual.mode, expected.mode, `${expected.name}: ${actual.error}`);
+        else assert.match(actual.error || '', /registration|installation mode/, expected.name);
+      }
+    });
     const oldExe = await compileFixture(root, 'original');
     const newExe = await compileFixture(root, 'replacement');
     const originalBytes = await fs.readFile(oldExe);
@@ -121,7 +250,20 @@ async function runUpdateInstallTests(test) {
         await fs.writeFile(path.join(directory, 'resources', 'app.asar'), 'fixture');
         await fs.writeFile(path.join(directory, 'Uninstall KonX.exe'), 'fixture');
       }
-      return { directory, target: { mode, targetPath }, update: { mode, file, size: data.length, sha256: digest(data), version: '9.9.9' }, cacheDir: path.join(directory, 'cache'), showFailure: false };
+      const options = { directory, target: { mode, targetPath }, update: { mode, file, size: data.length, sha256: digest(data), version: '9.9.9' }, cacheDir: path.join(directory, 'cache'), showFailure: false };
+      if (mode === 'installed') {
+        options.registrationId = crypto.randomUUID();
+        // Only this exclusively owned staged helper copy changes identity. The
+        // production helper has no environment/plan override for registration.
+        options.spawnImpl = (command, args, spawnOptions) => {
+          const script = args[args.indexOf('-File') + 1];
+          const source = fsSync.readFileSync(script, 'utf8');
+          assert.equal(source.split(registrationId).length, 2);
+          fsSync.writeFileSync(script, source.replace(registrationId, options.registrationId));
+          return spawn(command, args, spawnOptions);
+        };
+      }
+      return options;
     };
     await test('updater real helper verifies readiness and cancellation without replacing or quitting', async () => {
       const options = await fixture();
@@ -318,7 +460,7 @@ const { launchUpdate } = require(${JSON.stringify(require.resolve('../src/main/u
     });
     await test('updater real installed helper preserves explicit mode and final unquoted NSIS directory with spaces', async () => {
       const options = await fixture('installed');
-      const key = await registrations(options.directory, 'add');
+      const key = await registrations(options.directory, 'add', options.registrationId);
       const p = parent();
       try {
         const helper = await launchUpdate({ ...options, parentPid: p.pid });

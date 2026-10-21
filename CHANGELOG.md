@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Installed updater detection now checks the physical `app.asar` file rather than Electron's virtual archive directory.
+- Installed update handoff reads the installer location and uninstall registration from electron-builder's separate registry keys, validating the application identity, directory, and installation mode together.
+- Regression coverage now includes Electron's real ASAR filesystem behavior and the actual installer registry layout. The original 0.6.0/0.6.1 installed update button is affected; portable updating is unaffected. Installed copies need a manual upgrade to a release containing these fixes.
+
+Validation: 485 automated tests pass. Corrected source components completed a real all-users NSIS update from installed 0.6.0 to the published 0.6.1 installer, preserving the installation folder/mode and settings bytes and restarting KonX as 0.6.1. This is a component handoff test; the original installed button failed. See the [release notes](docs/releases/0.6.1.md#validation) for coverage limits.
+
 ## 0.6.1 — 2026-10-21
 
 ### Added
@@ -10,7 +20,7 @@
 
 This release does not change the updater's application behavior from 0.6.0. Installer and portable copies retain their existing Windows profile. See [0.6.1 release notes](docs/releases/0.6.1.md) and [Updating KonX](docs/UPDATING.md).
 
-Validation: all 482 automated tests pass for 0.6.1. Installer and portable builds completed; all 81 packaged source files match this checkout. Isolated unpacked and portable startup/restart checks pass, including encrypted credential persistence/removal and Knowledge notes. A complete public-release installation remains an end-to-end test; Windows helper fixtures exercise portable replacement/rollback and installed mode/directory arguments.
+Release-time validation: all 482 automated tests passed for 0.6.1. Installer and portable builds completed; all 81 packaged source files matched the release checkout (`41208e0`). Isolated unpacked and portable startup/restart checks passed, including encrypted credential persistence/removal and Knowledge notes. At publication, a complete public-release installation remained an end-to-end test; Windows helper fixtures exercised portable replacement/rollback and installed mode/directory arguments. See the release notes for subsequent live test findings.
 
 ## 0.6.0 — unreleased
 

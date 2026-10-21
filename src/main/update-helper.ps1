@@ -98,17 +98,31 @@ function Verify-Payload([string]$Path) {
     if ($item.Length -ne $plan.size -or (File-Hash $Path) -cne $plan.sha256) { throw 'The downloaded update failed its size or SHA-256 verification.' }
 }
 function Get-InstallMode([string]$TargetDirectory) {
-    $modes = New-Object 'Collections.Generic.HashSet[string]'
+    # electron-builder derives this UUID from appId com.konx.app. Its install
+    # location and uninstall metadata belong to two separate, paired keys.
+    $registrationId = 'e1e4513c-47e1-589d-a8c8-61851534c8b6'
+    $modes = New-Object 'Collections.Generic.List[string]'
+    $targetLocation = [IO.Path]::GetFullPath($TargetDirectory).TrimEnd('\')
+    $uninstaller = [IO.Path]::Combine($targetLocation, 'Uninstall KonX.exe')
     foreach ($entry in @(@('HKCU', 'currentuser'), @('HKLM', 'allusers'))) {
-        $root = $entry[0] + ':\Software\Microsoft\Windows\CurrentVersion\Uninstall'
-        if (!(Test-Path -LiteralPath $root)) { continue }
-        foreach ($key in @(Get-ChildItem -LiteralPath $root -ErrorAction Stop)) {
-            $values = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction Stop
-            if ($values.DisplayName -ne 'KonX' -or !$values.InstallLocation) { continue }
-            try { $location = [IO.Path]::GetFullPath([string]$values.InstallLocation).TrimEnd('\') }
-            catch { continue }
-            if ($location -ieq $TargetDirectory.TrimEnd('\')) { [void]$modes.Add($entry[1]) }
+        $installKey = $entry[0] + ':\Software\' + $registrationId
+        $uninstallKey = $entry[0] + ':\Software\Microsoft\Windows\CurrentVersion\Uninstall\' + $registrationId
+        $expectedCommand = '"' + $uninstaller + '" /' + $entry[1]
+        $installation = if (Test-Path -LiteralPath $installKey) { Get-ItemProperty -LiteralPath $installKey -ErrorAction Stop } else { $null }
+        $uninstall = if (Test-Path -LiteralPath $uninstallKey) { Get-ItemProperty -LiteralPath $uninstallKey -ErrorAction Stop } else { $null }
+        $location = ''
+        # GetFullPath alone accepts drive-relative paths such as C:KonX.
+        if ($installation.InstallLocation -is [string] -and $installation.InstallLocation -match '^(?:[A-Za-z]:[\\/]|\\\\[^\\]+\\[^\\]+(?:\\|$))') {
+            try { $location = [IO.Path]::GetFullPath($installation.InstallLocation).TrimEnd('\') } catch { }
         }
+        $ownsDirectory = $location -ieq $targetLocation
+        $ownsCommand = $uninstall.UninstallString -is [string] -and $uninstall.UninstallString -ieq $expectedCommand
+        # Another installation of this app in the other scope may coexist.
+        if (!$ownsDirectory -and !$ownsCommand) { continue }
+        if (!$ownsDirectory -or !$ownsCommand -or $uninstall.DisplayName -isnot [string] -or $uninstall.DisplayName -cne 'KonX') {
+            throw 'The existing installation registration does not consistently identify this KonX directory and mode. Run the downloaded installer manually.'
+        }
+        $modes.Add($entry[1])
     }
     if ($modes.Count -ne 1) { throw 'The existing installation mode could not be identified unambiguously. Run the downloaded installer manually.' }
     return @($modes)[0]

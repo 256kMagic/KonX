@@ -7,7 +7,10 @@ const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const regular = (file) => { try { return fs.lstatSync(file).isFile(); } catch { return false; } };
+// Electron's patched fs presents app.asar as a virtual directory. Target
+// validation needs physical files; reads of our packaged helper still use fs.
+const physicalFs = process.versions.electron ? require('original-fs') : fs;
+const regular = (file) => { try { return physicalFs.lstatSync(file).isFile(); } catch { return false; } };
 const safePath = (file) => typeof file === 'string' && path.isAbsolute(file) && !/[\0\r\n"]/.test(file);
 const cleanEnvironment = (env) => Object.fromEntries(Object.entries(env).filter(([key]) =>
   !/^PORTABLE_EXECUTABLE_/i.test(key) && !/^(?:ELECTRON_RUN_AS_NODE|KONX_CAPTURE|KONX_DEMO)(?:_|$)/i.test(key)));

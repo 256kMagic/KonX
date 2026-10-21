@@ -1,12 +1,16 @@
 # Updating KonX
 
+**Installed-updater issue in 0.6.0 and 0.6.1:** these releases can misidentify an installed copy as unpacked and read the installation location from the wrong registry key. Their installed update button cannot complete a normal upgrade. Use the installer manually until a release containing the fixes is available. Portable updating is unaffected. The source fixes are currently unreleased.
+
 This guide covers the updater in KonX 0.6.1 for Windows x64. The updater was introduced in the local 0.6.0 test build; 0.6.1 is its first public release and carries the same update features. Versions 0.5.0 and earlier need one manual installation or portable-file replacement to gain the button.
 
-- **From 0.5.0 or earlier:** save your work, close KonX, and install 0.6.1 or replace your portable executable manually.
-- **From the local 0.6.0 installed or portable build:** choose **Update KonX** to reach 0.6.1 once its complete stable release is published. An unpacked development build does not support in-place updates.
-- **From 0.6.1 onward:** use the same button for newer stable releases. If no newer release exists, KonX reports that it is up to date.
+- **From 0.5.0 or earlier:** save your work, close KonX, and install the latest release or replace your portable executable manually.
+- **Installed 0.6.0 or 0.6.1:** run the latest installer manually. The update button needs the fixes described above, which are not yet released.
+- **Portable 0.6.0 or later:** choose **Update KonX** for a newer stable release. If no newer release exists, KonX reports that it is up to date. An unpacked development build does not support in-place updates.
 
 ## One-press update
+
+Published one-press updating currently works for portable copies. Installed copies require a future release containing the fixes above.
 
 Save local and remote documents and Knowledge notes. Disconnect terminal and SFTP sessions, finish transfers, and stop captures or tool jobs. Then choose **Update KonX** on Home or **Settings → Updates**.
 
@@ -16,7 +20,7 @@ The updater does not need a GitHub account or key. It does not check on startup,
 
 ## Installed and portable copies
 
-An installed copy uses the KonX installer in update mode, preserving the current folder and per-user/all-users installation. Updating an all-users installation can require a Windows administrator prompt. Cancelling that prompt leaves the update unapplied.
+With the unreleased installed-updater fixes, an installed copy uses the KonX installer in update mode, preserving the current folder and per-user/all-users installation. Updating an all-users installation can require a Windows administrator prompt. Cancelling that prompt leaves the update unapplied.
 
 A portable copy replaces the same executable, even if you renamed it, and restarts from that location. Its containing folder must be writable. The old file is retained as a backup during replacement so a failed swap or restart can recover it. A portable update does not install KonX or move the Windows profile.
 
