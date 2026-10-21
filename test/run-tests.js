@@ -319,10 +319,17 @@ const fakeCrypt = {
         const sock = net.connect(info.destPort, info.destIP, () => sock.pipe(ch).pipe(sock));
       });
     });
-    const fwdPort = 40000 + Math.floor(Math.random() * 20000);
-    const fs2 = store.saveSession({ name: 'fwd', protocol: 'ssh', host: '127.0.0.1', port, username: 'test', password: 'test', forwards: [{ type: 'L', listenHost: '127.0.0.1', listenPort: fwdPort, destHost: '127.0.0.1', destPort: echo.address().port }] });
+    // Let the actual forwarding listener own an OS-assigned port. Random
+    // unreserved port numbers can be excluded or occupied on Windows.
+    const outputStart = out.length;
+    const fs2 = store.saveSession({ name: 'fwd', protocol: 'ssh', host: '127.0.0.1', port, username: 'test', password: 'test', forwards: [{ type: 'L', listenHost: '127.0.0.1', listenPort: 0, destHost: '127.0.0.1', destPort: echo.address().port }] });
+    try {
     const r = await cm.open('s4', { sessionId: fs2.id }, {});
     assert.ok(r.ok, r.error);
+    const forwarding = out.slice(outputStart).join('').match(/Forwarding 127\.0\.0\.1:(\d+) ->/);
+    assert.ok(forwarding, 'Forwarding listener must announce its bound address');
+    const fwdPort = Number(forwarding[1]);
+    assert.ok(fwdPort > 0);
     const reply = await new Promise((resolve, reject) => {
       const c = net.connect(fwdPort, '127.0.0.1', () => c.write('ping-through-tunnel'));
       c.on('data', (d) => {
@@ -332,8 +339,10 @@ const fakeCrypt = {
       c.on('error', reject);
     });
     assert.strictEqual(reply, 'ping-through-tunnel');
+    } finally {
     cm.close('s4');
     echo.close();
+    }
   });
 
   const sm = new SftpManager({ emit: () => {}, ask, store, connections: cm, openExternal: async () => {}, tempDir: () => path.join(tmp, 'edit') });
@@ -481,6 +490,9 @@ const fakeCrypt = {
   await (await import('./rtp-tests.mjs')).runRtpTests(test);
   await require('./rtp-navigation-tests.cjs').runRtpNavigationTests(test);
   await require('./rtp-ui-tests.cjs').runRtpUiTests(test);
+  await (await import('./incident-evidence-tests.mjs')).runIncidentEvidenceTests(test);
+  await require('./incident-ui-tests.cjs').runIncidentUiTests(test);
+  await require('./incident-tests.cjs').runIncidentTests(test);
 
   const failed = results.filter((r) => !r[0]);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

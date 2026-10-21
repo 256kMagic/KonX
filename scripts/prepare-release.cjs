@@ -16,6 +16,7 @@ async function main() {
     ['docs/DEVICE_INSPECTOR.md', 'DEVICE_INSPECTOR.md'],
     ['docs/DEVICE_SNAPSHOTS.md', 'DEVICE_SNAPSHOTS.md'],
     ['docs/RTP_MEDIA.md', 'RTP_MEDIA.md'],
+    ['docs/INCIDENT_WORKSPACES.md', 'INCIDENT_WORKSPACES.md'],
     ['CHANGELOG.md', 'CHANGELOG.md'], [`docs/releases/${version}.md`, 'RELEASE_NOTES.md'],
   ];
   for (const file of [...binaries.map((name) => `dist/${name}`), ...documents.map(([source]) => source)]) {

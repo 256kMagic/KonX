@@ -8,6 +8,7 @@ const modeLabel = (mode) => mode === 'portable' ? 'Portable application' : mode 
 export function updateBlockers(app) {
   const reasons = [];
   for (const tab of app.tabs || []) {
+    if (typeof tab.updateBlockers === 'function') reasons.push(...tab.updateBlockers());
     if (tab.kind === 'notepad') {
       if (!tab.monaco) reasons.push('Wait for Notepad to finish loading.');
       if (tab.sending) reasons.push('Stop sending Notepad text to the terminal.');

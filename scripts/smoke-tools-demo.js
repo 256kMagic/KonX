@@ -47,11 +47,13 @@
   const supportsDeviceInspector = versionParts[0] > 0 || versionParts[1] >= 7;
   const supportsSnapshots = versionParts[0] > 0 || versionParts[1] >= 8;
   const supportsRtp = versionParts[0] > 0 || versionParts[1] >= 9;
+  const supportsIncidents = versionParts[0] > 0 || versionParts[1] >= 10;
 
   if (options.phase === 'save') {
     let deviceInspector = null;
     let deviceSnapshots = null;
     let rtpMedia = null;
+    let incidentWorkspace = null;
     if (supportsDeviceInspector) {
       assert(TOOLS.some((tool) => tool.kind === 'device'), 'Device Inspector entry is missing');
       const device = app.openTool('device');
@@ -106,6 +108,24 @@
         samples: audio.samples.length, wavBytes: wav.length, waveformAndGaps: true, noPlayback: true, noNetworkCollection: app.jobs.size === 0 };
       await app.closeTab(capture);
     }
+    if (supportsIncidents) {
+      assert(TOOLS.some(tool => tool.kind === 'incidents'), 'Incident Workspace tool is missing');
+      const incidents = app.openTool('incidents'); await incidents.ready;
+      assert(incidents.incidents.length === 0, 'Fresh smoke profile unexpectedly contains incidents');
+      const created = await api.invoke('tools:incidentCreate', { title: 'Synthetic package smoke incident', description: 'Offline evidence persistence fixture' });
+      await incidents.refresh(created.id);
+      incidents.noteText.value = 'Synthetic observation: audio gap seen in a local sample.';
+      incidents.noteLabel.value = 'Package smoke note'; await incidents.addText();
+      assert(incidents.report.evidence.length === 1 && incidents.report.timeline[0].observedAt === null, 'Untimed note must stay unknown');
+      const { makeRtpDemo } = await import('./js/capture/sample-rtp.mjs');
+      const demo = makeRtpDemo();
+      incidents.acceptIncident(await api.invoke('tools:incidentAddCapture', created.id, { bytes: demo.bytes, label: demo.name }));
+      assert(incidents.report.evidence.length === 2 && incidents.report.evidence.find(item => item.kind === 'note').integrity === 'verified', 'Text evidence copy was not verified');
+      assert(incidents.report.evidence.find(item => item.kind === 'capture').integrity === 'not-checked', 'Binary integrity should remain unknown until read');
+      assert(incidents.aiContext.evidenceCount === 2 && !Object.hasOwn(incidents.aiContext, 'evidence'), 'Incident AI context must exclude raw evidence');
+      incidentWorkspace = { savedEvidence: 2, unknownNoteTimePreserved: true, captureCopied: true, summaryOnlyAI: true, noNetworkCollection: app.jobs.size === 0 };
+      await app.closeTab(incidents);
+    }
     assert(!mist.config.hasToken && mist.testButton.disabled, 'Fresh profile must have no API token');
     app.activate(security);
     security.audit.value = 'config';
@@ -146,7 +166,7 @@
     const article = await api.invoke('tools:knowledgeSave', { title: noteTitle, vendor: 'Synthetic fixture', content: 'Wireless RSSI observations are cached evidence. Verify the adapter and collection time.' });
     await ai.readDocument(article.id);
     assert(ai.documentContent.textContent.includes('cached evidence'), 'Packaged local article did not render');
-    await complete({ phase: options.phase, version: info.version, tools: supportsRtp ? 7 : supportsSnapshots ? 6 : supportsDeviceInspector ? 5 : 4, ...(deviceInspector ? { deviceInspector } : {}), ...(deviceSnapshots ? { deviceSnapshots } : {}), ...(rtpMedia ? { rtpMedia } : {}), assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
+    await complete({ phase: options.phase, version: info.version, tools: supportsIncidents ? 8 : supportsRtp ? 7 : supportsSnapshots ? 6 : supportsDeviceInspector ? 5 : 4, ...(deviceInspector ? { deviceInspector } : {}), ...(deviceSnapshots ? { deviceSnapshots } : {}), ...(rtpMedia ? { rtpMedia } : {}), ...(incidentWorkspace ? { incidentWorkspace } : {}), assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
   } else if (options.phase === 'forget') {
     assert(mist.config.hasToken && !mist.testButton.disabled, 'Encrypted Mist token did not survive app restart');
     assert(mist.token.value === '', 'Saved credential must not be returned to the input');
@@ -178,7 +198,23 @@
       assert((await api.invoke('tools:snapshotList')).snapshots.length === 0, 'Synthetic snapshots remained after removal');
       deviceSnapshots = { persistedAcrossRestart: true, comparisonRestored: true, syntheticSnapshotsRemoved: true };
     }
+    let incidentWorkspace = null;
+    if (supportsIncidents) {
+      const library = await api.invoke('tools:incidentList');
+      assert(library.incidents.length === 1 && library.issues.length === 0, 'Incident evidence did not survive restart');
+      const saved = library.incidents.find(item => item.title === 'Synthetic package smoke incident');
+      assert(saved, 'Synthetic incident identity missing after restart');
+      const incident = await api.invoke('tools:incidentGet', saved.id);
+      assert(incident.evidence.length === 2 && incident.evidence.find(item => item.kind === 'note').integrity === 'verified', 'Restored text evidence failed verification');
+      const capture = incident.evidence.find(item => item.kind === 'capture');
+      const bytes = await api.invoke('tools:incidentCapture', saved.id, capture.id);
+      const { readCapture } = await import('./js/capture/pcapfile.mjs');
+      assert(readCapture(bytes.bytes).packets.length === 401, 'Restored capture copy is unreadable');
+      await api.invoke('tools:incidentRemove', saved.id);
+      assert((await api.invoke('tools:incidentList')).incidents.length === 0, 'Synthetic incident remained after removal');
+      incidentWorkspace = { persistedAcrossRestart: true, retainedCaptureVerified: true, syntheticIncidentRemoved: true };
+    }
     assert(app.jobs.size === 0, 'Smoke left running jobs');
-    await complete({ phase: options.phase, version: info.version, ...(deviceSnapshots ? { deviceSnapshots } : {}), encryptedTokenPersisted: true, tokenForgotten: true, encryptedAiKeyPersisted: true, aiKeyForgotten: true, customNotePersisted: true, customNoteRemoved: true, vectorIndexReady: true, noAutomaticJobs: true });
+    await complete({ phase: options.phase, version: info.version, ...(deviceSnapshots ? { deviceSnapshots } : {}), ...(incidentWorkspace ? { incidentWorkspace } : {}), encryptedTokenPersisted: true, tokenForgotten: true, encryptedAiKeyPersisted: true, aiKeyForgotten: true, customNotePersisted: true, customNoteRemoved: true, vectorIndexReady: true, noAutomaticJobs: true });
   } else throw new Error('Unknown package smoke phase');
 })()

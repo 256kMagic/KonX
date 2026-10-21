@@ -16,6 +16,7 @@ const wifi = require('./wifi');
 const deviceAnalysis = require('./device-analysis');
 const deviceCollector = require('./device-collector');
 const { SnapshotStore, compareSnapshots } = require('./device-snapshots');
+const { IncidentStore } = require('./incidents');
 const { MistClient } = require('./mist');
 const { AIClient } = require('./ai');
 const { KnowledgeLibrary } = require('./knowledge');
@@ -44,6 +45,7 @@ let mist;
 let ai;
 let knowledge;
 let snapshots;
+let incidents;
 let updates;
 const toolJobs = new Map();
 
@@ -355,6 +357,30 @@ function registerIpc() {
   });
   handle('tools:deviceConnections', () => deviceCollector.listConnections(connections));
   handle('tools:snapshotSave', (params) => snapshots.save(params));
+  handle('tools:incidentCreate', (params) => incidents.create(params));
+  handle('tools:incidentList', () => incidents.list());
+  handle('tools:incidentGet', (id) => incidents.get(id));
+  handle('tools:incidentRemove', (id) => incidents.remove(id));
+  handle('tools:incidentAddText', (id, params) => incidents.addText(id, params));
+  handle('tools:incidentAddCapture', (id, params) => incidents.addBytes(id, { ...params, kind: 'capture' }));
+  handle('tools:incidentCapture', (id, evidenceId) => incidents.readCapture(id, evidenceId));
+  handle('tools:incidentImport', async (id, params) => {
+    if (!['capture', 'terminal', 'tool', 'syslog', 'other'].includes(params?.kind)) throw new Error('Choose a supported evidence type.');
+    await incidents.get(id);
+    const result = await dialog.showOpenDialog(win, { title: 'Add incident evidence', properties: ['openFile'],
+      filters: params.kind === 'capture' ? [{ name: 'Packet captures', extensions: ['pcap', 'pcapng', 'cap'] }] : [{ name: 'Evidence files', extensions: ['*'] }] });
+    if (result.canceled || !result.filePaths[0]) return null;
+    return incidents.addFile(id, { ...params, sourcePath: result.filePaths[0] });
+  });
+  handle('tools:incidentExport', async (id, format) => {
+    if (!['html', 'json'].includes(format)) throw new Error('Choose HTML or JSON incident export.');
+    const content = format === 'html' ? await incidents.exportHtml(id) : await incidents.exportJson(id);
+    const result = await dialog.showSaveDialog(win, { title: 'Export incident report', defaultPath: `konx-incident.${format}`,
+      filters: [{ name: format === 'html' ? 'HTML report' : 'JSON report', extensions: [format] }] });
+    if (result.canceled || !result.filePath) return null;
+    await fs.promises.writeFile(result.filePath, content, 'utf8');
+    return result.filePath;
+  });
   handle('tools:snapshotList', () => snapshots.list());
   handle('tools:snapshotGet', (id) => snapshots.get(id));
   handle('tools:snapshotRemove', (id) => snapshots.remove(id));
@@ -532,6 +558,7 @@ app.whenReady().then(() => {
   };
   store = new Store(app.getPath('userData'), crypt);
   snapshots = new SnapshotStore(app.getPath('userData'));
+  incidents = new IncidentStore(app.getPath('userData'));
   mist = new MistClient({ dir: app.getPath('userData'), crypt });
   knowledge = new KnowledgeLibrary({ dir: app.getPath('userData') });
   ai = new AIClient({ dir: app.getPath('userData'), crypt, knowledge });

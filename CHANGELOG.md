@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.10.0 — 2026-10-21
+
+- Create local incident workspaces for captures, selected terminal output, tool results, imported syslog, and notes.
+- Snapshot current-tab evidence into an explicit pending item before choosing its destination and saving it.
+- Retain independent asset copies, SHA-256 integrity checks, source line references, and timelines with unknown timestamps preserved.
+- Export escaped HTML and structured JSON reports; reopen verified captures for packet, SIP, and RTP analysis.
+- Keep raw incident evidence out of AI summary context and protect unfinished incident work during tab closing and updater restart.
+- Report the actual bound SSH forwarding port when the operating system assigns it, and remove the test fixture's random-port collision risk.
+
+See the [incident guide](docs/INCIDENT_WORKSPACES.md) and [release notes](docs/releases/0.10.0.md).
+
 ## 0.9.0 — 2026-10-21
 
 - Open RTP Media from Packet Capture or a SIP call, with directional streams, SDP associations, jitter, gaps, duplicate/reordered packets, and source-frame navigation.

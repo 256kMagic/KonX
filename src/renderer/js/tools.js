@@ -8,8 +8,10 @@ import { createMistTool } from './mist.js';
 import { AITab } from './ai.js';
 import { DeviceTab } from './device.js';
 import { SnapshotTab } from './snapshots.js';
+import { IncidentTab } from './incidents.js';
 
 export const TOOLS = [
+  { kind: 'incidents', label: 'Incident Workspace', icon: 'file', desc: 'Collect local evidence and notes, inspect observation timelines and export incident reports' },
   { kind: 'snapshots', label: 'Device Snapshots', icon: 'columns', desc: 'Save device observations and compare configuration, interfaces, VLANs, neighbors and routes before and after changes' },
   { kind: 'device', label: 'Device Inspector', icon: 'server', desc: 'Inspect Cisco interfaces, VLANs and neighbors, and find observed IP/MAC switch ports' },
   { kind: 'ai', label: 'AI & Knowledge', icon: 'insight', desc: 'Ask an AI to explain results and browse the offline tool and vendor reference library' },
@@ -1006,6 +1008,7 @@ class NetInfoTool extends ToolView {
 const CLASSES = { capture: CaptureTab, ping: PingTool, sweep: SweepTool, portscan: PortScanTool, traceroute: TraceTool, dns: DnsTool, whois: WhoisTool, subnet: SubnetTool, wol: WolTool, netinfo: NetInfoTool };
 
 export function createTool(app, kind, params = {}) {
+  if (kind === 'incidents') return new IncidentTab(app, params);
   if (kind === 'snapshots') return new SnapshotTab(app, params);
   if (kind === 'device') return new DeviceTab(app, params);
   if (kind === 'ai') return new AITab(app, params);

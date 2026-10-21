@@ -9,6 +9,7 @@ import { NotepadTab } from './notepad/notepad.js';
 import { toolContext } from './tool-context.mjs';
 import { applyApplicationTheme } from './theme-effects.js';
 import { updateKonx } from './updates.js';
+import { incidentEvidence } from './incident-evidence.mjs';
 
 const RECENT_KEY = 'konx.recent';
 
@@ -408,6 +409,7 @@ class App {
   }
 
   async closeTab(tab) {
+    if (tab.requestClose && !(await tab.requestClose())) return;
     if (tab.kind === 'sftp' && tab.xfers.active()) {
       const ok = await modal({ title: 'Transfers in progress', body: h('div.message', 'Closing this tab cancels the remaining transfers.'), buttons: [{ label: 'Cancel', value: null }, { label: 'Close tab', value: true, danger: true }] });
       if (!ok) return;
@@ -509,6 +511,7 @@ class App {
         if (n) this.setTabTitle(t, n);
       } },
       t.kind === 'terminal' && { label: 'Clone', icon: 'copy', action: () => this.openTerminal(t.spec, t.meta) },
+      (t.kind === 'terminal' || t.kind === 'capture' || (t.kind === 'tool' && !['ai', 'incidents'].includes(t.toolKind))) && { label: 'Add evidence to incident…', icon: 'file', action: () => this.addToIncident(t) },
       t.kind === 'terminal' && t.protocol === 'ssh' && { label: 'Open SFTP tab', icon: 'file-transfer', disabled: t.state !== 'connected', action: () => this.openSftpFromTerminal(t) },
       t.kind === 'terminal' && t.state !== 'connected' && { label: 'Reconnect', icon: 'refresh', action: () => t.reconnect() },
       t.kind === 'terminal' && t.state === 'connected' && { label: 'Disconnect', icon: 'unplug', action: () => t.disconnect() },
@@ -619,6 +622,7 @@ class App {
     if (kind !== 'ai') {
       const heading = tab.el.querySelector('.tool-title') || tab.el.querySelector('.tool-head') || tab.el.querySelector('.cap-frow');
       heading?.append(h('button.btn.sm', { title: 'Preview these results in AI & Knowledge', onclick: () => this.explainTool(tab) }, icon('insight'), 'Explain with AI'));
+      if (kind !== 'incidents') heading?.append(h('button.btn.sm', { title: 'Choose an incident for a snapshot of this evidence', onclick: () => this.addToIncident(tab) }, icon('file'), 'Add to incident'));
     }
     return this.addTab(tab);
   }
@@ -631,6 +635,11 @@ class App {
       return this.openTool('ai', { label: tab.title, context: preview.context,
         question: `Explain these ${tab.title} results in plain language. Distinguish observed facts, unknowns, and possible causes, then suggest which KonX tool to use next.` });
     } catch (error) { toast(errMsg(error), 'err'); }
+  }
+
+  addToIncident(tab) {
+    try { return this.openTool('incidents', { evidence: incidentEvidence(tab) }); }
+    catch (error) { toast(errMsg(error), 'err'); }
   }
 
   hostMenu(host, port) {

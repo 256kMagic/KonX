@@ -7,7 +7,7 @@ Each phase ships separately with its own version, source commit, tests, Windows 
 | 1 | 0.7.0 | Device Inspector and IP/MAC switch-port tracing | Complete; 518 tests and packaged checks passed |
 | 2 | 0.8.0 | Saved device snapshots and before/after change checks | Complete; 537 tests and packaged checks passed |
 | 3 | 0.9.0 | RTP analysis, G.711 playback, and WAV export alongside SIP calls | Complete; 564 tests and packaged checks passed |
-| 4 | 0.10.0 | Incident workspaces, evidence timeline, notes, and reports | Planned |
+| 4 | 0.10.0 | Incident workspaces, evidence timeline, notes, and reports | Complete; 595 tests and packaged checks passed |
 | 5 | 0.11.0 | Bounded remote packet capture through SSH | Planned |
 | 6 | 0.12.0 | Diagnostic runbooks and saved procedures | Planned |
 | 7 | 0.13.0 | Comparison of working and failing captures | Planned |

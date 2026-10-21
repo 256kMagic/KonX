@@ -298,12 +298,12 @@ async function startForwards(client, forwards, log) {
         });
         await listen(srv, lp, lh);
         servers.push(srv);
-        log(`Forwarding ${lh}:${lp} -> ${f.destHost}:${f.destPort}`);
+        log(`Forwarding ${lh}:${srv.address().port} -> ${f.destHost}:${f.destPort}`);
       } else if (f.type === 'D') {
         const srv = net.createServer((sock) => socks5(sock, client));
         await listen(srv, lp, lh);
         servers.push(srv);
-        log(`SOCKS5 proxy listening on ${lh}:${lp}`);
+        log(`SOCKS5 proxy listening on ${lh}:${srv.address().port}`);
       } else if (f.type === 'R') {
         await new Promise((res, rej) => client.forwardIn(lh, lp, (err) => (err ? rej(err) : res())));
         remote.push(f);
