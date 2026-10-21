@@ -199,7 +199,9 @@ function parseDirection(direction, kind, requests, limits, budget, input = input
       break;
     }
     message.mediaType = trimOws((values(message.headers, 'content-type')[0] || '').split(';')[0]).toLowerCase();
-    const transfer = values(message.headers, 'transfer-encoding').join(',').toLowerCase().split(',').map(trimOws).filter(Boolean);
+    const transferFields = values(message.headers, 'transfer-encoding');
+    const hasTransfer = transferFields.length > 0;
+    const transfer = transferFields.join(',').toLowerCase().split(',').map(trimOws).filter(Boolean);
     const lengths = values(message.headers, 'content-length').flatMap((s) => s.split(',').map(trimOws));
     const validLengths = lengths.length && lengths.every((s) => /^\d+$/.test(s) && Number.isSafeInteger(Number(s)) && Number(s) === Number(lengths[0]));
     const request = kind === 'response' ? requests[requestIndex] : null;
@@ -210,19 +212,19 @@ function parseDirection(direction, kind, requests, limits, budget, input = input
     );
     const switching = kind === 'response' && (message.status === 101 || (request?.method === 'CONNECT' && message.status >= 200 && message.status < 300));
     // RFC 9112 section 6.3: HEAD/status/CONNECT rules precede framing fields.
-    if (!noBody && ((lengths.length && !validLengths) || (lengths.length && transfer.length))) {
-      message.warnings.push(transfer.length ? 'Both Transfer-Encoding and Content-Length are present; framing is ambiguous.' : 'Invalid or conflicting Content-Length values.');
+    if (!noBody && ((lengths.length && !validLengths) || (lengths.length && hasTransfer))) {
+      message.warnings.push(hasTransfer ? 'Both Transfer-Encoding and Content-Length are present; framing is ambiguous.' : 'Invalid or conflicting Content-Length values.');
       finish();
       stopped = true;
       break;
     }
     if (noBody) {
       message.complete = true;
-      if ((lengths.length && !validLengths) || (lengths.length && transfer.length)) message.warnings.push('Invalid framing headers ignored because this response cannot contain a body.');
-    } else if (transfer.length) {
+      if ((lengths.length && !validLengths) || (lengths.length && hasTransfer)) message.warnings.push('Invalid framing headers ignored because this response cannot contain a body.');
+    } else if (hasTransfer) {
       message.framing = 'chunked';
       if (message.version === '1.0' || transfer.length !== 1 || transfer[0] !== 'chunked') {
-        message.warnings.push(message.version === '1.0' ? 'Transfer-Encoding is invalid in HTTP/1.0.' : `Unsupported Transfer-Encoding: ${transfer.join(', ')}.`);
+        message.warnings.push(message.version === '1.0' ? 'Transfer-Encoding is invalid in HTTP/1.0.' : `Unsupported Transfer-Encoding: ${transfer.join(', ') || '(empty)'}.`);
         finish();
         stopped = true;
         break;

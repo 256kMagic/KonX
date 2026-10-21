@@ -8,6 +8,10 @@ Connect to a switch, move files over SFTP, edit its configuration, and investiga
 
 [Download the latest release](https://github.com/256kMagic/KonX/releases/latest) · [User guide](docs/USER_GUIDE.md) · [Report an issue](https://github.com/256kMagic/KonX/issues)
 
+**0.3.0 test build:** Security Suite, Wi-Fi Tools, Mist/Marvis monitoring and troubleshooting, and local JavaScript error logs are now available in the latest source/test build. See the [0.3.0 notes](docs/releases/0.3.0.md). The public download links below still refer to the published 0.2.0 release.
+
+**0.4.0 test build:** adds **AI & Knowledge**, with encrypted keys for OpenAI, Claude, Gemini, Nyquest, and a custom OpenAI-compatible endpoint; an offline background SQLite vector index; 46 bundled articles and an editable reference library; and **Explain with AI** in tool tabs. See the [0.4.0 notes](docs/releases/0.4.0.md) and [AI and knowledge guide](docs/AI_KNOWLEDGE_GUIDE.md). Older 0.3.0 installations do not include AI. The public download links below still refer to 0.2.0.
+
 ![KonX terminal workspace](docs/screenshots/terminal.png)
 
 ## Download and install
@@ -53,6 +57,9 @@ See the [release notes](CHANGELOG.md) and [user guide](docs/USER_GUIDE.md) for w
 - **Transfer:** open SFTP from a saved SSH session or an existing SSH tab to work with local and remote files side by side.
 - **Edit:** open Notepad for local documents, remote SFTP files, configuration cleanup, file hashing, or document comparison.
 - **Investigate:** open Packet Capture to record traffic or inspect an existing capture, or choose a network tool from the home screen.
+- **Assess security (0.3.0):** open Security Suite for Windows posture and remote exposure, TLS/SSH, web headers, device configuration, and saved-capture checks. Review evidence, compare local baselines, and export JSON/HTML reports. See the [Security Suite guide](docs/SECURITY_SUITE.md) for scope and workflows.
+- **Wireless and Mist (0.3.0):** inspect local Wi-Fi adapters, cached BSSIDs, signal and channels, or save an encrypted Mist token for AP/client monitoring and direct Marvis troubleshooting. See the [Wi-Fi and Mist guide](docs/WIRELESS_MIST_GUIDE.md).
+- **Understand results (0.4.0):** choose **Explain with AI** in a tool tab, preview the result context, and ask a configured AI provider for an explanation with local references. Search the offline library or maintain your own reference notes without an AI key. See the [AI and knowledge guide](docs/AI_KNOWLEDGE_GUIDE.md).
 
 The [user guide](docs/USER_GUIDE.md) covers connection settings, credentials, imports, transfers, editing, capture filters, and troubleshooting in detail.
 
@@ -186,7 +193,7 @@ Then retry `npm start`. Serial support depends on the optional `serialport` pack
 npm run dist
 ~~~
 
-The build creates `dist/KonX-Setup-0.2.0.exe` and `dist/KonX-0.2.0-portable.exe`. `npm run dist:dir` creates the unpacked Windows application for inspection. Release executables are attached to [GitHub Releases](https://github.com/256kMagic/KonX/releases); they are not checked into the source tree.
+The build creates versioned executables under `dist/`, such as `KonX-Setup-0.2.1.exe` and `KonX-0.2.1-portable.exe` for the current source version. `npm run dist:dir` creates the unpacked Windows application for inspection. Published release executables are attached to [GitHub Releases](https://github.com/256kMagic/KonX/releases); they are not checked into the source tree.
 
 ### Test and try a local device
 
@@ -194,7 +201,7 @@ The build creates `dist/KonX-Setup-0.2.0.exe` and `dist/KonX-0.2.0-portable.exe`
 npm test
 ~~~
 
-The automated suite covers connections, host-key/authentication handling, SFTP, session storage/imports, network tools, packet decoding/filtering/analysis, capture files, and editor operations. Regression checks also cover download path validation, save/upload recovery, prompt handling, capture-file isolation, and closing connection tabs. Some live-capture behavior additionally depends on Windows permissions, adapters, and installed drivers.
+The automated suite covers connections, host-key/authentication handling, SFTP, session storage/imports, network tools, packet decoding/filtering/analysis, capture files, and editor operations. Regression checks also cover download cancellation and original-file preservation, editor reload/save recovery, prompt handling, capture-file isolation, malformed filters/files, large scans, and closing connection tabs. Some live-capture behavior additionally depends on Windows permissions, adapters, and installed drivers.
 
 Run `npm run test:traffic` for the focused offline reassembly, HTTP, body export, and traffic-view navigation tests. Run `npm run test:sip` for SIP/SDP parsing, call exports, and capture-snapshot navigation checks. These focused suites do not record network traffic or require a capture driver. The full suite also exercises the Electron interface, including session dialogs, tab overflow, and the SIP ladder.
 
@@ -236,6 +243,8 @@ Connect to `127.0.0.1` on port `2222`, username `test`, password `test`. These c
 KonX is an early **0.x** project. The Windows x64 release is the currently tested distribution. Packet filters implement KonX's supported syntax rather than the complete Wireshark filter language, capture insights are diagnostic aids, and serial/capture support depends on the available hardware and drivers.
 
 Version **0.2.0** adds the packet and SIP workflows and interface fixes described above. It retains the 0.1.2 connection-tab close fix and earlier fixes for SFTP download paths, connection errors and trust prompts, editor save state, remote-edit upload recovery, and loading capture files while a live capture is active.
+
+Development and test-build changes after the published 0.2.0 release are recorded in the [changelog](CHANGELOG.md).
 
 For help, start with the [user guide](docs/USER_GUIDE.md). Common first checks:
 

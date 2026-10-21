@@ -2,8 +2,16 @@
 // subnet calculator, Wake-on-LAN and interface / ARP info.
 import { h, icon, api, DataTable, contextMenu, toast, errMsg, fmtMs, csv, buildFields } from './ui.js';
 import { CaptureTab } from './capture.js';
+import { createSecurityTool } from './security.js';
+import { createWifiTool } from './wifi.js';
+import { createMistTool } from './mist.js';
+import { AITab } from './ai.js';
 
 export const TOOLS = [
+  { kind: 'ai', label: 'AI & Knowledge', icon: 'insight', desc: 'Ask an AI to explain results and browse the offline tool and vendor reference library' },
+  { kind: 'wifi', label: 'Wi-Fi Tools', icon: 'wifi', desc: 'Wireless adapters, visible access points, signal, channel crowding and security observations' },
+  { kind: 'mist', label: 'Mist & Marvis', icon: 'cloud', desc: 'Connect to Juniper Mist for AP/client monitoring and Marvis troubleshooting' },
+  { kind: 'security', label: 'Security Suite', icon: 'shield', desc: 'Windows assessment, TLS/SSH auditing, service exposure, web headers, configuration and capture review' },
   { kind: 'capture', label: 'Packet Capture', icon: 'capture', desc: 'Capture and decode traffic with plain-English insights, or open .pcap files' },
   { kind: 'ping', label: 'Ping Monitor', icon: 'activity', desc: 'Continuous ping of one or many hosts with loss, jitter and history' },
   { kind: 'sweep', label: 'Network Sweep', icon: 'radar', desc: 'Find live hosts on a subnet or range, with names and MACs' },
@@ -49,6 +57,7 @@ export function hostMenuItems(app, host, port) {
     '-',
     { label: 'Ping', icon: 'activity', action: () => app.openTool('ping', { hosts: host }) },
     { label: 'Port scan', icon: 'target', action: () => app.openTool('portscan', { targets: host }) },
+    { label: 'Security review', icon: 'shield', action: () => app.openTool('security', { host }) },
     { label: 'Traceroute', icon: 'route', action: () => app.openTool('traceroute', { host }) },
     { label: 'DNS lookup', icon: 'globe', action: () => app.openTool('dns', { name: host }) },
     { label: 'Capture traffic', icon: 'capture', action: () => app.openTool('capture', { filter: `host ${host}`, captureFilter: `host ${host}` }) },
@@ -72,6 +81,8 @@ class ToolView {
     this.icon = def.icon;
     this.state = 'idle';
     this.jobId = null;
+    this.jobSeq = 0;
+    this.disposed = false;
     this.el = h('div.view');
   }
 
@@ -99,13 +110,21 @@ class ToolView {
   }
 
   async runJob(kind, params) {
-    if (this.jobId) await this.stop();
+    if (this.disposed || this.jobId) return;
+    // Subscribe before starting: validation errors and short jobs can finish
+    // before the tools:start IPC reply reaches this window.
+    const id = `${this.id}:${++this.jobSeq}`;
+    this.jobId = id;
+    this.app.registerJob(id, this);
+    this.started = Date.now();
+    this.setRunning(true);
     try {
-      this.jobId = await api.invoke('tools:start', kind, params);
-      this.app.registerJob(this.jobId, this);
-      this.started = Date.now();
-      this.setRunning(true);
+      await api.invoke('tools:start', kind, params, id);
     } catch (e) {
+      if (this.disposed || this.jobId !== id) return;
+      this.app.unregisterJob(id);
+      this.jobId = null;
+      this.setRunning(false);
       toast(errMsg(e), 'err');
     }
   }
@@ -115,6 +134,7 @@ class ToolView {
   }
 
   onJobEvent(type, data) {
+    if (this.disposed) return;
     if (type === 'done' || type === 'error') {
       this.app.unregisterJob(this.jobId);
       this.jobId = null;
@@ -149,8 +169,10 @@ class ToolView {
   }
 
   dispose() {
-    this.stop();
+    this.disposed = true;
+    this.stop().catch(() => {});
     if (this.jobId) this.app.unregisterJob(this.jobId);
+    this.jobId = null;
   }
 }
 
@@ -215,6 +237,7 @@ class PingTool extends ToolView {
   }
 
   start() {
+    if (this.disposed || this.jobId) return;
     const hosts = this.hosts.value.trim();
     if (!hosts) return toast('Enter at least one host');
     this.stats.clear();
@@ -393,6 +416,7 @@ class SweepTool extends ToolView {
   }
 
   async start() {
+    if (this.disposed || this.jobId) return;
     this.hosts.clear();
     this.progress = { done: 0, total: 0, alive: 0 };
     this.app.setTabTitle(this, 'Sweep ' + this.targets.value.trim().split(/[\s,]+/)[0]);
@@ -505,6 +529,7 @@ class PortScanTool extends ToolView {
   }
 
   async start() {
+    if (this.disposed || this.jobId) return;
     if (!this.targets.value.trim()) return toast('Enter a target');
     this.results = [];
     this.progress = {};
@@ -590,14 +615,15 @@ class TraceTool extends ToolView {
   }
 
   async start() {
+    if (this.disposed || this.jobId) return;
     const host = this.host.value.trim();
     if (!host) return toast('Enter a destination');
     this.hops = [];
     this.log.replaceChildren();
     this.app.setTabTitle(this, 'Trace ' + host);
     this.table.setRows([]);
-    await this.runJob('traceroute', { host, maxHops: Number(this.maxHops.value) || 30, timeout: Number(this.timeout.value) || 1000, resolveNames: this.names.checked });
     this.summary.replaceChildren(h('span', `Tracing route to ${host}…`));
+    await this.runJob('traceroute', { host, maxHops: Number(this.maxHops.value) || 30, timeout: Number(this.timeout.value) || 1000, resolveNames: this.names.checked });
   }
 
   onEvent(type, d) {
@@ -976,6 +1002,10 @@ class NetInfoTool extends ToolView {
 const CLASSES = { capture: CaptureTab, ping: PingTool, sweep: SweepTool, portscan: PortScanTool, traceroute: TraceTool, dns: DnsTool, whois: WhoisTool, subnet: SubnetTool, wol: WolTool, netinfo: NetInfoTool };
 
 export function createTool(app, kind, params = {}) {
+  if (kind === 'ai') return new AITab(app, params);
+  if (kind === 'wifi') return createWifiTool(app, params);
+  if (kind === 'mist') return createMistTool(app, params);
+  if (kind === 'security') return createSecurityTool(app, params);
   const def = TOOLS.find((t) => t.kind === kind);
   if (kind === 'capture') return new CaptureTab(app, params);
   return new CLASSES[kind](app, def, params);

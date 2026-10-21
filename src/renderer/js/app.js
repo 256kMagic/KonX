@@ -6,6 +6,7 @@ import { SessionTree, editSessionDialog } from './sessions.js';
 import { TOOLS, createTool, hostMenuItems } from './tools.js';
 import { settingsDialog } from './settings.js';
 import { NotepadTab } from './notepad/notepad.js';
+import { toolContext } from './tool-context.mjs';
 
 const RECENT_KEY = 'konx.recent';
 
@@ -201,7 +202,7 @@ class App {
       addEventListener('mousemove', move);
       addEventListener('mouseup', up);
     });
-    this.sidebar = h('div#sidebar', this.sideSessions, h('div.side-section', h('div.side-head', h('span.title', 'Network Tools')), toolList), resizer);
+    this.sidebar = h('div#sidebar', this.sideSessions, h('div.side-section.side-tools', h('div.side-head', h('span.title', 'Network Tools')), toolList), resizer);
 
     this.tabbar = h('div#tabbar');
     this.tabScrollLeft = h('button.tb-btn.icon-only.tab-nav', { title: 'Scroll tabs left', 'aria-label': 'Scroll tabs left', onclick: () => this.scrollTabs(-1) }, icon('chev-left'));
@@ -580,7 +581,22 @@ class App {
   }
 
   openTool(kind, params = {}) {
-    return this.addTab(createTool(this, kind, params));
+    const tab = createTool(this, kind, params);
+    if (kind !== 'ai') {
+      const heading = tab.el.querySelector('.tool-title') || tab.el.querySelector('.tool-head') || tab.el.querySelector('.cap-frow');
+      heading?.append(h('button.btn.sm', { title: 'Preview these results in AI & Knowledge', onclick: () => this.explainTool(tab) }, icon('insight'), 'Explain with AI'));
+    }
+    return this.addTab(tab);
+  }
+
+  async explainTool(tab) {
+    if (tab.disposed) return;
+    try {
+      const preview = await api.invoke('tools:aiPreview', { context: toolContext(tab) });
+      if (tab.disposed) return;
+      return this.openTool('ai', { label: tab.title, context: preview.context,
+        question: `Explain these ${tab.title} results in plain language. Distinguish observed facts, unknowns, and possible causes, then suggest which KonX tool to use next.` });
+    } catch (error) { toast(errMsg(error), 'err'); }
   }
 
   hostMenu(host, port) {

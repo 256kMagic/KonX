@@ -55,14 +55,14 @@ class NotepadStore {
 }
 
 function atomicWrite(file, bytes) {
-  const tmp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, bytes);
+  const tmp = `${file}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
   try {
+    fs.writeFileSync(tmp, bytes, { flag: 'wx' });
     fs.renameSync(tmp, file);
-  } catch (e) {
-    // Renaming over a file that another program holds open can fail on Windows.
-    fs.rmSync(tmp, { force: true });
-    fs.writeFileSync(file, bytes);
+  } finally {
+    // A locked destination or failed replacement must leave its original
+    // contents intact. Writing directly as a fallback would truncate them.
+    try { fs.rmSync(tmp, { force: true }); } catch {}
   }
 }
 
@@ -182,7 +182,9 @@ async function findInFiles(jobId, opts, emit, signal) {
       // Skip binaries (NUL bytes) unless the file is UTF-16 with a BOM.
       const utf16 = buf.length >= 2 && ((buf[0] === 0xff && buf[1] === 0xfe) || (buf[0] === 0xfe && buf[1] === 0xff));
       if (!utf16 && buf.subarray(0, 8000).includes(0)) continue;
-      const text = utf16 ? buf.toString('utf16le') : buf.toString('utf8');
+      const text = utf16
+        ? new TextDecoder(buf[0] === 0xfe ? 'utf-16be' : 'utf-16le').decode(buf.subarray(2))
+        : buf.toString('utf8').replace(/^\uFEFF/, '');
       const lines = text.split(/\r\n|\n|\r/);
       let fileHits = 0;
       for (let i = 0; i < lines.length; i++) {

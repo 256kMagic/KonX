@@ -51,6 +51,7 @@ function harness({ showTraffic, reconstruct } = {}) {
         return reconstruct ? reconstruct(...args) : stream;
       },
     },
+    setAutoScroll: (enabled) => events.push(['auto-scroll', enabled]),
     setFilter: (filter) => {
       events.push(['filter', filter]);
       tab.view = packets.flatMap((packet, index) => packet.ann.stream === 7 ? [index] : []);
@@ -68,6 +69,7 @@ async function runTrafficUiTests(test) {
     const h = harness({ showTraffic: () => ({ action: 'packet', frame: 900 }) });
     await h.tab.follow(7);
     assert.deepEqual(h.events, [
+      ['auto-scroll', false],
       ['filter', 'tcp.stream == 7'],
       ['select', 2],
       ['visible', 1],

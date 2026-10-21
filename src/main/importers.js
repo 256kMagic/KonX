@@ -83,12 +83,20 @@ function importSshConfig(file) {
   let cur = null;
   const jumpNames = [];
   for (const raw of text.split(/\r?\n/)) {
-    const line = raw.replace(/#.*$/, '').trim();
+    // A # inside a quoted filename is data, while an unquoted # starts a comment.
+    let quote = '';
+    let line = '';
+    for (const ch of raw) {
+      if ((ch === '"' || ch === "'") && (!quote || quote === ch)) quote = quote ? '' : ch;
+      else if (ch === '#' && !quote) break;
+      line += ch;
+    }
+    line = line.trim();
     if (!line) continue;
-    const m = line.match(/^(\S+)\s*=?\s*(.+)$/);
+    const m = line.match(/^([^\s=]+)(?:\s*=\s*|\s+)(.+)$/);
     if (!m) continue;
     const key = m[1].toLowerCase();
-    const val = m[2].trim().replace(/^"(.*)"$/, '$1');
+    const val = m[2].trim().replace(/^(["'])(.*)\1$/, '$2');
     if (key === 'host') {
       cur = null;
       for (const alias of val.split(/\s+/)) {
@@ -97,6 +105,10 @@ function importSshConfig(file) {
         out.push(cur);
         break;
       }
+    } else if (key === 'match') {
+      // Conditional Match clauses need OpenSSH evaluation, which this importer
+      // does not perform. Their options cannot belong to the preceding Host.
+      cur = null;
     } else if (cur) {
       if (key === 'hostname') cur.host = val;
       else if (key === 'user') cur.username = val;

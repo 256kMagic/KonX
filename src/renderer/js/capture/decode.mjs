@@ -50,7 +50,7 @@ export class Ctx {
     this.r = { proto: '', src: '', dst: '', info: '', cls: '', f: { hosts: [] }, layers: [], explain: [], notes: [], nodes: tree ? [] : null };
   }
   need(o, n) {
-    if (o < 0 || o + n > this.d.length) throw new Truncated();
+    if (o < 0 || n < 0 || o + n > this.end) throw new Truncated();
   }
   u8(o) {
     this.need(o, 1);
@@ -83,7 +83,7 @@ export class Ctx {
     return fmtIp6(this.d, o);
   }
   text(o, end, max = 4096) {
-    const e = Math.min(end, o + max, this.d.length);
+    const e = Math.min(end, o + max, this.end);
     let s = '';
     for (let i = o; i < e; i++) s += String.fromCharCode(this.d[i]);
     return s;
@@ -379,6 +379,7 @@ export function ipv4(c, o) {
   c.need(o, ihl);
   const tos = c.u8(o + 1);
   const tot = c.u16(o + 2);
+  if (tot < ihl) throw new Truncated();
   const id = c.u16(o + 4);
   const ff = c.u16(o + 6);
   const ttl = c.u8(o + 8);
@@ -434,9 +435,9 @@ export function ipv4(c, o) {
   c.r.ttl = ttl;
   if (!csumOk) c.r.notes.push('IPv4 header checksum is incorrect (normal for packets sent by this PC when checksum offload is on)');
   c.top('IPv4', `${IP_PROTOS[proto] || 'Protocol ' + proto}`, '');
-  const end = Math.min(c.d.length, o + Math.max(tot, ihl));
+  const end = Math.min(c.end, o + tot);
   if (tot > c.d.length - o) c.r.notes.push('IP packet is longer than the captured bytes (snap length or TSO)');
-  c.end = tot ? end : c.d.length;
+  c.end = end;
   if (frag > 0) {
     c.top('IPv4', `Fragmented IP protocol (proto=${IP_PROTOS[proto] || proto}, off=${frag}, ID=0x${hex4(id)})`, '');
     c.explain(`This is a fragment (offset ${frag}) of a larger ${IP_PROTOS[proto] || ''} packet from ${src} to ${dst}.`);
@@ -478,7 +479,7 @@ export function ipv6(c, o) {
   c.r.src = src;
   c.r.dst = dst;
   c.r.ttl = hlim;
-  c.end = Math.min(c.d.length, o + 40 + plen);
+  c.end = Math.min(c.end, o + 40 + plen);
   let p = o + 40;
   // Extension headers
   for (let i = 0; i < 8; i++) {

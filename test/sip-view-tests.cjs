@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const { setViewport } = require('./lib/electron-viewport.cjs');
 
 const pause = () => new Promise((resolve) => setTimeout(resolve, 20));
 async function until(check, description) {
@@ -48,8 +49,7 @@ async function runSipViewChecks(win, run) {
     return { canceled: false, filePath: path.join(exportRoot, 'call.' + format) };
   };
   try {
-    win.setContentSize(1400, 880);
-    await until(() => run('innerWidth === 1400 && innerHeight === 880'), 'SIP fixture viewport');
+    await setViewport(win, run, 1400, 880);
     await evaluate(async (fixtureUrl) => {
       const { sipDemoCapture } = await import(fixtureUrl);
       window.__sipTestTab = window.__app.openTool('capture');
@@ -64,8 +64,7 @@ async function runSipViewChecks(win, run) {
     assert.equal(await run('document.querySelectorAll(".sip-lane").length'), 3);
     assert.equal(await run('document.querySelectorAll(".sip-message-arrow.retransmission").length'), 1);
     assert.equal(await run('document.querySelectorAll(".sip-arrow-head").length'), 14, 'every retained message is a visible directional arrow');
-    win.setContentSize(900, 560);
-    await until(() => run('innerWidth === 900 && innerHeight === 560'), 'small SIP fixture viewport');
+    await setViewport(win, run, 900, 560);
     await painted();
     const bounds = await evaluate(() => {
       const rect = (element) => {
@@ -89,8 +88,7 @@ async function runSipViewChecks(win, run) {
       assert.ok(bounds[region].left >= bounds.body.left - 1 && bounds[region].right <= bounds.body.right + 1,
         'SIP ' + region + ' must stay inside the body; only the lane viewport scrolls horizontally');
     }
-    win.setContentSize(1400, 880);
-    await until(() => run('innerWidth === 1400 && innerHeight === 880'), 'restored SIP preview viewport');
+    await setViewport(win, run, 1400, 880);
     await painted();
     const previewPath = path.resolve(__dirname, '../user-data/sip-ui-preview.png');
     fs.mkdirSync(path.dirname(previewPath), { recursive: true });

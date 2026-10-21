@@ -13,8 +13,8 @@ const utf8 = new TextDecoder('utf-8');
 const strictUtf8 = new TextDecoder('utf-8', { fatal: true });
 const latin = new TextDecoder('iso-8859-1');
 const TOKEN = "[!#$%&'*+.^_`|~0-9A-Za-z-]+";
-const REQUEST = new RegExp(`^(${TOKEN}) ([^\\x00-\\x20\\x7f]+) SIP/2\\.0$`);
-const RESPONSE = /^SIP\/2\.0 ([1-6][0-9]{2})(?: ([^\x00-\x08\x0b\x0c\x0e-\x1f\x7f]*))?$/;
+const REQUEST = new RegExp(`^(${TOKEN}) ([^\\x00-\\x20\\x7f]+) SIP/2\\.0$`, 'i');
+const RESPONSE = /^SIP\/2\.0 ([1-6][0-9]{2})(?: ([^\x00-\x08\x0b\x0c\x0e-\x1f\x7f]*))?$/i;
 const TOKEN_RE = new RegExp(`^${TOKEN}$`);
 const COMPACT = { i: 'call-id', f: 'from', t: 'to', v: 'via', c: 'content-type', l: 'content-length', e: 'content-encoding' };
 const ows = (value) => value.replace(/^[ \t]+|[ \t]+$/g, '');
@@ -114,8 +114,8 @@ function identity(message) {
   message.toTag = parameter(message.to, 'tag', message.warnings);
   const cseq = field('cseq');
   const match = cseq && new RegExp(`^(\\d+)[ \\t]+(${TOKEN})$`).exec(cseq);
-  message.cseq = match && Number(match[1]) <= 0xffffffff ? { number: Number(match[1]), method: match[2] } : null;
-  if (!message.cseq) note(message.warnings, 'CSeq is missing, invalid or ambiguous; transaction association is unknown.');
+  message.cseq = match && Number(match[1]) < 0x80000000 ? { number: Number(match[1]), method: match[2] } : null;
+  if (!message.cseq) { note(message.warnings, 'CSeq is missing, invalid or ambiguous; transaction association is unknown.'); valid = false; }
   if (message.type === 'request' && message.cseq && message.method !== message.cseq.method) {
     note(message.warnings, 'CSeq method differs from the request method.'); message.cseq = null; valid = false;
   }
@@ -247,7 +247,9 @@ function parseMessages(bytes, context, state) {
       if (pos < bytes.length) note(warnings, `${bytes.length - pos} trailing datagram bytes are outside the declared SIP message.`);
       break;
     }
-    if (stop || !parsed.valid || !identityValid) break;
+    // Invalid identity cannot make this message complete, but it does not erase
+    // the next message's boundary when Content-Length framed it reliably.
+    if (stop || !parsed.valid) break;
   }
 }
 
@@ -363,7 +365,7 @@ function groupCalls(state) {
     call.dialogs = [...dialogs.values()];
     call.transactions = [...transactions.values()];
     const answered = call.dialogs.filter((d) => /^(Answered|Ended)/.test(d.outcome));
-    if (answered.length === 1) { call.outcome = answered[0].outcome; call.duration = answered[0].duration; }
+    if (answered.length === 1) { call.outcome = answered[0].outcome; call.setupTime = answered[0].setupTime; call.duration = answered[0].duration; }
     if (answered.length > 1) {
       call.outcome = answered.every((d) => d.outcome.startsWith('Ended')) ? `Ended (${answered.length} answered dialogs observed)` : `Answered (${answered.length} dialogs observed)`;
       call.duration = null;

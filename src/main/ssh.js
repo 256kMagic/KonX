@@ -39,21 +39,20 @@ function defaultAgent() {
  * @param {object} [sock] pre-connected stream (jump host channel)
  * @returns {Promise<{client: Client, info: object}>}
  */
-function connect(s, hooks, sock) {
-  return new Promise(async (resolve, reject) => {
-    const host = s.host;
-    const port = Number(s.port) || 22;
-    let username = s.username;
-    if (!username) {
-      const r = await hooks.ask({
-        kind: 'form',
-        title: `Login to ${host}`,
-        fields: [{ name: 'username', label: 'Username', type: 'text' }],
-      });
-      if (!r || !r.username) return reject(new Error('Login cancelled'));
-      username = r.username;
-    }
-
+async function connect(s, hooks, sock) {
+  const host = s.host;
+  const port = Number(s.port) || 22;
+  let username = s.username;
+  if (!username) {
+    const r = await hooks.ask({
+      kind: 'form',
+      title: `Login to ${host}`,
+      fields: [{ name: 'username', label: 'Username', type: 'text' }],
+    });
+    if (!r || !r.username) throw new Error('Login cancelled');
+    username = r.username;
+  }
+  return new Promise((resolve, reject) => {
     const client = new Client();
     const info = { host, port, username, hostKey: null };
     let password = s.password || '';
@@ -253,13 +252,22 @@ async function connectChain(s, hooks, resolveJump, depth = 0) {
   if (!jumpSession) throw new Error('Jump host session not found');
   hooks.log?.(`Connecting via jump host ${jumpSession.host}...`);
   const jump = await connectChain(jumpSession, hooks, resolveJump, depth + 1);
-  const stream = await new Promise((res, rej) =>
-    jump.client.forwardOut('127.0.0.1', 0, s.host, Number(s.port) || 22, (err, ch) => (err ? rej(err) : res(ch)))
-  );
-  const target = await connect(s, hooks, stream);
-  target.client.once('close', () => jump.client.end());
-  target.info.via = jump.info;
-  return target;
+  let stream;
+  try {
+    stream = await new Promise((res, rej) =>
+      jump.client.forwardOut('127.0.0.1', 0, s.host, Number(s.port) || 22, (err, ch) => (err ? rej(err) : res(ch)))
+    );
+    const target = await connect(s, hooks, stream);
+    target.client.once('close', () => jump.client.end());
+    target.info.via = jump.info;
+    return target;
+  } catch (error) {
+    // A failed target login never reaches the target's close handler. Close its
+    // channel and jump connection here, including any earlier hops in the chain.
+    stream?.destroy();
+    jump.client.end();
+    throw error;
+  }
 }
 
 function openShell(client, { term = 'xterm-256color', cols = 80, rows = 24 } = {}) {

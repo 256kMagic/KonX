@@ -572,10 +572,16 @@ export class CaptureTab {
   }
 
   async save(pkts) {
-    const bytes = writePcapng(pkts.map((p) => ({ ts: p.ts, len: p.len, linktype: p.lt, data: p.data })));
-    const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
-    const p = await api.invoke('cap:save', `${(this.fileName || 'konx-capture').replace(/\.(pcapng|pcap|cap)$/i, '')}-${stamp}.pcapng`, bytes);
-    if (p) toast(`Saved ${pkts.length.toLocaleString()} packets to ${p}`, 'ok');
+    try {
+      // Live capture can append packets while the native save dialog is open.
+      const count = pkts.length;
+      const bytes = writePcapng(pkts.map((p) => ({ ts: p.ts, len: p.len, linktype: p.lt, data: p.data })));
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+      const p = await api.invoke('cap:save', `${(this.fileName || 'konx-capture').replace(/\.(pcapng|pcap|cap)$/i, '')}-${stamp}.pcapng`, bytes);
+      if (p) toast(`Saved ${count.toLocaleString()} packets to ${p}`, 'ok');
+    } catch (error) {
+      toast(errMsg(error), 'err');
+    }
   }
 
   // ------------------------------------------------------------ filtering
@@ -745,6 +751,7 @@ export class CaptureTab {
       if (result.action === 'packet') {
         const index = packets.findIndex((p) => p.no === result.frame);
         if (index < 0) return;
+        this.setAutoScroll(false);
         this.setFilter(`${proto.toLowerCase()}.stream == ${streamId}`);
         this.select(index);
         this.list.ensureVisible(this.view.indexOf(index));

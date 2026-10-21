@@ -1,6 +1,8 @@
 # KonX User Guide
 
-This guide covers KonX 0.2.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, and network troubleshooting tools in one window.
+This guide covers KonX 0.2.x and the 0.3.0/0.4.0 test builds for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, and network troubleshooting tools in one window. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
+
+Version 0.4.0 adds [AI & Knowledge](AI_KNOWLEDGE_GUIDE.md): provider API keys, explanations of selected tool output, and an offline reference library backed by a background SQLite vector index. Older 0.3.0 builds do not include this feature.
 
 For downloads, build instructions, and project information, see the [README](../README.md) and [GitHub releases](https://github.com/256kMagic/KonX/releases).
 
@@ -18,6 +20,9 @@ For downloads, build instructions, and project information, see the [README](../
 - [Reassembled streams and readable traffic](#reassembled-streams-and-readable-traffic)
 - [SIP calls and signaling ladders](#sip-calls-and-signaling-ladders)
 - [Network tools](#network-tools)
+- [Security Suite](SECURITY_SUITE.md)
+- [Wi-Fi and Mist/Marvis](WIRELESS_MIST_GUIDE.md)
+- [AI and knowledge library (0.4.0)](AI_KNOWLEDGE_GUIDE.md)
 - [Settings](#settings)
 - [Keyboard reference](#keyboard-reference)
 - [Application data and backups](#application-data-and-backups)
@@ -600,6 +605,9 @@ KonX's normal Windows profile is under `%APPDATA%\KonX`. Installed and portable 
 | `settings.json` | Appearance, terminal, transfer, button-bar, and Notepad preferences |
 | `sessions.json` | Saved sessions, folders, and encrypted secret values |
 | `known_hosts.json` | Accepted SSH fingerprints |
+| `mist.json` | Mist cloud selection and Windows-encrypted API token (0.3.0+) |
+| `ai.json` | AI provider/model settings and Windows-encrypted API keys (0.4.0+) |
+| `knowledge/library.sqlite` and SQLite journal files | Offline reference articles, custom notes, chunks, and local vector index (0.4.0+) |
 | `notepad/session.json` | Editor document list and restore information |
 | `notepad/backup/*.txt` | UTF-8 recovery text for unsaved editor work |
 | Chromium/Electron profile files | UI state such as recent sessions and expanded folders |
@@ -624,6 +632,7 @@ Run this from the folder containing the portable executable. The environment var
 | Symptom | Checks and recovery |
 | --- | --- |
 | **A connection tab stays after clicking X** | Use version 0.1.2 or newer. **Ctrl+Shift+W** or **Ctrl+F4** closes the active application tab. Verify you are clicking the connection tab's X rather than a saved session or a Notepad document. |
+| **A JavaScript error dialog appears** | Copy its exact text before dismissing it, if possible. KonX 0.3.0 also saves startup errors, uncaught main-process JavaScript errors, and unhandled-rejection warnings to `diagnostics/javascript-errors.log` inside the active KonX profile, normally `%APPDATA%\KonX`. The previous log is `javascript-errors.previous.log`. A closed dialog's text can then be recovered from these files. Earlier 0.2.x builds do not include this logging. |
 | **SSH times out or is refused** | Check the host, SSH port, reachability, VPN, firewall, and server service. Use Ping/Port Scanner where authorized. Review the session's timeout and jump host. |
 | **SSH authentication fails** | Verify username, authentication method, key-file path, key passphrase, and server policy. Check the OpenSSH agent when using the default Windows agent method. Answer keyboard-interactive challenges as requested. |
 | **Unexpected host-key change** | Compare the old and new fingerprints with a trusted administrator. Replace the saved key only after establishing the reason. |
@@ -660,3 +669,5 @@ Open a [GitHub issue](https://github.com/256kMagic/KonX/issues) with:
 5. A minimal sanitized screenshot, configuration example, or capture only when needed.
 
 Remove credentials, private keys, host inventories, personal paths, sensitive command output, and packet payloads before posting publicly. Review redaction yourself even when using **Copy config without secrets**. Developer-tools output from **F12** can help with a reproducible UI failure, but inspect it for sensitive values before sharing it.
+
+JavaScript diagnostic logs are local and contain the application/runtime version, timestamp, error message, and stack trace. They can include file paths or target details from the error. Review them before sharing. No automatic error uploads are performed. The logger observes failures and preserves the original error handling; it does not recover a failed process or diagnose an earlier dismissed error retroactively.

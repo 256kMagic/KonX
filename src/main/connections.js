@@ -40,10 +40,13 @@ function expandLogPath(template, s) {
 }
 
 class SessionLogger {
-  constructor(file, timestamps) {
+  constructor(file, timestamps, onError) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     this.file = file;
     this.stream = fs.createWriteStream(file, { flags: 'a' });
+    // File creation and later disk-full errors arrive asynchronously. They must
+    // not escape as unhandled stream errors and terminate the application.
+    this.stream.on('error', onError);
     this.timestamps = timestamps;
     this.atLineStart = true;
     this.decoder = new TextDecoder('utf-8');
@@ -422,8 +425,21 @@ class ConnectionManager {
     const dir = this.deps.defaultLogDir();
     const template = (s.logging && s.logging.path) || path.join(dir, '%S_%Y-%M-%D_%h%m%s.log');
     const file = expandLogPath(template, s);
-    c.logger = new SessionLogger(file, !!(s.logging && s.logging.timestamps));
-    c.logger.note(`Log opened for ${s.name || s.host}`);
+    try {
+      const logger = new SessionLogger(file, !!(s.logging && s.logging.timestamps), (error) => {
+        if (c.logger !== logger) return;
+        c.logger = null;
+        this._local(id, `Logging stopped: ${error.message}`, '31');
+        if (!c.closed && this.conns.get(id) === c) this._status(id, 'connected', { info: this.info(id) });
+      });
+      c.logger = logger;
+      logger.note(`Log opened for ${s.name || s.host}`);
+    } catch (error) {
+      if (c.logger) c.logger.close();
+      c.logger = null;
+      this._local(id, `Could not start logging: ${error.message}`, '31');
+      return null;
+    }
     this._local(id, `Logging to ${file}`, '36');
     this._status(id, 'connected', { info: this.info(id) });
     return file;

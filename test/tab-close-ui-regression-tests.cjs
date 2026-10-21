@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { setViewport } = require('./lib/electron-viewport.cjs');
 
 const pause = (ms = 20) => new Promise((resolve) => setTimeout(resolve, ms));
 async function until(test, description, timeout = 10000) {
@@ -127,8 +128,7 @@ async function layoutChecks(win, run) {
       selected: modal.querySelector('.mtabs button.active').textContent };
   })()`);
   for (const [width, height] of [[1400, 880], [900, 560]]) {
-    win.setContentSize(width, height);
-    await until(() => run(`innerWidth === ${width} && innerHeight === ${height}`), 'requested session-dialog viewport size');
+    await setViewport(win, run, width, height);
     await run('window.__layoutSession = window.__app.editSession(); void 0;');
     await until(() => run('Boolean(document.querySelector(".modal .mtabs"))'), 'New session dialog');
     const baseline = await measureDialog();
@@ -160,8 +160,7 @@ async function layoutChecks(win, run) {
     assert.equal(await run('window.__app.sessions.data.sessions.length'), 0, 'layout fixture must not save sessions');
   }
 
-  win.setContentSize(1400, 880);
-  await until(() => run('innerWidth === 1400 && innerHeight === 880'), 'wide tab-strip viewport');
+  await setViewport(win, run, 1400, 880);
   await run(`window.__layoutTabs = Array.from({ length: 24 }, (_, index) => {
     const tab = window.__app.openTool('subnet');
     window.__app.setTabTitle(tab, 'Layout workspace ' + (index + 1));
@@ -207,8 +206,7 @@ async function layoutChecks(win, run) {
   await until(activeVisible, 'overflow-selected tab to be visible');
 
   await run('window.__app.activate(window.__layoutTabs[23])');
-  win.setContentSize(900, 560);
-  await until(() => run('innerWidth === 900 && innerHeight === 560'), 'narrow tab-strip viewport');
+  await setViewport(win, run, 900, 560);
   await until(activeVisible, 'active tab to remain visible after narrowing the window');
   await run('window.__app.toggleSidebar()');
   await until(activeVisible, 'active tab to remain visible after sidebar width changes');

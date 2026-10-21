@@ -156,11 +156,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Run fn over items with at most `limit` in flight; stops early when signal.stopped. */
 async function pool(items, limit, fn, signal) {
+  const count = typeof items === 'number' ? items : items.length;
   let i = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (i < items.length && !signal.stopped) {
+  const workers = Array.from({ length: Math.min(limit, count) }, async () => {
+    while (i < count && !signal.stopped) {
       const idx = i++;
-      await fn(items[idx], idx);
+      await fn(typeof items === 'number' ? idx : items[idx], idx);
     }
   });
   await Promise.all(workers);
@@ -331,12 +332,13 @@ async function portScan({ targets, ports, timeout = 1000, concurrency = 200, ban
   const portList = parsePorts(ports);
   if (!hosts.length) throw new Error('No targets');
   if (!portList.length) throw new Error('No ports');
-  const work = [];
-  for (const h of hosts) for (const pt of portList) work.push([h, pt]);
-  const total = work.length;
+  // Enumerate pairs lazily: even a /24 and all ports has over 16 million
+  // probes, which must not allocate millions of arrays before scanning starts.
+  const total = hosts.length * portList.length;
   let done = 0;
   const resolved = new Map();
   for (const h of hosts) {
+    if (signal.stopped) break;
     try {
       resolved.set(h, await resolveHost(h));
     } catch (e) {
@@ -345,7 +347,9 @@ async function portScan({ targets, ports, timeout = 1000, concurrency = 200, ban
   }
   let lastProgress = 0;
   const counts = { open: 0, closed: 0, filtered: 0 };
-  await pool(work, concurrency, async ([h, pt]) => {
+  await pool(total, concurrency, async (idx) => {
+    const h = hosts[Math.floor(idx / portList.length)];
+    const pt = portList[idx % portList.length];
     const ip = resolved.get(h);
     if (ip) {
       const r = await probePort(ip, pt, { timeout, banner });

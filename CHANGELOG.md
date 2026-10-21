@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.4.0 — 2026-10-20 (test build)
+
+### Added
+
+- AI & Knowledge workspace with separate Windows-encrypted API keys and editable models for OpenAI, Claude, Gemini, Nyquest, and a custom OpenAI-compatible Chat Completions endpoint.
+- Background local SQLite knowledge database with versioned reference articles, overlapping chunks, persistent TF-IDF cosine vectors, local retrieval, and custom note creation, editing, removal, and index rebuilds. Library search and reading work without an AI key.
+- Explain with AI actions in tool tabs, bounded result snapshots, explicit redacted-context previews, opt-in sharing, source articles alongside answers, cancellation, and configuration revision guards. No automatic tool execution or collection of saved sessions, documents, or packet payloads.
+
+See the [0.4.0 test-build notes](docs/releases/0.4.0.md), [AI and knowledge guide](docs/AI_KNOWLEDGE_GUIDE.md), and [architecture notes](docs/design/ai-knowledge.md). Older 0.3.0 builds do not include AI.
+
+Validation: 427 automated tests pass, including 43 new AI/provider, offline knowledge, integration, and real Electron workflow checks. All five provider protocols use simulated responses; encryption, SQLite/vector persistence, packaged-ASAR workers, cancellation, scoped sharing, failure states, and responsive layout are exercised without a live AI key or paid generation.
+
+## 0.3.0 — 2026-10-20 (test build)
+
+### Added
+
+- Wi-Fi Tools with native Windows adapter/connection details, cached BSSID survey, signal and channel views, security observations, filtering, and JSON export.
+- Mist & Marvis workspace with encrypted API-token storage, regional endpoint selection, authorized organization/site discovery, AP/client snapshots, and direct Marvis device/site troubleshooting.
+- Cancellation of active tool jobs during application shutdown, including Wi-Fi inventory children and Mist requests.
+- Security Suite tab with local Windows posture checks and a remote Windows TCP-exposure profile.
+- TLS/certificate, pre-authentication SSH, web-header, and single-host service-exposure assessments.
+- Offline Cisco-style configuration and saved PCAP/PCAPNG security findings with redacted line/frame evidence.
+- Result filters, evidence and recommendations, explicit unknown states and scope limits, local opt-in baselines, and JSON/HTML report exports.
+- Bounded collection and cancellation when stopped or closed, plus unit, loopback-network, synthetic-file, and real Electron workflow regression coverage.
+- Local JavaScript error logs, including startup failures, uncaught main-process errors, and unhandled-rejection warnings. The original Electron error handling remains active; logs rotate at 128 KiB and individual entries are bounded to 16 KiB.
+
+See the [0.3.0 test-build notes](docs/releases/0.3.0.md), [Security Suite guide](docs/SECURITY_SUITE.md), and [Wi-Fi/Mist guide](docs/WIRELESS_MIST_GUIDE.md). These tools are included in 0.3.0; the published 0.2.0 executables and older 0.2.1 test build do not include them.
+
+Validation: 384 automated tests pass, including 36 Wi-Fi/Mist checks, 56 security checks, and 13 diagnostics/boot checks using synthetic inputs, loopback services, and isolated real Electron processes. Wireless coverage includes native WLAN layouts, a nested child loading from an ASAR archive, encrypted token storage, fixed regional HTTPS requests, cancellation, redaction, cloud scope/revision changes, exports, and minimum-window layout. Mist tests use synthetic credentials and mocked cloud responses; no live Mist account was queried. Error-logging tests cover fatal exceptions, warning-only rejections, startup failures, rotation, size limits, and failed log writes. A separate local Windows smoke test completed all 14 posture checks at the current user's permission level; inaccessible firmware/encryption checks remained unknown.
+
+## 0.2.1 — 2026-10-20 (test build)
+
+### Fixed
+
+- Preserve existing local files when SFTP downloads fail or are cancelled; replace them only after a successful download.
+- Cancel transfers waiting for conflict decisions or channels, and stop queuing files after the SFTP tab closes.
+- Clean up late SFTP logins, failed subsystem setup, transport errors, and external-edit watchers while preserving shared terminal connections.
+- Preserve editor changes typed during a reload, confirm before reopening an unsaved document with another encoding, and ignore reads that finish after closure.
+- Preserve original files when an atomic editor save cannot replace its destination, and correctly search UTF-16 BE/LE files without counting their BOM as text.
+- Reject SSH setup errors without hanging, close jump connections after target failures, and handle log-file errors without terminating the app or stranding a connection.
+- Read OpenSSH `key=value` settings and quoted `#` characters, and keep unsupported `Match` blocks from changing the preceding imported host.
+- Reject lone `&`/`|` filter operators without freezing the window, validate CIDR/port ranges, and include VLAN zero in the bare VLAN filter.
+- Validate pcapng block boundaries, interface references, and packet lengths; exclude simple-packet alignment bytes from captured payloads.
+- Keep IP decoding inside its payload boundary and match DNS replies to the correct resolver.
+- Deliver network-tool errors/results even when they arrive before the start reply, cancel tools closed during startup, and prevent duplicate starts from clearing active results.
+- Start large port scans without allocating the entire host/port task matrix, and preserve completed traceroute summaries.
+- Reject empty HTTP Transfer-Encoding fields instead of inventing body boundaries or subsequent requests; retain valid zero-valued TCP handshake timestamps and RTTs.
+- Accept case-insensitive SIP version tokens, validate CSeq bounds, and retain correctly framed messages following malformed identities.
+- Derive call setup time from its sole answered dialog when SIP tags differ across observed legs.
+- Pause Auto-scroll when inspecting Follow Stream packet evidence, surface capture-save errors, and report the actual exported packet count while live capture continues.
+- Run Electron layout and SIP view checks at fractional display scales while retaining all viewport and control-bounds assertions.
+
+Validation: 279 automated tests pass on Windows, including 53 regression checks added across the local reviews. The real Electron checks cover connection-tab closure, session dialogs, overflowing tabs, the SIP ladder, SDP, source-packet navigation, and both SIP export actions. The earlier local fixes are integrated with the 0.2.0 stream reconstruction and traffic views.
+
+The Windows x64 installer and portable executable were built with publishing disabled. All 53 packaged source files match the working source. The packaged app passed an isolated SIP workflow check with three calls, SDP, split TCP reconstruction, packet navigation, and JSON/PCAPNG round trips. See the [0.2.1 test-build notes](docs/releases/0.2.1.md).
+
 ## 0.2.0 — 2026-10-20
 
 ### Added

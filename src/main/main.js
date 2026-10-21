@@ -11,6 +11,11 @@ const { ConnectionManager } = require('./connections');
 const { SftpManager } = require('./sftp');
 const localfs = require('./localfs');
 const nettools = require('./nettools');
+const security = require('./security');
+const wifi = require('./wifi');
+const { MistClient } = require('./mist');
+const { AIClient } = require('./ai');
+const { KnowledgeLibrary } = require('./knowledge');
 const importers = require('./importers');
 const serial = require('./serial');
 const { CaptureManager, readCaptureFile } = require('./capture');
@@ -28,6 +33,10 @@ let sftp;
 let capture;
 let npStore;
 let npWatcher;
+let mist;
+let ai;
+let knowledge;
+const toolJobs = new Map();
 
 function send(channel, ...args) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, ...args);
@@ -287,19 +296,25 @@ function registerIpc() {
   });
 
   // network tools
-  const jobs = new Map();
+  const jobs = toolJobs;
   let jobSeq = 0;
   const runners = {
+    security: security.run,
+    wifi: wifi.run,
+    mist: (params, emit, signal) => mist.run(params, emit, signal),
+    ai: (params, emit, signal) => ai.run(params, emit, signal),
     ping: nettools.pingMonitor,
     sweep: nettools.sweep,
     portscan: nettools.portScan,
     traceroute: nettools.traceroute,
   };
-  handle('tools:start', (kind, params) => {
+  handle('tools:start', (kind, params, requestedId) => {
     const fn = runners[kind];
     if (!fn) throw new Error('Unknown tool ' + kind);
-    const id = ++jobSeq;
-    const signal = { stopped: false, onStop: null };
+    if (requestedId !== undefined && (typeof requestedId !== 'string' || !requestedId || requestedId.length > 128)) throw new Error('Invalid tool job ID');
+    const id = requestedId ?? ++jobSeq;
+    if (jobs.has(id)) throw new Error('Tool job is already running');
+    const signal = { stopped: false, onStop: null, kind };
     jobs.set(id, signal);
     const emit = (type, data) => send('tools:event', id, type, data);
     Promise.resolve()
@@ -316,6 +331,33 @@ function registerIpc() {
     if (!s) return;
     s.stopped = true;
     if (s.onStop) s.onStop();
+  });
+  handle('tools:mistConfig', () => mist.getConfig());
+  handle('tools:mistConfigure', (params) => mist.configure(params));
+  handle('tools:aiConfig', () => ai.getConfig());
+  handle('tools:aiConfigure', (params) => {
+    const config = ai.configure(params);
+    for (const signal of jobs.values()) {
+      if (signal.kind !== 'ai') continue;
+      signal.stopped = true;
+      try { signal.onStop?.(); } catch { /* Cancel the other AI jobs too. */ }
+    }
+    return config;
+  });
+  handle('tools:aiPreview', (params) => ai.preview(params?.context));
+  handle('tools:knowledgeStatus', () => knowledge.status());
+  handle('tools:knowledgeList', (params) => knowledge.list(params));
+  handle('tools:knowledgeGet', (id) => knowledge.get(id));
+  handle('tools:knowledgeSave', (article) => knowledge.save(article));
+  handle('tools:knowledgeRemove', (id) => knowledge.remove(id));
+  handle('tools:knowledgeRebuild', () => knowledge.rebuild());
+  handle('tools:knowledgeOpenSource', async (id) => {
+    const article = await knowledge.get(id);
+    if (!article?.sourceUrl) throw new Error('This article has no source link.');
+    let url;
+    try { url = new URL(article.sourceUrl); } catch { throw new Error('This article has no source link.'); }
+    if (url.protocol !== 'https:' || url.username || url.password) throw new Error('Article sources must use HTTPS without embedded credentials.');
+    await shell.openExternal(url.href);
   });
   handle('tools:dns', (params) => nettools.dnsLookup(params));
   handle('tools:whois', (params) => nettools.whois(params));
@@ -421,6 +463,9 @@ app.whenReady().then(() => {
     decrypt: (s) => safeStorage.decryptString(Buffer.from(s, 'base64')),
   };
   store = new Store(app.getPath('userData'), crypt);
+  mist = new MistClient({ dir: app.getPath('userData'), crypt });
+  knowledge = new KnowledgeLibrary({ dir: app.getPath('userData') });
+  ai = new AIClient({ dir: app.getPath('userData'), crypt, knowledge });
   connections = new ConnectionManager({ emit: send, ask, store, defaultLogDir });
   sftp = new SftpManager({
     emit: send,
@@ -440,8 +485,13 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  for (const signal of toolJobs.values()) {
+    signal.stopped = true;
+    try { signal.onStop?.(); } catch { /* Finish shutting down other jobs too. */ }
+  }
   connections && connections.closeAll();
   sftp && sftp.closeAll();
   capture && capture.stopAll();
+  knowledge && knowledge.close()?.catch?.(() => {});
   app.quit();
 });

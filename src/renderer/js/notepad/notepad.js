@@ -432,12 +432,33 @@ export class NotepadTab {
     if (p) this.openFile(p);
   }
 
-  async reload(d = this.current, { ask = true } = {}) {
+  async reload(d = this.current, { ask = true, encoding = null } = {}) {
     if (!d || !d.path) return;
     if (ask && this.isDirty(d) && !(await confirmDialog(`Reload "${d.title}" from disk and lose your changes?`, { okLabel: 'Reload', danger: true }))) return;
+    const isOpen = () => this.docs.includes(d) && !d.model.isDisposed();
+    if (!isOpen()) return;
+    const file = d.path;
+    const version = d.model.getAlternativeVersionId();
+    const previousEncoding = d.encoding;
+    const previousEol = d.eol;
+    const request = d.reloadRequest = (d.reloadRequest || 0) + 1;
     try {
-      const f = await api.invoke('np:read', d.path);
-      const dec = T.decodeBytes(f.bytes);
+      const f = await api.invoke('np:read', file);
+      if (!isOpen() || d.reloadRequest !== request) return;
+      // Reading the file is asynchronous. Never overwrite typing or a changed
+      // destination/format that arrived after the reload was requested.
+      if (d.path !== file || d.model.getAlternativeVersionId() !== version || d.encoding !== previousEncoding || d.eol !== previousEol || d.savePending) {
+        toast(`"${d.title}" changed while loading. Reload again to replace those changes.`, 'err');
+        return;
+      }
+      let dec;
+      if (encoding) {
+        const bytes = new Uint8Array(f.bytes);
+        const bom = encoding.startsWith('utf-16')
+          ? bytes.length >= 2 && ((bytes[0] === 0xff && bytes[1] === 0xfe) || (bytes[0] === 0xfe && bytes[1] === 0xff)) ? 2 : 0
+          : encoding === 'utf-8' && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? 3 : 0;
+        dec = { text: new TextDecoder(encoding).decode(bytes.subarray(bom)), encoding };
+      } else dec = T.decodeBytes(f.bytes);
       const view = this.current === d ? this.editor.saveViewState() : d.viewState;
       d.model.setValue(dec.text);
       d.encoding = dec.encoding;
@@ -454,16 +475,7 @@ export class NotepadTab {
   /** Reopen the file from disk, decoding it with a specific encoding. */
   async reopenWithEncoding(enc, d = this.current) {
     if (!d || !d.path) return toast('Save the document first', 'err');
-    const f = await api.invoke('np:read', d.path);
-    const bytes = new Uint8Array(f.bytes);
-    let text;
-    if (enc === 'windows-1252') text = new TextDecoder('windows-1252').decode(bytes);
-    else if (enc.startsWith('utf-16')) text = new TextDecoder(enc).decode(bytes[0] === 0xff || bytes[0] === 0xfe ? bytes.subarray(2) : bytes);
-    else text = new TextDecoder('utf-8').decode(bytes[0] === 0xef ? bytes.subarray(3) : bytes);
-    d.model.setValue(text);
-    d.encoding = enc;
-    d.savedVersion = d.model.getAlternativeVersionId();
-    this.changed();
+    return this.reload(d, { encoding: enc });
   }
 
   setEncoding(enc, d = this.current) {
