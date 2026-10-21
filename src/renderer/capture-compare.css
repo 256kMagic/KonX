@@ -1,0 +1,27 @@
+.compare-view { min-width:0; }
+.compare-view .tool-head { flex:0 1 auto; min-height:120px; max-height:49%; overflow:auto; gap:8px; }
+.compare-view .tool-title { flex-wrap:wrap; }
+.compare-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; min-width:0; }
+.compare-actions .input { width:auto; flex:1; min-width:120px; max-width:100%; }
+.compare-source-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.compare-source { display:flex; flex-direction:column; gap:6px; min-width:0; padding:10px; border:1px solid var(--border); border-radius:6px; }
+.compare-source>.hint,.compare-status { overflow-wrap:anywhere; }
+.compare-source-panel>summary { overflow-wrap:anywhere; margin-bottom:8px; }
+.compare-content { flex:1; min-width:0; min-height:120px; overflow:auto; padding:14px 16px; }
+.compare-content>.tbl-wrap { flex:0 0 auto; overflow:auto; margin-top:10px; max-height:320px; }
+.compare-content .tbl { min-width:760px; }
+.compare-content h3 { margin:4px 0 10px; }
+.compare-summary,.compare-coverage,.compare-pairing,.compare-detail { margin-bottom:14px; }
+.compare-view summary { cursor:pointer; }
+.compare-coverage-source { overflow-wrap:anywhere; min-width:0; }
+.compare-coverage-source p { margin:7px 0; }
+.compare-pairing>summary { margin-bottom:8px; }
+.compare-pair-row { display:flex; gap:8px; align-items:center; margin-top:6px; overflow-wrap:anywhere; }
+.compare-pair-row>span { min-width:0; flex:1; }
+.compare-value { display:block; white-space:normal; overflow-wrap:anywhere; max-width:230px; max-height:56px; overflow:hidden; }
+.compare-evidence { min-width:0; }
+.compare-evidence pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:230px; overflow:auto; font:12px/1.5 var(--mono); padding:10px; border:1px solid var(--border); border-radius:5px; user-select:text; }
+.compare-source-frames { display:flex; flex-wrap:wrap; gap:5px; max-height:140px; overflow:auto; }
+.compare-status { color:var(--muted); }
+@media(max-width:1000px) { .compare-view .tool-head,.compare-content { padding:10px; } .compare-source-grid { gap:8px; } .compare-source { padding:8px; } }
+@media(max-width:650px) { .compare-source-grid { grid-template-columns:1fr; } }

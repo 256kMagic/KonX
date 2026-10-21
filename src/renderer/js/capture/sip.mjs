@@ -218,7 +218,10 @@ function parseMessages(bytes, context, state) {
     }
     const absoluteStart = context.start + begin, absoluteEnd = context.start + pos;
     message.frames = frameSources(context, absoluteStart, absoluteEnd);
-    message.ts = message.frames.map((frame) => state.packetByNo.get(frame)?.ts).filter(finite).reduce((min, ts) => min == null ? ts : Math.min(min, ts), null);
+    const sources = message.frames.map((frame) => state.packetByNo.get(frame));
+    const timeKnown = sources.length && sources.every((packet) => packet && packet.timestampKnown !== false && finite(packet.ts));
+    message.ts = timeKnown ? sources.reduce((min, packet) => Math.min(min, packet.ts), Infinity) : null;
+    if (!timeKnown) note(warnings, 'A contributing capture timestamp is unavailable; message timing is unknown.');
     if (context.incomplete) { message.complete = false; note(warnings, 'Capture truncation, IP fragmentation or resource limits make this message incomplete.'); }
     if (context.direction?.conflicts.some((range) => overlap(range.start, range.end, absoluteStart, absoluteEnd))) {
       message.complete = false; note(warnings, 'Conflicting TCP overlap affects this SIP message.');

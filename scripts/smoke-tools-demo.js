@@ -50,6 +50,7 @@
   const supportsIncidents = versionParts[0] > 0 || versionParts[1] >= 10;
   const supportsRemoteCapture = versionParts[0] > 0 || versionParts[1] >= 11;
   const supportsRunbooks = versionParts[0] > 0 || versionParts[1] >= 12;
+  const supportsComparison = versionParts[0] > 0 || versionParts[1] >= 13;
 
   if (options.phase === 'save') {
     let deviceInspector = null;
@@ -58,6 +59,24 @@
     let incidentWorkspace = null;
     let remoteCapture = null;
     let runbooks = null;
+    let captureComparison = null;
+    if (supportsComparison) {
+      assert(TOOLS.some(tool => tool.kind === 'capture-compare'), 'Capture Comparison tool is missing');
+      const comparison = app.openTool('capture-compare'); await comparison.ready; await comparison.loadDemo();
+      assert(comparison.report?.summary.matchedServices === 2 && comparison.report.summary.changed >= 8, 'Packaged working/failing demo did not compare');
+      assert(comparison.sources.before.packets.length === 11 && comparison.sources.after.packets.length === 11, 'Demo source packets were not retained');
+      assert(['dns', 'tcp', 'http'].every(category => comparison.report.changes.some(row => row.category === category && row.status === 'changed')), 'Expected DNS/TCP/HTTP observations are missing');
+      assert(comparison.aiContext && !Object.hasOwn(comparison.aiContext, 'changes') && !Object.hasOwn(comparison.aiContext, 'packets'), 'Comparison AI context must contain only its summary');
+      const row = comparison.report.changes.find(item => item.category === 'http' && item.status === 'changed' && item.afterSources.length);
+      assert(row, 'HTTP source-frame evidence is missing');
+      await comparison.openSource('after', row.afterSources[0].frame);
+      const evidence = app.active;
+      assert(evidence.kind === 'capture' && evidence.packets.length === 11 && evidence.captureCoverage?.examinedAllRecords === true, 'Retained comparison source did not open with coverage');
+      await app.closeTab(evidence);
+      captureComparison = { matchedServices: comparison.report.summary.matchedServices, changes: comparison.report.summary.changed,
+        dnsTcpHttp: true, retainedSourceOpened: true, summaryOnlyAI: true, noNetworkCollection: app.jobs.size === 0 };
+      await app.closeTab(comparison); assert(!app.byId.has(comparison.id), 'Comparison tab failed to close');
+    }
     if (supportsRunbooks) {
       assert(TOOLS.some(tool => tool.kind === 'runbook'), 'Troubleshooting Runbooks tool is missing');
       const runbook = app.openTool('runbook'); await runbook.ready;
@@ -199,7 +218,7 @@
     const article = await api.invoke('tools:knowledgeSave', { title: noteTitle, vendor: 'Synthetic fixture', content: 'Wireless RSSI observations are cached evidence. Verify the adapter and collection time.' });
     await ai.readDocument(article.id);
     assert(ai.documentContent.textContent.includes('cached evidence'), 'Packaged local article did not render');
-    await complete({ phase: options.phase, version: info.version, tools: supportsRunbooks ? 10 : supportsRemoteCapture ? 9 : supportsIncidents ? 8 : supportsRtp ? 7 : supportsSnapshots ? 6 : supportsDeviceInspector ? 5 : 4, ...(deviceInspector ? { deviceInspector } : {}), ...(deviceSnapshots ? { deviceSnapshots } : {}), ...(rtpMedia ? { rtpMedia } : {}), ...(incidentWorkspace ? { incidentWorkspace } : {}), ...(remoteCapture ? { remoteCapture } : {}), ...(runbooks ? { runbooks } : {}), assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
+    await complete({ phase: options.phase, version: info.version, tools: supportsComparison ? 11 : supportsRunbooks ? 10 : supportsRemoteCapture ? 9 : supportsIncidents ? 8 : supportsRtp ? 7 : supportsSnapshots ? 6 : supportsDeviceInspector ? 5 : 4, ...(deviceInspector ? { deviceInspector } : {}), ...(deviceSnapshots ? { deviceSnapshots } : {}), ...(rtpMedia ? { rtpMedia } : {}), ...(incidentWorkspace ? { incidentWorkspace } : {}), ...(remoteCapture ? { remoteCapture } : {}), ...(runbooks ? { runbooks } : {}), ...(captureComparison ? { captureComparison } : {}), assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
   } else if (options.phase === 'forget') {
     assert(mist.config.hasToken && !mist.testButton.disabled, 'Encrypted Mist token did not survive app restart');
     assert(mist.token.value === '', 'Saved credential must not be returned to the input');

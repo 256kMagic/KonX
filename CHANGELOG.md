@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.13.0 — 2026-10-21
+
+- Compare working and failing capture files or retained snapshots of stopped capture tabs, with a synthetic demo.
+- Inspect DNS answers/codes/timing, TCP setup/resets/duplicate-sequence candidates, and plaintext HTTP/1 status/timing.
+- Match exact service identities or select explicit mappings; preserve changed, same, unknown, and unmatched observations.
+- Navigate to retained source packets on either side, export comparison JSON, add reports to incidents, and share summary-only AI context.
+- Preserve unknown packet timestamps and source coverage through viewing, capture/SIP export, and incident attachment; disclose bounded reads and incomplete records.
+- Keep mixed timing uncertainty, DNS question identity, and PCAPNG timestamp offsets in the owning analysis path.
+- Honor unknown capture times in SIP timing, RTP jitter, RTCP arrival observations, and paired audio alignment while retaining RTP-clock mono reconstruction.
+
+See the [comparison guide](docs/CAPTURE_COMPARISON.md) and [release notes](docs/releases/0.13.0.md).
+
 ## 0.12.0 — 2026-10-21
 
 - Run reviewed gateway, slow-application, and phone-audio procedures with explicit typed targets.

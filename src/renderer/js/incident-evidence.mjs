@@ -14,18 +14,10 @@ export function incidentEvidence(tab) {
   if (tab.kind === 'terminal') return textEvidence('terminal', tab.term?.getSelection(), 'Selected terminal output: ' + tab.title);
   if (tab.kind === 'capture') {
     if (!tab.packets?.length) throw new Error('No captured packets are available.');
-    // Account for packet padding and block headers before PCAPNG allocation.
-    // The writer's fixed KonX section is 40 bytes; each interface is 32 bytes.
-    const interfaces = new Set(); let size = 40;
-    for (const packet of tab.packets) {
-      if (!(packet.data instanceof Uint8Array)) throw new Error('A captured packet has no retained bytes.');
-      interfaces.add(packet.lt ?? packet.linktype ?? 1);
-      size += 32 + Math.ceil(packet.data.length / 4) * 4;
-      if (size + interfaces.size * 32 > CAPTURE_BYTES) throw new Error('Capture evidence exceeds 128 MiB. Save a smaller capture selection first.');
-    }
-    const packets = tab.packets.map(packet => ({ ts: packet.ts, len: packet.len, data: packet.data, linktype: packet.lt ?? packet.linktype ?? 1 }));
-    const bytes = writePcapng(packets);
-    if (bytes.byteLength > CAPTURE_BYTES) throw new Error('Capture evidence exceeds 128 MiB.');
+    const packets = tab.packets.map(packet => ({ ts: packet.ts, timestampKnown: packet.timestampKnown, len: packet.len, data: packet.data, linktype: packet.lt ?? packet.linktype ?? 1 }));
+    // The format owner validates exact section/interface/padding expansion
+    // before allocation, including timestamp-free simple packet sections.
+    const bytes = writePcapng(packets, { maxBytes: CAPTURE_BYTES });
     return { kind: 'capture', bytes, sourceName: tab.fileName || 'capture-snapshot.pcapng',
       label: ('Capture snapshot: ' + (tab.fileName || tab.title)).slice(0, 256), observedAt: null };
   }

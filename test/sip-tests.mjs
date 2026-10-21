@@ -45,6 +45,19 @@ const analyze = (items, options) => analyzeSipCalls(packets(items), options);
 
 export async function runSipTests(test) {
   console.log('packet capture: SIP calls and ladders');
+  await test('SIP source-PCAPNG unknown timestamps remain unknown for UDP and mixed-time TCP messages', () => {
+    const request = { ...datagram(sip(), { ts: 42 }), timestampKnown: false };
+    const response = datagram(sip({ status: 200, toTag: 'callee' }), { reverse: true, ts: 43 });
+    const call = analyzeSipCalls(packets([request, response], true)).calls[0];
+    assert.equal(call.messages.find(m => m.type === 'request').ts, null); assert.equal(call.setupTime, null);
+    assert.ok(call.transactions.every(t => t.elapsed === null));
+    const wire = sip(), split = 90;
+    const tcp = packets([segment([], { seq: 100, flags: 'S', ts: 40 }), segment(wire.subarray(0, split), { seq: 101, ts: 41 }),
+      { ...segment(wire.subarray(split), { seq: 101 + split, ts: 42 }), timestampKnown: false }], true);
+    const message = analyzeSipCalls(tcp).calls[0].messages[0];
+    assert.equal(message.complete, true); assert.deepEqual(message.frames, [2, 3]); assert.equal(message.ts, null);
+    assert.match(message.warnings.join(' '), /timestamp.*unavailable/);
+  });
   await test('SIP groups an any-port call across proxy legs after a PCAP round trip', () => {
     const result = analyzeSipCalls(packets([
       datagram(sip(), { sport: 55000, dport: 5099, ts: 1 }),

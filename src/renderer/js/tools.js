@@ -11,8 +11,10 @@ import { SnapshotTab } from './snapshots.js';
 import { IncidentTab } from './incidents.js';
 import { RemoteCaptureTab } from './remote-capture.js';
 import { RunbookTab } from './runbooks.js';
+import { CaptureComparisonTab } from './capture-compare.js';
 
 export const TOOLS = [
+  { kind: 'capture-compare', label: 'Capture Comparison', icon: 'columns', desc: 'Compare working and failing captures with observed DNS, TCP and HTTP behavior and original packet evidence' },
   { kind: 'runbook', label: 'Troubleshooting Runbooks', icon: 'route', desc: 'Run reviewed DNS, ping, TCP and device checks with explicit targets and manual capture guidance' },
   { kind: 'remote-capture', label: 'Remote Capture', icon: 'capture', desc: 'Collect bounded Linux packet captures over an existing SSH session and inspect retained traffic locally' },
   { kind: 'incidents', label: 'Incident Workspace', icon: 'file', desc: 'Collect local evidence and notes, inspect observation timelines and export incident reports' },
@@ -1012,6 +1014,7 @@ class NetInfoTool extends ToolView {
 const CLASSES = { capture: CaptureTab, ping: PingTool, sweep: SweepTool, portscan: PortScanTool, traceroute: TraceTool, dns: DnsTool, whois: WhoisTool, subnet: SubnetTool, wol: WolTool, netinfo: NetInfoTool };
 
 export function createTool(app, kind, params = {}) {
+  if (kind === 'capture-compare') return new CaptureComparisonTab(app, params);
   if (kind === 'runbook') return new RunbookTab(app, params);
   if (kind === 'remote-capture') return new RemoteCaptureTab(app, params);
   if (kind === 'incidents') return new IncidentTab(app, params);

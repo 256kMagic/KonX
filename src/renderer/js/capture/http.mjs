@@ -380,7 +380,9 @@ export async function parseHttpStream(stream, options = {}) {
   result.messages = [...requests.messages, ...responses.messages];
   result.warnings.push(...requests.warnings, ...responses.warnings);
   if (!canPair && requests.messages.length && responses.messages.length) result.warnings.push('Unverified connection starts, conflicting bytes, capture truncation or limits prevent reliable pairing; request/response pairing is not asserted.');
-  for (const message of result.messages) await contentDecode(message, limits, budget);
+  // Summary consumers need the same framing and pairing without decoding body
+  // content they do not display. The normal readable-traffic view is unchanged.
+  if (options.decodeBodies !== false) for (const message of result.messages) await contentDecode(message, limits, budget);
   if (canPair) {
     let index = 0;
     for (const request of requests.messages) result.exchanges.push({ id: request.id, request, response: null, informational: [], warnings: [] });

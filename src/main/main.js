@@ -386,6 +386,13 @@ function registerIpc() {
     if (s.onStop) s.onStop();
   });
   handle('tools:deviceConnections', () => deviceCollector.listConnections(connections));
+  handle('tools:comparisonOpen', async () => {
+    const result = await dialog.showOpenDialog(win, { title: 'Select capture for comparison', properties: ['openFile'],
+      filters: [{ name: 'Packet captures', extensions: ['pcap', 'pcapng', 'cap', 'dmp'] }] });
+    if (result.canceled || !result.filePaths[0] || !win || win.isDestroyed()) return null;
+    const file = result.filePaths[0];
+    return { name: path.basename(file), bytes: readCaptureFile(file, { maxBytes: 64 * 1024 * 1024 }) };
+  });
   handle('tools:remoteCaptureRead', (id) => remoteResults.read(id));
   handle('tools:remoteCaptureRemove', (id) => remoteResults.remove(id));
   const requireRunbookReady = () => {

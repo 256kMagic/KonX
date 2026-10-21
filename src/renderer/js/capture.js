@@ -42,6 +42,7 @@ export class CaptureTab {
     this.icon = 'capture';
     this.state = 'idle';
     this.packets = [];
+    this.captureCoverage = null;
     this.view = [];
     this.filter = null;
     this.analyzer = new Analyzer();
@@ -415,13 +416,14 @@ export class CaptureTab {
   /** capFilter: drop packets that do not match (capture filter of the built-in engine). */
   ingest(items, capFilter) {
     for (const it of items) {
-      const pkt = { no: this.packets.length + 1, ts: it.ts, caplen: it.caplen, len: it.len, data: it.data, lt: it.linktype };
+      const pkt = { no: this.packets.length + 1, ts: it.ts, timestampKnown: it.timestampKnown !== false && Number.isFinite(it.ts), caplen: it.caplen, len: it.len, data: it.data, lt: it.linktype ?? it.lt };
       pkt.d = decode(pkt.lt, pkt.data);
       if (capFilter && !capFilter.test(pkt)) {
         this.capFiltered++;
         continue;
       }
       this.analyzer.ingest(pkt);
+      if (!pkt.timestampKnown || this.packets[0]?.timestampKnown === false) pkt.rel = null;
       this.packets.push(pkt);
       if (!this.filter || this.filter.test(pkt)) this.view.push(this.packets.length - 1);
     }
@@ -465,7 +467,9 @@ export class CaptureTab {
     const live = this.state === 'running' ? ` · ${r.pps}/s · ${fmtRate(r.bps)}` : '';
     const drops = this.stats.dropped ? ` · ${this.stats.dropped} dropped` : '';
     const filtered = this.capFiltered ? ` · ${this.capFiltered.toLocaleString()} filtered out` : '';
-    this.statsEl.textContent = `${this.packets.length.toLocaleString()} packets${shown}${live}${filtered}${drops}`;
+    const incomplete = this.captureCoverage && (this.captureCoverage.limited || this.captureCoverage.truncated || this.captureCoverage.examinedAllRecords === false);
+    this.statsEl.textContent = `${this.packets.length.toLocaleString()} packets${shown}${live}${filtered}${drops}${incomplete ? ' · source incomplete' : ''}`;
+    this.statsEl.title = (this.captureCoverage?.warnings || []).join('\n');
     this.app.updateStatus(this);
     // throughput sparkline: live rate, else per-second timeline
     const series = this.state === 'running' ? this.rateHist : this.analyzer.timeline.slice(-60).map((t) => t.bytes * 8);
@@ -500,6 +504,7 @@ export class CaptureTab {
     const go = () => {
       this.rtpAbort?.abort();
       this.packets = [];
+      this.captureCoverage = null;
       this.view = [];
       this.analyzer.reset();
       this.selected = -1;
@@ -541,13 +546,38 @@ export class CaptureTab {
   }
 
   async loadBytes(bytes, name) {
+    return this.loadPacketSource(() => readCapture(bytes), name);
+  }
+
+  async loadPacketSnapshot(packets, name, coverage) {
+    if (!Array.isArray(packets) || packets.length > MAX_PACKETS) throw new Error('Retained capture exceeds its packet limit');
+    let bytes = 0;
+    for (const packet of packets) {
+      if (!(packet?.data instanceof Uint8Array)) throw new Error('Retained capture packet bytes are unavailable');
+      bytes += packet.data.length;
+      if (bytes > 256 * 1024 * 1024) throw new Error('Retained capture exceeds its byte limit');
+    }
+    // Own retained evidence before stopping another capture or yielding to UI.
+    const retained = packets.map(packet => ({ ts: packet.ts, timestampKnown: packet.timestampKnown,
+      caplen: packet.caplen ?? packet.data.length, len: packet.len ?? packet.data.length,
+      linktype: packet.linktype ?? packet.lt ?? 1, data: new Uint8Array(packet.data) }));
+    const retainedCoverage = coverage ? { ...coverage, warnings: [...(coverage.warnings || [])] } : null;
+    return this.loadPacketSource(() => ({ packets: retained, format: 'retained capture', coverage: retainedCoverage }), name);
+  }
+
+  async loadPacketSource(readSource, name) {
     const generation = this.loadGeneration = (this.loadGeneration || 0) + 1;
     await this.stop();
     const captureGeneration = this.captureGeneration;
-    const current = () => !this.disposed && generation === this.loadGeneration && captureGeneration === this.captureGeneration;
+    let destination = null;
+    const current = () => !this.disposed && generation === this.loadGeneration && captureGeneration === this.captureGeneration && (!destination || this.packets === destination);
     if (!current()) return;
-    const { packets, format } = readCapture(bytes);
+    const { packets, format, coverage } = readSource();
     this.clear(false);
+    // Clear replaces the retained array. Completion belongs to this exact
+    // destination; a user clear during a sliced import must not resume a suffix.
+    destination = this.packets;
+    this.captureCoverage = { ...(coverage || {}), examinedAllRecords: false, warnings: [...(coverage?.warnings || []), 'Capture loading is in progress; only a retained prefix is available.'] };
     this.fileName = name;
     this.app.setTabTitle(this, name);
     // Decode in slices so the window stays responsive on big files.
@@ -558,13 +588,15 @@ export class CaptureTab {
       await new Promise((r) => setTimeout(r, 0));
     }
     if (!current()) return;
+    this.captureCoverage = coverage || null;
     this.notice.classList.add('hidden');
     this.list.setCount(this.view.length);
     this.list.scrollTo(0);
     this.list.render();
     this.refreshSide();
     this.renderStats();
-    toast(`Loaded ${packets.length.toLocaleString()} packets (${/\.etl$/i.test(name) ? 'Windows trace' : format})`, 'ok');
+    const warnings = this.captureCoverage?.warnings || [];
+    toast(`Loaded ${packets.length.toLocaleString()} packets (${/\.etl$/i.test(name) ? 'Windows trace' : format})${warnings.length ? '. ' + warnings.join(' ') : ''}`, warnings.length ? 'warn' : 'ok');
   }
 
   saveMenu(e) {
@@ -579,7 +611,7 @@ export class CaptureTab {
     try {
       // Live capture can append packets while the native save dialog is open.
       const count = pkts.length;
-      const bytes = writePcapng(pkts.map((p) => ({ ts: p.ts, len: p.len, linktype: p.lt, data: p.data })));
+      const bytes = writePcapng(pkts.map((p) => ({ ts: p.ts, timestampKnown: p.timestampKnown, len: p.len, linktype: p.lt, data: p.data })));
       const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
       const p = await api.invoke('cap:save', `${(this.fileName || 'konx-capture').replace(/\.(pcapng|pcap|cap)$/i, '')}-${stamp}.pcapng`, bytes);
       if (p) toast(`Saved ${count.toLocaleString()} packets to ${p}`, 'ok');
@@ -639,8 +671,8 @@ export class CaptureTab {
     if (!p) return;
     const full = decode(p.lt, p.data, { tree: true });
     const frame = new Node(`Frame ${p.no}: ${p.len} bytes on wire (${p.len * 8} bits), ${p.caplen} bytes captured`, 0, p.caplen);
-    frame.add(`Arrival Time: ${new Date(p.ts * 1000).toISOString().replace('T', ' ').replace('Z', ' UTC')}`);
-    frame.add(`Time since first packet: ${p.rel.toFixed(6)} s`);
+    frame.add(`Arrival Time: ${p.timestampKnown === false ? 'Unknown (not recorded in source)' : new Date(p.ts * 1000).toISOString().replace('T', ' ').replace('Z', ' UTC')}`);
+    frame.add(`Time since first packet: ${p.rel == null ? 'Unknown' : p.rel.toFixed(6) + ' s'}`);
     frame.add(`Link type: ${LINKTYPES[p.lt] || p.lt}`);
     frame.add(`Protocols in frame: ${full.layers.join(':')}`);
     if (p.ann && p.ann.stream != null) frame.add(`Stream index: ${p.ann.stream}`);

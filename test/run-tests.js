@@ -500,6 +500,10 @@ const fakeCrypt = {
   await require('./runbook-tests.cjs').runRunbookTests(test);
   await require('./runbook-lifecycle-tests.cjs').runRunbookLifecycleTests(test);
   await require('./runbook-ui-tests.cjs').runRunbookUiTests(test);
+  await (await import('./capture-compare-tests.mjs')).runCaptureCompareTests(test);
+  await (await import('./capture-metadata-tests.mjs')).runCaptureMetadataTests(test);
+  await require('./capture-file-reader-tests.cjs').runCaptureFileReaderTests(test);
+  await require('./compare-ui-tests.cjs').runComparisonUiTests(test);
 
   const failed = results.filter((r) => !r[0]);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

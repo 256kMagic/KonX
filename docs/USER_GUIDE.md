@@ -1,6 +1,6 @@
 # KonX User Guide
 
-This guide covers KonX 0.12.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one window. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
+This guide covers KonX 0.13.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one window. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
 
 Version 0.4.0 adds [AI & Knowledge](AI_KNOWLEDGE_GUIDE.md): provider API keys, explanations of selected tool output, and an offline reference library backed by a background SQLite vector index. Older 0.3.0 builds do not include this feature.
 
@@ -15,6 +15,8 @@ Version 0.10.0 adds [Incident workspaces](INCIDENT_WORKSPACES.md). Local inciden
 Version 0.11.0 adds [Remote packet capture](REMOTE_CAPTURE.md). Capture bounded traffic from an existing Linux SSH connection, retain verified local packets, and open them in KonX. See the [release notes](releases/0.11.0.md).
 
 Version 0.12.0 adds [Troubleshooting runbooks](RUNBOOKS.md): reviewed diagnostic procedures, typed targets, per-step evidence, and a saved custom runbook library. See the [release notes](releases/0.12.0.md).
+
+Version 0.13.0 adds [Capture comparison](CAPTURE_COMPARISON.md): working/failing capture comparisons with DNS, TCP, and HTTP observations linked to retained source packets. See the [release notes](releases/0.13.0.md).
 
 For downloads, build instructions, and project information, see the [README](../README.md) and [GitHub releases](https://github.com/256kMagic/KonX/releases).
 
@@ -37,6 +39,7 @@ For downloads, build instructions, and project information, see the [README](../
 - [Incident workspaces](INCIDENT_WORKSPACES.md)
 - [Remote packet capture](REMOTE_CAPTURE.md)
 - [Troubleshooting runbooks](RUNBOOKS.md)
+- [Capture comparison](CAPTURE_COMPARISON.md)
 - [Network tools](#network-tools)
 - [Security Suite](SECURITY_SUITE.md)
 - [Wi-Fi and Mist/Marvis](WIRELESS_MIST_GUIDE.md)
@@ -51,7 +54,7 @@ Examples use reserved documentation addresses such as `192.0.2.10`, `198.51.100.
 
 ## Install, run, and update
 
-Download a Windows x64 executable from the [0.12.0 release](https://github.com/256kMagic/KonX/releases/tag/v0.12.0).
+Download a Windows x64 executable from the [0.13.0 release](https://github.com/256kMagic/KonX/releases/tag/v0.13.0).
 
 | Download | Use it when | How to start |
 | --- | --- | --- |
@@ -60,7 +63,7 @@ Download a Windows x64 executable from the [0.12.0 release](https://github.com/2
 
 The portable executable still uses a Windows user profile for settings, saved sessions, and editor recovery. It does **not** automatically place all data beside the executable or make encrypted credentials transferable between computers. See [Application data and backups](#application-data-and-backups).
 
-**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.12.0.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
+**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.13.0.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
 
 For updates from **installed 0.6.2 or later**, or **portable 0.6.0 or later**:
 
@@ -71,7 +74,7 @@ For updates from **installed 0.6.2 or later**, or **portable 0.6.0 or later**:
 
 Installed copies retain their installation folder and mode. Portable copies retain their filename and location; the containing folder must be writable. Both continue to use the existing Windows profile. No update is applied just because you close KonX, and no release checks run in the background. See [Updating KonX](UPDATING.md) for cancellation, failures, and release preparation.
 
-Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.8.0 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
+Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.13.0 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
 
 Npcap is optional for packet capture; SSH, SFTP, Notepad, and the other tools do not require it. Updating KonX does not install or update Npcap.
 
@@ -430,7 +433,7 @@ Combine conditions with `and`/`&&`, `or`/`||`, `not`/`!`, and parentheses. Compa
 
 ### Open and save capture files
 
-Use the folder button or drop a capture file into the view. Supported inputs include classic `.pcap`, `.pcapng`, `.cap`, `.dmp`, and supported Windows `.etl` packet traces. The input file-size limit is 1 GB. Opening a file stops any live capture in that tab before replacing its data.
+Use the folder button or drop a capture file into the view. Supported inputs include classic `.pcap`, `.pcapng`, `.cap`, `.dmp`, and supported Windows `.etl` packet traces. The input file-size limit is 1 GB. PCAP/PCAPNG import also stops at 1,000,000 packets or 256 MiB of captured packet bytes and reports the retained prefix and coverage warnings. Opening a file stops any live capture in that tab before replacing its data.
 
 Windows ETL support reads NDIS packet traces such as those recorded with `netsh trace ... capture=yes`. Arbitrary ETL event logs and `pktmon` ETL files are not supported by this importer. A trace without captured packet events cannot be analyzed as a packet capture.
 
@@ -478,14 +481,14 @@ Open **Packet Capture → SIP Calls** after loading a capture or collecting traf
 
 1. Search the call list by Call-ID, parties, outcome, or method, then select a call.
 2. Read the signaling ladder from top to bottom. Endpoint lanes and message arrows show the observed request/response sequence. Paging controls expose additional calls, messages, and endpoints.
-3. Select an arrow to inspect the captured SIP headers and body, CSeq, dialog tags, retransmission markings, and warnings. Setup time, duration, and outcome describe the signaling that was captured; missing or ambiguous messages can leave them unknown.
+3. Select an arrow to inspect the captured SIP headers and body, CSeq, dialog tags, retransmission markings, and warnings. Setup time, duration, and outcome describe the signaling that was captured; missing or ambiguous messages can leave them unknown. Missing capture timestamps also leave the affected timing unknown.
 4. Click a **Source packets** button to return to an original packet. This pauses Auto-scroll and clears the display filter if necessary to reveal that packet.
 
 On a wide window, the ladder and selected message appear side by side. Each pane scrolls independently; narrower windows stack the details beneath the ladder. Tagged dialog branches remain separate, and an authentication challenge such as 401 or 407 does not by itself prove that the call failed. Retransmissions stay visible in the ladder; an incomplete message or uncertain retransmission classification carries a note.
 
 For a complete, unambiguous SIP body with an SDP content type, the message details include the session, connection address, timing, and media sections. Media details show ports, transport, direction, codec declarations, format parameters, and explicit RTCP settings. Connection and direction sources identify media overrides, inherited session values, or the SDP default. Port-zero media is marked disabled; dynamic payload IDs without an `rtpmap` declaration remain unmapped. Raw attributes remain available for inspection.
 
-These SDP details describe what the selected message advertises. They do not establish the negotiated codec, successful media delivery, or audio quality. The view supports **plaintext SIP over UDP and TCP**. SIP over TLS and SRTP remain encrypted; RTP reconstruction, media decryption, and audio playback are not included.
+These SDP details describe what the selected message advertises. They do not establish the negotiated codec, successful media delivery, or audio quality. The view supports **plaintext SIP over UDP and TCP**. Use **RTP Media** for supported unencrypted RTP analysis, G.711 playback, and WAV export; see the [RTP media guide](RTP_MEDIA.md). SIP over TLS and SRTP remain encrypted; media decryption is unsupported.
 
 The selected call offers two exports:
 

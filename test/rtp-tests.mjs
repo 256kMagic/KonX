@@ -34,6 +34,28 @@ function rtcpReport({ type = 201, ssrc = 777, reportedSsrc = 123, lost = -2, jit
 }
 
 export async function runRtpTests(test) {
+  await test('RTP source-PCAPNG unknown capture times preserve mono audio but not jitter, RTCP time or paired alignment', () => {
+    const source = [packet(sip(sdp(A, 4000)), { no: 1, ts: 10, sport: 5060, dport: 5060 }),
+      packet(sip(sdp(B, 5000), true), { no: 2, ts: 10.1, src: B, dst: A, sport: 5060, dport: 5060 })];
+    for (let i = 0; i < 3; i++) {
+      source.push({ ...packet(wire({ seq: i + 1, timestamp: i * 160 }), { no: source.length + 1, ts: 11 + i * .02 }), timestampKnown: false });
+      source.push({ ...packet(wire({ seq: i + 1, timestamp: i * 160, ssrc: 456 }), { no: source.length + 1, ts: 11 + i * .02, src: B, dst: A, sport: 5000, dport: 4000 }), timestampKnown: false });
+    }
+    source.push({ ...packet(rtcpReport(), { no: source.length + 1, ts: 12, sport: 4001, dport: 5001 }), timestampKnown: false });
+    for (const unknownSignaling of [false, true]) {
+      const records = source.map((p, i) => i < 2 && unknownSignaling ? { ...p, timestampKnown: false } : p);
+      const reopened = readCapture(writePcapng(records)).packets.map((p, i) => ({ ...p, no: i + 1, d: decode(p.linktype, p.data) }));
+      const calls = analyzeSipCalls(reopened).calls, result = analyzeRtp(reopened, { sipCalls: calls });
+      assert.equal(result.streams.length, 2); assert.ok(result.streams.every(s => s.identification === 'SDP receive endpoint'));
+      assert.equal(result.rtcp.length, 1); assert.equal(result.rtcp[0].time, null);
+      for (const stream of result.streams) {
+        assert.equal(stream.startTime, null); assert.equal(stream.endTime, null); assert.equal(stream.durationSeconds, null);
+        assert.equal(stream.maxJitterMs, null); assert.ok(stream.packets.every(p => p.time === null && p.deltaMs === null && p.jitterMs === null));
+        const mono = buildRtpAudio(stream); assert.equal(mono.samples.length, 480); assert.equal(mono.startCaptureTime, null);
+      }
+      if (unknownSignaling) { assert.ok(calls[0].messages.every(m => m.ts === null)); assert.equal(calls[0].setupTime, null); }
+    }
+  });
   await test('RTP/SDP: actual SIP and UDP packets associate both call directions after PCAPNG round trip', () => {
     const source = [packet(sip(sdp(A, 4000)), { no: 1, ts: 0, sport: 5060, dport: 5060 }), packet(sip(sdp(B, 5000), true), { no: 2, ts: 0.1, src: B, dst: A, sport: 5060, dport: 5060 }),
       packet(wire(), { no: 3, ts: 1 }), packet(wire({ ssrc: 456 }), { no: 4, ts: 1.01, src: B, dst: A, sport: 5000, dport: 4000 })];

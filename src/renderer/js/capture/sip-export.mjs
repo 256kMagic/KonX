@@ -6,17 +6,14 @@ export const MAX_SIP_EXPORT_BYTES = 64 * 1024 * 1024;
 export function buildSipCallCapture(packets, call) {
   const wanted = new Set(call.frames);
   const selected = [];
-  let size = 1024;
   for (const packet of packets) {
     if (!wanted.has(packet.no)) continue;
-    size += 32 + Math.ceil(packet.data.byteLength / 4) * 4;
-    if (size > MAX_SIP_EXPORT_BYTES) throw new RangeError('Call capture exceeds the 64 MiB export limit.');
-    selected.push({ ts: packet.ts, len: packet.len, linktype: packet.lt ?? packet.linktype ?? 1, data: packet.data });
+    selected.push({ ts: packet.ts, timestampKnown: packet.timestampKnown, len: packet.len, linktype: packet.lt ?? packet.linktype ?? 1, data: packet.data });
     wanted.delete(packet.no);
   }
   if (wanted.size) throw new Error('Some call packets are no longer available in this capture snapshot.');
   if (!selected.length) throw new Error('This call has no captured signaling packets to export.');
-  return writePcapng(selected, { app: 'KonX SIP signaling export' });
+  return writePcapng(selected, { app: 'KonX SIP signaling export', maxBytes: MAX_SIP_EXPORT_BYTES });
 }
 
 // Bound JSON expansion before serialization. A UTF-16 code unit requires at most

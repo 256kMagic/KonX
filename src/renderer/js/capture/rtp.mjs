@@ -220,7 +220,8 @@ export function analyzeRtp(packets, options = {}) {
     const bytes = packet.data.subarray(off, off + len);
     if (result.examinedBytes + bytes.length > limits.maxInputBytes) { limited('RTP input byte limit reached; later packets were not examined.'); break; }
     result.examinedBytes += bytes.length;
-    const destination = activeMappings(mappings, dst, dp, packet.ts), source = activeMappings(mappings, src, sp, packet.ts);
+    const time = packet.timestampKnown !== false && finite(packet.ts) ? packet.ts : null;
+    const destination = activeMappings(mappings, dst, dp, time), source = activeMappings(mappings, src, sp, time);
     const all = [...destination, ...source];
     if (all.some((m) => m.encrypted)) { result.excluded.encrypted++; continue; }
     const rtpMappings = (destination.some((m) => m.kind !== 'rtcp') ? destination : source).filter((m) => m.kind !== 'rtcp');
@@ -232,7 +233,7 @@ export function analyzeRtp(packets, options = {}) {
       if (control.ok) {
         for (const report of control.reports) {
           if (result.rtcp.length >= limits.maxRtcpReports) { limited('RTCP report limit reached.'); break; }
-          result.rtcp.push({ ...report, frame: packet.no, time: finite(packet.ts) ? packet.ts : null,
+          result.rtcp.push({ ...report, frame: packet.no, time,
             src: endpoint(src, sp), dst: endpoint(dst, dp), identification: rtcpMappings.length || rtpMappings.length ? 'SDP endpoint' : 'heuristic',
             signalingFrames: [...new Set(all.flatMap((m) => m.frames))].slice(0, 64) });
         }
@@ -291,7 +292,6 @@ export function analyzeRtp(packets, options = {}) {
     group.high = group.high == null ? extSeq : Math.max(group.high, extSeq);
     const extTime = group.timestampHigh == null ? parsed.timestamp : group.timestampHigh + delta32(parsed.timestamp, ((group.timestampHigh % 0x100000000) + 0x100000000) % 0x100000000);
     if (!prior && !flags.includes('out of order')) group.timestampHigh = extTime;
-    const time = finite(packet.ts) ? packet.ts : null;
     let jitterMs = null, deltaMs = null;
     if (group.previous && time != null && group.previous.time != null) {
       deltaMs = (time - group.previous.time) * 1000;

@@ -10,7 +10,7 @@ Each phase ships separately with its own version, source commit, tests, Windows 
 | 4 | 0.10.0 | Incident workspaces, evidence timeline, notes, and reports | Complete; 595 tests and packaged checks passed |
 | 5 | 0.11.0 | Bounded remote packet capture through SSH | Complete; 641 tests and packaged checks passed |
 | 6 | 0.12.0 | Diagnostic runbooks and saved procedures | Complete; 671 tests and packaged checks passed |
-| 7 | 0.13.0 | Comparison of working and failing captures | Planned |
+| 7 | 0.13.0 | Comparison of working and failing captures | Complete; 716 tests and packaged checks passed |
 
 ## Scope
 

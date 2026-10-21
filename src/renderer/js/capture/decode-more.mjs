@@ -542,7 +542,7 @@ export const misc = {
       const nm = dnsName(c, o, p);
       const type = c.u16(nm.next);
       const cls = c.u16(nm.next + 2);
-      qs.push({ name: nm.name, type });
+      qs.push({ name: nm.name, type, class: cls });
       qn.add(`${nm.name}: type ${DNS_TYPES[type] || type}, class ${(cls & 0x7fff) === 1 ? 'IN' : cls & 0x7fff}${cls & 0x8000 ? ' (QU)' : ''}`, p, nm.next + 4 - p);
       p = nm.next + 4;
     }
@@ -559,6 +559,7 @@ export const misc = {
         const start = p;
         const nm = dnsName(c, o, p);
         const type = c.u16(nm.next);
+        const cls = c.u16(nm.next + 2);
         const ttl = c.u32(nm.next + 4);
         const rdlen = c.u16(nm.next + 8);
         const rd = nm.next + 10;
@@ -573,7 +574,10 @@ export const misc = {
         else if (type === 6) data = `${dnsName(c, o, rd).name} …`;
         else if (type === 41) data = `EDNS0 UDP payload ${c.u16(nm.next + 2)}`;
         else data = `${rdlen} bytes`;
-        if (title === 'Answers') answers.push({ name: nm.name, type, ttl, data });
+        // TXT currently displays only its first character-string, and SOA or
+        // unknown RDATA use previews. Such display summaries are not complete
+        // values for consumers comparing answer sets.
+        if (title === 'Answers') answers.push({ name: nm.name, type, class: cls, ttl, data, decoded: [1, 2, 5, 12, 15, 28, 33].includes(type) && !(type === 1 && rdlen !== 4) && !(type === 28 && rdlen !== 16) });
         sn.add(`${nm.name}: type ${DNS_TYPES[type] || type}${type === 41 ? '' : `, TTL ${ttl}`}, ${data}`, start, rd + rdlen - start);
         p = rd + rdlen;
       }
@@ -592,7 +596,9 @@ export const misc = {
       'dns.cname': answers.filter((a) => a.type === 5).map((a) => a.data),
     });
     f.dns = true;
-    c.r.dns = { id, qr: !!qr, rcode, qname: q.name, qtype: q.type, answers, kind };
+    c.r.dns = { id, qr: !!qr, rcode, qname: q.name, qtype: q.type, answers, kind,
+      questions: qs, questionCount: qd, answerCount: an, authorityCount: ns, additionalCount: ar,
+      truncated: !!(flags & 0x200), complete: qd <= 16 && an <= 64 && ns <= 64 && ar <= 64 };
     const tname = DNS_TYPES[q.type] || q.type;
     let info;
     if (!qr) {

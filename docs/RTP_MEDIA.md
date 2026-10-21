@@ -22,13 +22,13 @@ For unencrypted mono PCMU or PCMA at 8 kHz, build the waveform, then choose play
 
 Missing intervals become marked silence. They are not recovered speech. Reconstruction rejects conflicting sequence data, overlapping timestamps, sequence restarts, unknown codecs, gaps over ten seconds, and audio beyond ten minutes. The waveform and warnings identify inserted silence and other coverage limits.
 
-When an unambiguous opposite-direction stream belongs to the same advertised call, paired playback aligns the streams using capture timestamps. This is an aid to reviewing the conversation; it does not synchronize sender clocks or emulate a receiver's jitter buffer. Each direction is exported separately.
+When an unambiguous opposite-direction stream belongs to the same advertised call, paired playback aligns the streams using capture timestamps. This is an aid to reviewing the conversation; it does not synchronize sender clocks or emulate a receiver's jitter buffer. Each direction is exported separately. Missing capture times prevent paired alignment; supported mono reconstruction can still use the RTP media clock.
 
 ## Interpret results
 
 Sequence gaps describe missing observations in this capture. They do not prove network loss. A missing direction does not prove one-way audio: capture position, dropped capture packets, or incomplete signaling may hide it.
 
-Jitter is calculated from captured arrival times and a known RTP clock rate. Unknown clocks produce unknown jitter. RTCP SR/RR details preserve their reported counters; RTCP jitter remains in RTP timestamp units. KonX does not invent MOS, end-to-end delay, RTT, or the listener's experience from incomplete evidence.
+Jitter is calculated from captured arrival times and a known RTP clock rate. Unknown clocks or missing capture times produce unknown jitter. RTCP SR/RR details preserve their reported counters; RTCP jitter remains in RTP timestamp units, and missing packet arrival times remain unknown. KonX does not invent MOS, end-to-end delay, RTT, or the listener's experience from incomplete evidence.
 
 SRTP-advertised endpoints are excluded. Encrypted audio, codecs other than G.711, SIP over TLS, and media absent from the capture cannot be reconstructed by this feature.
 

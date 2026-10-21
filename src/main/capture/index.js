@@ -144,11 +144,40 @@ class CaptureManager {
 }
 
 /** Only capture files may be read through the capture IPC. */
-function readCaptureFile(file) {
+function readCaptureFile(file, { maxBytes = 1024 * 1024 * 1024 } = {}) {
   if (!/\.(pcap|pcapng|cap|dmp)$/i.test(file)) throw new Error('Not a capture file (.pcap, .pcapng, .cap, .etl)');
-  const st = fs.statSync(file);
-  if (st.size > 1024 * 1024 * 1024) throw new Error('File is larger than 1 GB');
-  return fs.readFileSync(file);
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 1024 * 1024 * 1024) throw new RangeError('Invalid capture file byte limit');
+  const tooLarge = () => new Error(maxBytes === 1024 * 1024 * 1024 ? 'File is larger than 1 GB' : `Capture file exceeds the ${maxBytes}-byte limit`);
+  // The open descriptor owns the object read. Nonblocking avoids waiting on a
+  // special file before fstat can reject it (a no-op for regular disk files).
+  const fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK || 0));
+  try {
+    const st = fs.fstatSync(fd);
+    if (!st.isFile()) throw new Error('Capture input must be a regular file');
+    if (st.size > maxBytes) throw tooLarge();
+    // Normal files need only their validated size plus one overflow-probe byte.
+    // Return the same owned allocation instead of retaining chunks and copying
+    // the whole file into a second concatenated buffer.
+    let bytes = Buffer.allocUnsafe(st.size + 1), total = 0;
+    while (true) {
+      // A size check alone is stale if the file grows. At most maxBytes + 1
+      // bytes are read, and every allocation is bounded before reading.
+      if (total === bytes.length) {
+        // Only a growing file needs another allocation. Geometric growth bounds
+        // repeated copying while the maximum still includes just one probe byte.
+        const grown = Buffer.allocUnsafe(Math.min(maxBytes + 1, Math.max(64 * 1024, bytes.length * 2)));
+        bytes.copy(grown, 0, 0, total);
+        bytes = grown;
+      }
+      const read = fs.readSync(fd, bytes, total, Math.min(64 * 1024, bytes.length - total), total);
+      if (!read) break;
+      total += read;
+      if (total > maxBytes) throw tooLarge();
+    }
+    return bytes.subarray(0, total);
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 module.exports = { CaptureManager, readCaptureFile };
