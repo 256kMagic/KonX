@@ -1,6 +1,6 @@
 # KonX User Guide
 
-This guide covers KonX 0.2.x for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, and network troubleshooting tools in one window.
+This guide covers KonX 0.2.x and the 0.3.0 test build for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, and network troubleshooting tools in one window. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0.
 
 For downloads, build instructions, and project information, see the [README](../README.md) and [GitHub releases](https://github.com/256kMagic/KonX/releases).
 
@@ -18,8 +18,8 @@ For downloads, build instructions, and project information, see the [README](../
 - [Reassembled streams and readable traffic](#reassembled-streams-and-readable-traffic)
 - [SIP calls and signaling ladders](#sip-calls-and-signaling-ladders)
 - [Network tools](#network-tools)
-- [Security Suite development guide](SECURITY_SUITE.md)
-- [Wi-Fi and Mist/Marvis development guide](WIRELESS_MIST_GUIDE.md)
+- [Security Suite](SECURITY_SUITE.md)
+- [Wi-Fi and Mist/Marvis](WIRELESS_MIST_GUIDE.md)
 - [Settings](#settings)
 - [Keyboard reference](#keyboard-reference)
 - [Application data and backups](#application-data-and-backups)
@@ -626,7 +626,7 @@ Run this from the folder containing the portable executable. The environment var
 | Symptom | Checks and recovery |
 | --- | --- |
 | **A connection tab stays after clicking X** | Use version 0.1.2 or newer. **Ctrl+Shift+W** or **Ctrl+F4** closes the active application tab. Verify you are clicking the connection tab's X rather than a saved session or a Notepad document. |
-| **A JavaScript error dialog appears** | Copy its exact text before dismissing it, if possible. Development builds after 0.2.1 also save startup errors, uncaught main-process JavaScript errors, and unhandled-rejection warnings to `diagnostics/javascript-errors.log` inside the active KonX profile, normally `%APPDATA%\KonX`. The previous log is `javascript-errors.previous.log`. A closed dialog's text can then be recovered from these files. Installed 0.2.1 does not include this logging yet. |
+| **A JavaScript error dialog appears** | Copy its exact text before dismissing it, if possible. KonX 0.3.0 also saves startup errors, uncaught main-process JavaScript errors, and unhandled-rejection warnings to `diagnostics/javascript-errors.log` inside the active KonX profile, normally `%APPDATA%\KonX`. The previous log is `javascript-errors.previous.log`. A closed dialog's text can then be recovered from these files. Earlier 0.2.x builds do not include this logging. |
 | **SSH times out or is refused** | Check the host, SSH port, reachability, VPN, firewall, and server service. Use Ping/Port Scanner where authorized. Review the session's timeout and jump host. |
 | **SSH authentication fails** | Verify username, authentication method, key-file path, key passphrase, and server policy. Check the OpenSSH agent when using the default Windows agent method. Answer keyboard-interactive challenges as requested. |
 | **Unexpected host-key change** | Compare the old and new fingerprints with a trusted administrator. Replace the saved key only after establishing the reason. |

@@ -1,8 +1,8 @@
 {
   "name": "konx",
   "productName": "KonX",
-  "version": "0.2.1",
-  "description": "SSH / Telnet / Serial terminal, SFTP file manager and network toolkit in one desktop app",
+  "version": "0.3.0",
+  "description": "Windows terminal, SFTP, packet analysis, security, Wi-Fi and Mist/Marvis troubleshooting workspace",
   "main": "src/main/boot.js",
   "author": "KonX",
   "license": "UNLICENSED",

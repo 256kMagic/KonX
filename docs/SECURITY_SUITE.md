@@ -1,6 +1,6 @@
 # KonX Security Suite
 
-The Security Suite is available in the development source following 0.2.1. Open **Security Suite** from Home, the sidebar, or the **Network Tools** menu. Opening a tab does not start an assessment. Choose an assessment, enter its target or select a local file, then click **Run assessment**. **Cancel assessment** stops the active job; closing its tab also cancels it.
+The Security Suite is included in KonX 0.3.0. Open **Security Suite** from Home, the sidebar, or the **Network Tools** menu. Opening a tab does not start an assessment. Choose an assessment, enter its target or select a local file, then click **Run assessment**. **Cancel assessment** stops the active job; closing its tab also cancels it.
 
 ## Assessments
 

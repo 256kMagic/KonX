@@ -8,6 +8,8 @@ Connect to a switch, move files over SFTP, edit its configuration, and investiga
 
 [Download the latest release](https://github.com/256kMagic/KonX/releases/latest) · [User guide](docs/USER_GUIDE.md) · [Report an issue](https://github.com/256kMagic/KonX/issues)
 
+**0.3.0 test build:** Security Suite, Wi-Fi Tools, Mist/Marvis monitoring and troubleshooting, and local JavaScript error logs are now available in the latest source/test build. See the [0.3.0 notes](docs/releases/0.3.0.md). The public download links below still refer to the published 0.2.0 release.
+
 ![KonX terminal workspace](docs/screenshots/terminal.png)
 
 ## Download and install
@@ -53,8 +55,8 @@ See the [release notes](CHANGELOG.md) and [user guide](docs/USER_GUIDE.md) for w
 - **Transfer:** open SFTP from a saved SSH session or an existing SSH tab to work with local and remote files side by side.
 - **Edit:** open Notepad for local documents, remote SFTP files, configuration cleanup, file hashing, or document comparison.
 - **Investigate:** open Packet Capture to record traffic or inspect an existing capture, or choose a network tool from the home screen.
-- **Assess security (development source):** open Security Suite for Windows posture and remote exposure, TLS/SSH, web headers, device configuration, and saved-capture checks. Review evidence, compare local baselines, and export JSON/HTML reports. See the [Security Suite guide](docs/SECURITY_SUITE.md) for scope and workflows; these tools are not included in the published 0.2.0 executables.
-- **Wireless and Mist (development source):** inspect local Wi-Fi adapters, cached BSSIDs, signal and channels, or save an encrypted Mist token for AP/client monitoring and direct Marvis troubleshooting. See the [Wi-Fi and Mist guide](docs/WIRELESS_MIST_GUIDE.md).
+- **Assess security (0.3.0):** open Security Suite for Windows posture and remote exposure, TLS/SSH, web headers, device configuration, and saved-capture checks. Review evidence, compare local baselines, and export JSON/HTML reports. See the [Security Suite guide](docs/SECURITY_SUITE.md) for scope and workflows.
+- **Wireless and Mist (0.3.0):** inspect local Wi-Fi adapters, cached BSSIDs, signal and channels, or save an encrypted Mist token for AP/client monitoring and direct Marvis troubleshooting. See the [Wi-Fi and Mist guide](docs/WIRELESS_MIST_GUIDE.md).
 
 The [user guide](docs/USER_GUIDE.md) covers connection settings, credentials, imports, transfers, editing, capture filters, and troubleshooting in detail.
 

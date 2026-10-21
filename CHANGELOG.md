@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-10-20 (test build)
 
 ### Added
 
@@ -12,9 +12,9 @@
 - Offline Cisco-style configuration and saved PCAP/PCAPNG security findings with redacted line/frame evidence.
 - Result filters, evidence and recommendations, explicit unknown states and scope limits, local opt-in baselines, and JSON/HTML report exports.
 - Bounded collection and cancellation when stopped or closed, plus unit, loopback-network, synthetic-file, and real Electron workflow regression coverage.
-- Local JavaScript error logs for the next development build, including startup failures, uncaught main-process errors, and unhandled-rejection warnings. The original Electron error handling remains active; logs rotate at 128 KiB and individual entries are bounded to 16 KiB.
+- Local JavaScript error logs, including startup failures, uncaught main-process errors, and unhandled-rejection warnings. The original Electron error handling remains active; logs rotate at 128 KiB and individual entries are bounded to 16 KiB.
 
-See the [Security Suite guide](docs/SECURITY_SUITE.md). These source changes are not included in the installed 0.2.1 test build or the published 0.2.0 executables.
+See the [0.3.0 test-build notes](docs/releases/0.3.0.md), [Security Suite guide](docs/SECURITY_SUITE.md), and [Wi-Fi/Mist guide](docs/WIRELESS_MIST_GUIDE.md). These tools are included in 0.3.0; the published 0.2.0 executables and older 0.2.1 test build do not include them.
 
 Validation: 384 automated tests pass, including 36 Wi-Fi/Mist checks, 56 security checks, and 13 diagnostics/boot checks using synthetic inputs, loopback services, and isolated real Electron processes. Wireless coverage includes native WLAN layouts, a nested child loading from an ASAR archive, encrypted token storage, fixed regional HTTPS requests, cancellation, redaction, cloud scope/revision changes, exports, and minimum-window layout. Mist tests use synthetic credentials and mocked cloud responses; no live Mist account was queried. Error-logging tests cover fatal exceptions, warning-only rejections, startup failures, rotation, size limits, and failed log writes. A separate local Windows smoke test completed all 14 posture checks at the current user's permission level; inaccessible firmware/encryption checks remained unknown.
 

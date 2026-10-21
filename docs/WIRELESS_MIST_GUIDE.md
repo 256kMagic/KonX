@@ -1,6 +1,6 @@
 # Wi-Fi Tools and Mist & Marvis
 
-These tools are available in the development source after 0.2.1. Open **Wi-Fi Tools** or **Mist & Marvis** from Home, the sidebar, or the Network Tools menu. They are not included in the installed 0.2.1 executable yet.
+These tools are included in KonX 0.3.0. Open **Wi-Fi Tools** or **Mist & Marvis** from Home, the sidebar, or the Network Tools menu. Earlier 0.2.x executables do not include them.
 
 ## Local Wi-Fi tools
 
