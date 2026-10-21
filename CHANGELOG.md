@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 — 2026-10-20 (test build)
+
+### Added
+
+- AI & Knowledge workspace with separate Windows-encrypted API keys and editable models for OpenAI, Claude, Gemini, Nyquest, and a custom OpenAI-compatible Chat Completions endpoint.
+- Background local SQLite knowledge database with versioned reference articles, overlapping chunks, persistent TF-IDF cosine vectors, local retrieval, and custom note creation, editing, removal, and index rebuilds. Library search and reading work without an AI key.
+- Explain with AI actions in tool tabs, bounded result snapshots, explicit redacted-context previews, opt-in sharing, source articles alongside answers, cancellation, and configuration revision guards. No automatic tool execution or collection of saved sessions, documents, or packet payloads.
+
+See the [0.4.0 test-build notes](docs/releases/0.4.0.md), [AI and knowledge guide](docs/AI_KNOWLEDGE_GUIDE.md), and [architecture notes](docs/design/ai-knowledge.md). Older 0.3.0 builds do not include AI.
+
+Validation: 427 automated tests pass, including 43 new AI/provider, offline knowledge, integration, and real Electron workflow checks. All five provider protocols use simulated responses; encryption, SQLite/vector persistence, packaged-ASAR workers, cancellation, scoped sharing, failure states, and responsive layout are exercised without a live AI key or paid generation.
+
 ## 0.3.0 — 2026-10-20 (test build)
 
 ### Added

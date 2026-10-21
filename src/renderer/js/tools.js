@@ -5,8 +5,10 @@ import { CaptureTab } from './capture.js';
 import { createSecurityTool } from './security.js';
 import { createWifiTool } from './wifi.js';
 import { createMistTool } from './mist.js';
+import { AITab } from './ai.js';
 
 export const TOOLS = [
+  { kind: 'ai', label: 'AI & Knowledge', icon: 'insight', desc: 'Ask an AI to explain results and browse the offline tool and vendor reference library' },
   { kind: 'wifi', label: 'Wi-Fi Tools', icon: 'wifi', desc: 'Wireless adapters, visible access points, signal, channel crowding and security observations' },
   { kind: 'mist', label: 'Mist & Marvis', icon: 'cloud', desc: 'Connect to Juniper Mist for AP/client monitoring and Marvis troubleshooting' },
   { kind: 'security', label: 'Security Suite', icon: 'shield', desc: 'Windows assessment, TLS/SSH auditing, service exposure, web headers, configuration and capture review' },
@@ -1000,6 +1002,7 @@ class NetInfoTool extends ToolView {
 const CLASSES = { capture: CaptureTab, ping: PingTool, sweep: SweepTool, portscan: PortScanTool, traceroute: TraceTool, dns: DnsTool, whois: WhoisTool, subnet: SubnetTool, wol: WolTool, netinfo: NetInfoTool };
 
 export function createTool(app, kind, params = {}) {
+  if (kind === 'ai') return new AITab(app, params);
   if (kind === 'wifi') return createWifiTool(app, params);
   if (kind === 'mist') return createMistTool(app, params);
   if (kind === 'security') return createSecurityTool(app, params);

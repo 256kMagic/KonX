@@ -462,6 +462,10 @@ const fakeCrypt = {
   await require('./wireless-integration-tests.cjs').runWirelessIntegrationTests(test);
   await require('./wifi-packaging-tests.cjs').runWifiPackagingTests(test);
   await require('./wireless-ui-tests.cjs').runWirelessUiTests(test);
+  await require('./ai-provider-tests.cjs').runAIProviderTests(test);
+  await require('./knowledge-tests.cjs').runKnowledgeTests(test);
+  await require('./ai-integration-tests.cjs').runAiIntegrationTests(test);
+  await require('./ai-ui-tests.cjs').runAiUiTests(test);
 
   const failed = results.filter((r) => !r[0]);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
