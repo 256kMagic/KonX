@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "description": "Synthetic Cisco-style show output. Documentation addresses only; no live device data or credentials.",
+  "devices": [
+    {
+      "id": "demo-core",
+      "label": "Demo core switch",
+      "host": "192.0.2.1",
+      "collectedAt": "2026-10-21T12:00:00.000Z",
+      "commands": [
+        {"id":"version","status":"ok","output":"Cisco IOS XE Software, Version 17.12.04\ncore-sw uptime is 2 weeks, 3 days\nModel Number : C9300-24P\nSystem image file is \"flash:packages.conf\"\n"},
+        {"id":"interfaces","status":"ok","output":"GigabitEthernet1/0/24 is up, line protocol is up (connected)\n  Description: Uplink to edge-sw\n  Full-duplex, 1000Mb/s, media type is 10/100/1000BaseTX\n  0 input errors, 0 CRC, 0 frame, 0 overrun, 0 ignored\n  0 output errors, 0 collisions, 0 interface resets\nVlan10 is up, line protocol is up\n  Description: Demo clients\n"},
+        {"id":"interfaceStatus","status":"ok","output":"Port         Name                 Status       Vlan       Duplex  Speed Type\nGi1/0/24     Uplink to edge-sw     connected    trunk      a-full a-1000 10/100/1000BaseTX\n"},
+        {"id":"vlans","status":"ok","output":"VLAN Name                             Status    Ports\n---- -------------------------------- --------- -------------------------------\n1    default                          active    Gi1/0/1, Gi1/0/2\n10   Demo-clients                     active\n"},
+        {"id":"mac","status":"ok","output":"          Mac Address Table\n-------------------------------------------\nVlan    Mac Address       Type        Ports\n----    -----------       --------    -----\n  10    0011.2233.4455    DYNAMIC     Gi1/0/24\nTotal Mac Addresses for this criterion: 1\n"},
+        {"id":"arp","status":"ok","output":"Protocol  Address          Age (min)  Hardware Addr   Type   Interface\nInternet  192.0.2.100              2   0011.2233.4455  ARPA   Vlan10\nInternet  192.0.2.1                -   00aa.bbcc.0001  ARPA   Vlan10\n"},
+        {"id":"cdp","status":"ok","output":"-------------------------\nDevice ID: edge-sw\nEntry address(es):\n  IP address: 192.0.2.2\nPlatform: cisco C9200L-24P-4G, Capabilities: Switch IGMP\nInterface: GigabitEthernet1/0/24, Port ID (outgoing port): GigabitEthernet1/0/24\nHoldtime : 142 sec\n"},
+        {"id":"lldp","status":"ok","output":"------------------------------------------------\nLocal Intf: Gi1/0/24\nChassis id: 00aa.bbcc.0002\nPort id: Gi1/0/24\nSystem Name: edge-sw\nSystem Capabilities: B,R\nManagement Addresses:\n    IP: 192.0.2.2\n"},
+        {"id":"poe","status":"ok","output":"Interface Admin  Oper       Power   Device              Class Max\n                            (Watts)\n--------- ------ ---------- ------- ------------------- ----- ----\nGi1/0/24  auto   off        0.0     n/a                 n/a   30.0\n"}
+      ]
+    },
+    {
+      "id": "demo-edge",
+      "label": "Demo access switch",
+      "host": "192.0.2.2",
+      "collectedAt": "2026-10-21T12:00:03.000Z",
+      "commands": [
+        {"id":"version","status":"ok","output":"Cisco IOS XE Software, Version 17.12.04\nedge-sw uptime is 1 week, 2 days\nModel Number : C9200L-24P-4G\n"},
+        {"id":"interfaces","status":"ok","output":"GigabitEthernet1/0/7 is up, line protocol is up (connected)\n  Description: Demo desk phone\n  Full-duplex, 1000Mb/s, media type is 10/100/1000BaseTX\n  12 input errors, 9 CRC, 0 frame, 0 overrun, 0 ignored\n  0 output errors, 0 collisions, 0 interface resets\nGigabitEthernet1/0/24 is up, line protocol is up (connected)\n  Description: Uplink to core-sw\n  Full-duplex, 1000Mb/s, media type is 10/100/1000BaseTX\n  0 input errors, 0 CRC, 0 frame, 0 overrun, 0 ignored\n  0 output errors, 0 collisions, 0 interface resets\n"},
+        {"id":"interfaceStatus","status":"ok","output":"Port         Name                 Status       Vlan       Duplex  Speed Type\nGi1/0/7      Demo desk phone      connected    10         a-full a-1000 10/100/1000BaseTX\nGi1/0/24     Uplink to core-sw    connected    trunk      a-full a-1000 10/100/1000BaseTX\n"},
+        {"id":"vlans","status":"ok","output":"VLAN Name                             Status    Ports\n---- -------------------------------- --------- -------------------------------\n1    default                          active    Gi1/0/1, Gi1/0/2\n10   Demo-clients                     active    Gi1/0/7\n"},
+        {"id":"mac","status":"ok","output":"          Mac Address Table\n-------------------------------------------\nVlan    Mac Address       Type        Ports\n----    -----------       --------    -----\n  10    0011.2233.4455    DYNAMIC     Gi1/0/7\n  10    00aa.bbcc.0001    DYNAMIC     Gi1/0/24\n"},
+        {"id":"arp","status":"ok","output":"Protocol  Address          Age (min)  Hardware Addr   Type   Interface\nInternet  192.0.2.2                -   00aa.bbcc.0002  ARPA   Vlan10\n"},
+        {"id":"cdp","status":"ok","output":"-------------------------\nDevice ID: core-sw\nEntry address(es):\n  IP address: 192.0.2.1\nPlatform: cisco C9300-24P, Capabilities: Router Switch IGMP\nInterface: GigabitEthernet1/0/24, Port ID (outgoing port): GigabitEthernet1/0/24\nHoldtime : 141 sec\n"},
+        {"id":"lldp","status":"ok","output":"------------------------------------------------\nLocal Intf: Gi1/0/24\nChassis id: 00aa.bbcc.0001\nPort id: Gi1/0/24\nSystem Name: core-sw\nSystem Capabilities: B,R\nManagement Addresses:\n    IP: 192.0.2.1\n"},
+        {"id":"poe","status":"ok","output":"Interface Admin  Oper       Power   Device              Class Max\n                            (Watts)\n--------- ------ ---------- ------- ------------------- ----- ----\nGi1/0/7   auto   on         6.3     IP Phone            2     30.0\nGi1/0/24  auto   off        0.0     n/a                 n/a   30.0\n"}
+      ]
+    }
+  ]
+}

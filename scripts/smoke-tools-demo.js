@@ -43,8 +43,26 @@
   assert(knowledge.algorithm === 'Local TF-IDF cosine vectors', 'Unexpected vector index algorithm');
   assert((await api.invoke('tools:knowledgeList', { query: 'RSSI' })).length > 0, 'Offline reference search found no signal guidance');
   const noteTitle = 'Package smoke synthetic reference';
+  const versionParts = info.version.split('.').map(Number);
+  const supportsDeviceInspector = versionParts[0] > 0 || versionParts[1] >= 7;
 
   if (options.phase === 'save') {
+    let deviceInspector = null;
+    if (supportsDeviceInspector) {
+      assert(TOOLS.some((tool) => tool.kind === 'device'), 'Device Inspector entry is missing');
+      const device = app.openTool('device');
+      await device.ready;
+      assert(!device.report && !device.jobId && app.jobs.size === 0, 'Device Inspector must not automatically collect SSH output');
+      await device.load('tools:deviceDemo');
+      assert(device.report?.devices.length === 2, 'Packaged Device Inspector demo is unavailable: ' + device.status.textContent);
+      assert(device.report.devices.every((entry) => entry.facts.interfaces.length > 0 && entry.facts.mac.length > 0), 'Packaged Cisco demo facts are missing');
+      device.query.value = '192.0.2.100'; await device.find();
+      assert(device.trace?.matches.length >= 2 && device.trace.paths.length >= 1, 'Packaged endpoint trace did not connect the synthetic switches');
+      assert(device.traceResults.querySelector('.device-match button'), 'Packaged endpoint evidence controls are missing');
+      deviceInspector = { demoDevices: device.report.devices.length, endpointMatches: device.trace.matches.length, paths: device.trace.paths.length, noNetworkCollection: !device.jobId };
+      await app.closeTab(device);
+      assert(!app.byId.has(device.id) && app.jobs.size === 0, 'Device Inspector smoke did not close cleanly');
+    }
     assert(!mist.config.hasToken && mist.testButton.disabled, 'Fresh profile must have no API token');
     app.activate(security);
     security.audit.value = 'config';
@@ -85,7 +103,7 @@
     const article = await api.invoke('tools:knowledgeSave', { title: noteTitle, vendor: 'Synthetic fixture', content: 'Wireless RSSI observations are cached evidence. Verify the adapter and collection time.' });
     await ai.readDocument(article.id);
     assert(ai.documentContent.textContent.includes('cached evidence'), 'Packaged local article did not render');
-    await complete({ phase: options.phase, version: info.version, tools: 4, assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
+    await complete({ phase: options.phase, version: info.version, tools: supportsDeviceInspector ? 5 : 4, ...(deviceInspector ? { deviceInspector } : {}), assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
   } else if (options.phase === 'forget') {
     assert(mist.config.hasToken && !mist.testButton.disabled, 'Encrypted Mist token did not survive app restart');
     assert(mist.token.value === '', 'Saved credential must not be returned to the input');

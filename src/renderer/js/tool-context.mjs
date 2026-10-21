@@ -19,7 +19,10 @@ export function toolContext(tab) {
       }
       return result;
     };
-    output = JSON.stringify(copy(tab.report), null, 2);
+    // Device raw command transcripts can contain credentials in later snapshot
+    // profiles. Offer parsed observations only; never include those transcripts.
+    const report = tab.toolKind === 'device' ? { ...tab.report, devices: tab.report.devices?.map(({ commands, ...device }) => device) } : tab.report;
+    output = JSON.stringify(copy(report), null, 2);
   } else if (tab.kind === 'capture') {
     output = [tab.statsEl?.innerText, tab.sideBody?.innerText].filter(Boolean).join('\n\n');
   } else {

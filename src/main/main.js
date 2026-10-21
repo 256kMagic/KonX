@@ -13,6 +13,8 @@ const localfs = require('./localfs');
 const nettools = require('./nettools');
 const security = require('./security');
 const wifi = require('./wifi');
+const deviceAnalysis = require('./device-analysis');
+const deviceCollector = require('./device-collector');
 const { MistClient } = require('./mist');
 const { AIClient } = require('./ai');
 const { KnowledgeLibrary } = require('./knowledge');
@@ -314,6 +316,7 @@ function registerIpc() {
   const jobs = toolJobs;
   let jobSeq = 0;
   const runners = {
+    device: (params, emit, signal) => deviceCollector.run(params, emit, signal, connections),
     security: security.run,
     wifi: wifi.run,
     mist: (params, emit, signal) => mist.run(params, emit, signal),
@@ -346,6 +349,35 @@ function registerIpc() {
     if (!s) return;
     s.stopped = true;
     if (s.onStop) s.onStop();
+  });
+  handle('tools:deviceConnections', () => deviceCollector.listConnections(connections));
+  handle('tools:deviceCommands', () => deviceAnalysis.COMMANDS);
+  handle('tools:deviceDemo', () => deviceAnalysis.analyzeDevices(JSON.parse(fs.readFileSync(path.join(__dirname, '../../assets/device-inspector-demo.json'), 'utf8'))));
+  handle('tools:deviceImport', async () => {
+    const result = await dialog.showOpenDialog(win, { title: 'Open Device Inspector report', properties: ['openFile'], filters: [{ name: 'Device report', extensions: ['json'] }] });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const file = await fs.promises.open(result.filePaths[0], 'r');
+    try {
+      if ((await file.stat()).size > 16 * 1024 * 1024) throw new Error('Device report exceeds the 16 MiB file limit.');
+      const buffer = Buffer.alloc(16 * 1024 * 1024 + 1);
+      let length = 0;
+      while (length < buffer.length) {
+        const { bytesRead } = await file.read(buffer, length, buffer.length - length, null);
+        if (!bytesRead) break;
+        length += bytesRead;
+      }
+      if (length > 16 * 1024 * 1024) throw new Error('Device report exceeds the 16 MiB file limit.');
+      const input = buffer.subarray(0, length).toString('utf8');
+      return deviceAnalysis.analyzeDevices(JSON.parse(input.replace(/^\uFEFF/, '')));
+    } finally { await file.close(); }
+  });
+  handle('tools:deviceTrace', (devices, query) => deviceAnalysis.traceEndpoint(deviceAnalysis.analyzeDevices({ devices }).devices, query));
+  handle('tools:deviceExport', async (input) => {
+    const report = deviceAnalysis.analyzeDevices(input);
+    const result = await dialog.showSaveDialog(win, { defaultPath: `konx-device-${new Date().toISOString().slice(0, 10)}.json`, filters: [{ name: 'Device report', extensions: ['json'] }] });
+    if (result.canceled || !result.filePath) return null;
+    await fs.promises.writeFile(result.filePath, JSON.stringify(report, null, 2));
+    return result.filePath;
   });
   handle('tools:mistConfig', () => mist.getConfig());
   handle('tools:mistConfigure', (params) => mist.configure(params));

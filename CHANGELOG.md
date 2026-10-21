@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.0 — 2026-10-21
+
+### Added
+
+- Device Inspector collects fixed Cisco IOS/IOS-XE show commands using a separate channel on selected connected SSH sessions. Search interfaces, VLANs, MAC and ARP tables, CDP/LLDP neighbors, and PoE observations with command/line evidence.
+- IP/MAC tracing correlates the selected devices' observations, preserving ambiguous matches, unresolved uplinks, and candidate edge ports rather than claiming a confirmed physical endpoint.
+- Synthetic offline demo, JSON report import/export, collection cancellation, and access to the original connected terminal.
+- A phased roadmap covering snapshots, RTP analysis, incidents, remote capture, runbooks, and capture comparisons. Later phases are not included in 0.7.0.
+
+See the [Device Inspector guide](docs/DEVICE_INSPECTOR.md) and [0.7.0 release notes](docs/releases/0.7.0.md) for validation and supported scope.
+
 ## 0.6.3 — 2026-10-21
 
 ### Release verification

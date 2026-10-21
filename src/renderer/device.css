@@ -1,0 +1,40 @@
+.device-view { min-width: 0; }
+.device-view .tool-head { flex: 0 1 auto; max-height: 48%; min-height: 110px; min-width: 0; overflow: auto; gap: 8px; }
+.device-view .tool-title { flex-wrap: wrap; }
+.device-view .tool-title .sub { overflow-wrap: anywhere; }
+.device-view .notice { margin: 0; }
+.device-status, .device-heading { overflow-wrap: anywhere; }
+.device-status { color: var(--muted); }
+.device-heading { font-weight: 600; color: var(--text-strong); }
+.device-content { flex: 1; min-height: 100px; min-width: 0; overflow: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.device-content > * { flex-shrink: 0; }
+.device-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
+.device-actions .input { min-width: 120px; max-width: 100%; width: auto; }
+.device-actions input.input { flex: 1 1 180px; }
+.device-actions .hint { margin-right: auto; }
+.device-connections { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 6px; }
+.device-connection { display: flex; align-items: center; gap: 7px; overflow-wrap: anywhere; max-width: 100%; }
+.device-connection input { flex-shrink: 0; }
+.device-connection-picker { min-width: 0; }
+.device-connection-picker summary { cursor: pointer; margin: 2px 0 8px; }
+.device-facts { display: grid; grid-template-columns: minmax(90px, 150px) minmax(0, 1fr); gap: 4px 12px; margin: 0; user-select: text; }
+.device-facts dt { color: var(--muted); overflow-wrap: anywhere; }
+.device-facts dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.device-warnings { display: flex; flex-direction: column; gap: 6px; }
+.device-table-host { min-width: 0; width: 100%; }
+.device-view .tbl-wrap { max-height: 320px; overflow: auto; width: 100%; min-width: 0; }
+.device-view .tbl { min-width: 650px; }
+.device-evidence, .device-trace { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; min-width: 0; }
+.device-evidence summary { cursor: pointer; }
+.device-evidence > .input { max-width: 100%; margin-top: 10px; }
+.device-evidence-heading { color: var(--muted); margin-top: 8px; overflow-wrap: anywhere; }
+.device-raw { max-height: 310px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 var(--mono); user-select: text; }
+.device-source-line { display: inline; background: var(--accent-dim, var(--panel-3)); color: var(--text-strong); }
+.device-match, .device-path { border-left: 3px solid var(--border-strong); padding: 8px 10px; margin-top: 8px; overflow-wrap: anywhere; user-select: text; }
+.device-match p, .device-path p { margin: 5px 0; }
+.device-trace h3, .device-limitations h3 { margin: 0 0 8px; }
+.device-limitations { color: var(--muted); overflow-wrap: anywhere; user-select: text; }
+@media (max-width: 1000px) {
+  .device-view .tool-head, .device-content { padding: 10px; }
+  .device-actions > select { flex: 1 1 150px; }
+}
