@@ -1,14 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.6.2 — 2026-10-21
 
 ### Fixed
 
 - Installed updater detection now checks the physical `app.asar` file rather than Electron's virtual archive directory.
 - Installed update handoff reads the installer location and uninstall registration from electron-builder's separate registry keys, validating the application identity, directory, and installation mode together.
-- Regression coverage now includes Electron's real ASAR filesystem behavior and the actual installer registry layout. The original 0.6.0/0.6.1 installed update button is affected; portable updating is unaffected. Installed copies need a manual upgrade to a release containing these fixes.
+- Regression coverage now includes Electron's real ASAR filesystem behavior and the actual installer registry layout. The original 0.6.0/0.6.1 installed update button is affected; portable updating is unaffected. Installed copies need one manual upgrade to 0.6.2.
 
-Validation: 485 automated tests pass. Corrected source components completed a real all-users NSIS update from installed 0.6.0 to the published 0.6.1 installer, preserving the installation folder/mode and settings bytes and restarting KonX as 0.6.1. This is a component handoff test; the original installed button failed. See the [release notes](docs/releases/0.6.1.md#validation) for coverage limits.
+### Documentation
+
+- Updated the release notes, download links, user guide, and update guide for 0.6.2. Installed 0.6.0/0.6.1 copies need one manual upgrade to 0.6.2; portable copies can use **Update KonX**.
+
+Validation: 0.6.2 passed 485 automated tests. Installer and portable builds completed, all 81 packaged source files match the release source, and isolated packaged startup/restart and updater-control checks passed. Corrected source components completed a real all-users NSIS update from installed 0.6.0 to the published 0.6.1 installer, preserving the installation folder/mode and settings bytes and restarting KonX as 0.6.1. This is a component handoff test; the original installed button failed. See the [0.6.2 release notes](docs/releases/0.6.2.md#validation) for coverage limits.
 
 ## 0.6.1 — 2026-10-21
 
