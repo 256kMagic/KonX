@@ -8,6 +8,7 @@ import { settingsDialog } from './settings.js';
 import { NotepadTab } from './notepad/notepad.js';
 import { toolContext } from './tool-context.mjs';
 import { applyApplicationTheme } from './theme-effects.js';
+import { updateKonx } from './updates.js';
 
 const RECENT_KEY = 'konx.recent';
 
@@ -79,6 +80,7 @@ class WelcomeTab {
         'div.welcome',
         h('h1', h('img', { src: '../../assets/logo.svg', alt: '' }), app.info.name),
         h('p.lead', 'Terminal, file transfer and network toolkit — SSH2, Telnet, Serial, SFTP, ping, sweep, port scan and more in one window.'),
+        h('div.welcome-update', h('span.hint', `KonX ${app.info.version || ''}`), h('button.btn.sm', { onclick: () => updateKonx(app) }, icon('download'), 'Update KonX')),
         h('h3', 'Quick connect'),
         h(
           'div.qc-form',

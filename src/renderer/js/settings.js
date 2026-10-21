@@ -1,6 +1,7 @@
 // Global settings dialog, including the known-hosts manager.
 import { h, api, modal, buildFields, DataTable, contextMenu, confirmDialog, fmtDate } from './ui.js';
 import { SCHEMES, APP_THEMES } from './themes.js';
+import { createUpdatesPane } from './updates.js';
 
 export async function settingsDialog(app) {
   const s = app.settings;
@@ -49,11 +50,16 @@ export async function settingsDialog(app) {
   hosts.el.style.height = '300px';
   hosts.setRows(await api.invoke('hostkeys:list'));
 
+  const readSettings = () => JSON.stringify({ ...appearance.read(), ...terminal.read(), ...transfer.read() });
+  const initialSettings = readSettings();
+  let settingsOpen = true;
+  const updates = createUpdatesPane(app, { blockers: () => settingsOpen && readSettings() !== initialSettings ? ['Save or cancel your Settings changes.'] : [] });
   const panes = {
     Appearance: h('div.mpane.active', h('div.grid2', appearance.els)),
     Terminal: h('div.mpane', h('div.grid2', terminal.els)),
     'File Transfer': h('div.mpane', h('div.grid2', transfer.els)),
     'Known Hosts': h('div.mpane', h('div.hint', 'SSH host keys you have accepted. Right-click to remove one.'), hosts.el),
+    Updates: updates.el,
   };
   const btns = Object.keys(panes).map((name, i) =>
     h('button', { type: 'button', class: i === 0 ? 'active' : '', onclick: (e) => {
@@ -72,7 +78,7 @@ export async function settingsDialog(app) {
       { label: 'Cancel', value: null },
       { label: 'Save', value: true, primary: true },
     ],
-  });
+  }).finally(() => { settingsOpen = false; updates.dispose(); });
   if (!r) return;
   const patch = { ...appearance.read(), ...terminal.read(), ...transfer.read() };
   patch.fontSize = Number(patch.fontSize) || 14;

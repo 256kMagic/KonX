@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.6.1 — 2026-10-21
+
+### Added
+
+- First public release of **Update KonX**, carrying the same installed and portable update features introduced in the local 0.6.0 test build.
+- A newer version for local 0.6.0 users to exercise **Update KonX** after the complete stable release is published. Version 0.5.0 and earlier still need one manual upgrade to gain the button.
+- Current download links, update instructions, and release notes documenting checksum verification, profile preservation, restart guards, and the six inherited review findings that remain unfixed.
+
+This release does not change the updater's application behavior from 0.6.0. Installer and portable copies retain their existing Windows profile. See [0.6.1 release notes](docs/releases/0.6.1.md) and [Updating KonX](docs/UPDATING.md).
+
+Validation: all 482 automated tests pass for 0.6.1. Installer and portable builds completed; all 81 packaged source files match this checkout. Isolated unpacked and portable startup/restart checks pass, including encrypted credential persistence/removal and Knowledge notes. A complete public-release installation remains an end-to-end test; Windows helper fixtures exercise portable replacement/rollback and installed mode/directory arguments.
+
+## 0.6.0 — unreleased
+
+### Added
+
+- **Update KonX** on Home and in Settings, with one-press release checking, download progress, SHA-256 verification, and installation/restart for Windows x64 installed and portable copies.
+- Explicit cancellation, retry, and up-to-date states. Requests use the public KonX GitHub release without a token; startup and ordinary application exit do not trigger updates.
+- Restart guards for unsaved documents and Knowledge notes, active connections, transfers, captures, tools, and pending file operations. A verified update can wait while work is saved or stopped.
+- Portable replacement preserves the original executable until a verified replacement is ready, retains its location, and supports rollback on replacement/start failure. Installed upgrades preserve the selected installation directory and user/all-users mode.
+- `npm run release:prepare` stages release executables, downloadable guides, and the checksum manifest used by the updater.
+
+Version 0.5.0 and earlier require one manual upgrade to gain the button. See [update instructions](docs/UPDATING.md) and [0.6.0 build notes](docs/releases/0.6.0.md).
+
 ## 0.5.0 — 2026-10-20
 
 ### Added

@@ -92,6 +92,7 @@ class KnowledgeLibrary {
   }
 
   search(query, options) { return this._rpc('search', [query, options]); }
+  get busy() { return this._state === 'indexing' || this._pending.size > 0; }
   list(options) { return this._rpc('list', [options]); }
   get(id) { return this._rpc('get', [id]); }
   save(article) { return this._rpc('save', [article]); }

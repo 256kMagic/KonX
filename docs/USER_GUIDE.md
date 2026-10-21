@@ -1,10 +1,12 @@
 # KonX User Guide
 
-This guide covers KonX 0.5.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one window. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
+This guide covers KonX 0.6.1 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one window. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
 
 Version 0.4.0 adds [AI & Knowledge](AI_KNOWLEDGE_GUIDE.md): provider API keys, explanations of selected tool output, and an offline reference library backed by a background SQLite vector index. Older 0.3.0 builds do not include this feature.
 
 Version 0.5.0 adds six animated application themes, with a compact top header and effects behind terminal and editor output. Classic Dark and Light application themes and the existing terminal schemes remain available. See [Appearance and motion](#appearance-and-motion).
+
+The local 0.6.0 test build introduced **Update KonX**. Version 0.6.1 is the first public release with that updater and carries the same update workflow for installed and portable copies. See [Updating KonX](UPDATING.md) and the [0.6.1 release notes](releases/0.6.1.md), including inherited known issues.
 
 For downloads, build instructions, and project information, see the [README](../README.md) and [GitHub releases](https://github.com/256kMagic/KonX/releases).
 
@@ -39,19 +41,23 @@ Download a Windows x64 executable from [GitHub releases](https://github.com/256k
 
 | Download | Use it when | How to start |
 | --- | --- | --- |
-| `KonX-Setup-0.2.0.exe` | You want an installed application with shortcuts | Run setup, choose an installation folder, finish, and open KonX |
-| `KonX-0.2.0-portable.exe` | You want to run the application without its normal installer | Put the executable in a suitable folder and run it |
+| `KonX-Setup-<version>.exe` | You want an installed application with shortcuts | Run setup, choose an installation folder, finish, and open KonX |
+| `KonX-<version>-portable.exe` | You want to run the application without its normal installer | Put the executable in a suitable folder and run it |
 
 The portable executable still uses a Windows user profile for settings, saved sessions, and editor recovery. It does **not** automatically place all data beside the executable or make encrypted credentials transferable between computers. See [Application data and backups](#application-data-and-backups).
 
-For an update:
+For an update from 0.6.0 or later:
 
 1. Save local and remote files, finish or cancel transfers, and save any packet captures you want to keep.
-2. Close KonX. If it reports active connections, choose **Disconnect and quit** when ready.
-3. Run the newer setup, or replace your portable executable with the newer portable download.
-4. Reopen KonX. The same Windows account normally continues to use its existing profile.
+2. Disconnect terminal and SFTP sessions, stop running tools, and save or cancel any open Knowledge note.
+3. Press **Update KonX** on Home or under **Settings → Updates**. KonX checks for a newer public release, downloads the matching installer or portable executable, and verifies its checksum.
+4. With no work active, KonX updates and restarts automatically. If work needs attention, the downloaded update stays ready; finish the listed steps and press **Install and restart**. An all-users installation may show a Windows administrator prompt.
 
-There is no in-app automatic updater in this version. Npcap is optional for packet capture; SSH, SFTP, Notepad, and the other tools do not require it. Interactive setup includes a **Packet capture** page that can offer to download and open Npcap's separate installer. That option is unchecked by default and is skipped during silent installation; you can install Npcap later from KonX or its official website.
+Installed copies retain their installation folder and mode. Portable copies retain their filename and location; the containing folder must be writable. Both continue to use the existing Windows profile. No update is applied just because you close KonX, and no release checks run in the background. See [Updating KonX](UPDATING.md) for cancellation, failures, and release preparation.
+
+Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.6.1 installer or replace the portable executable once to obtain the update button. A local 0.6.0 installed or portable test build can use the button to upgrade to 0.6.1 once its complete release is published.
+
+Npcap is optional for packet capture; SSH, SFTP, Notepad, and the other tools do not require it. Updating KonX does not install or update Npcap.
 
 ## Your first SSH connection
 
@@ -544,6 +550,7 @@ Click the gear icon, make changes, and choose **Save**.
 | **Terminal** | Scrollback; right-click behavior; copy on select; multi-line paste confirmation; remote tab titles; default log folder |
 | **File Transfer** | Initial local folder; conflict policy; simultaneous transfers; hidden files |
 | **Known Hosts** | Saved SSH host keys and removal |
+| **Updates** | Current version and distribution; explicit **Update KonX** check, download, verification, and restart |
 
 Defaults include a dark theme, terminal font size 14, block cursor, 10,000 scrollback lines, copy on select, a context menu on right-click, multi-line paste confirmation, Ask on SFTP conflicts, and two simultaneous transfers. Per-session color scheme/font size can override terminal defaults in **Terminal & Log**.
 

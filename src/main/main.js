@@ -16,6 +16,9 @@ const wifi = require('./wifi');
 const { MistClient } = require('./mist');
 const { AIClient } = require('./ai');
 const { KnowledgeLibrary } = require('./knowledge');
+const { UpdateManager } = require('./updater');
+const { getInstallTarget, launchUpdate } = require('./update-install');
+const { UpdateController } = require('./update-controller');
 const importers = require('./importers');
 const serial = require('./serial');
 const { CaptureManager, readCaptureFile } = require('./capture');
@@ -36,6 +39,7 @@ let npWatcher;
 let mist;
 let ai;
 let knowledge;
+let updates;
 const toolJobs = new Map();
 
 function send(channel, ...args) {
@@ -94,6 +98,10 @@ function createWindow() {
   });
   win.webContents.on('will-navigate', (e) => e.preventDefault());
   win.on('close', (e) => {
+    if (updates?.installing && !updates.committed) {
+      e.preventDefault();
+      return;
+    }
     if (connections.conns.size && !CAPTURE) {
       const choice = dialog.showMessageBoxSync(win, {
         type: 'question',
@@ -171,7 +179,7 @@ function launchCaptureHelper(args) {
 }
 
 function registerIpc() {
-  const handle = (ch, fn) => ipcMain.handle(ch, (_e, ...args) => fn(...args));
+  const handle = (ch, fn) => ipcMain.handle(ch, (_e, ...args) => updates ? updates.invoke(ch, () => fn(...args)) : fn(...args));
 
   // app
   handle('app:info', () => ({
@@ -190,6 +198,13 @@ function registerIpc() {
   handle('app:openPath', (p) => shell.openPath(p));
   handle('app:showItem', (p) => shell.showItemInFolder(p));
   handle('app:devtools', () => win && win.webContents.toggleDevTools());
+  handle('app:updateState', () => updates.snapshot());
+  handle('app:updateStart', () => {
+    if (updateShutdownPending) throw new Error('KonX is closing. Wait for it to finish before starting another update.');
+    return updates.start();
+  });
+  handle('app:updateCancel', () => updates.cancel());
+  handle('app:updateInstall', () => updates.install());
   handle('clipboard:read', () => clipboard.readText());
   handle('clipboard:write', (t) => clipboard.writeText(String(t)));
   handle('dialog:openFile', async (opts = {}) => {
@@ -480,8 +495,56 @@ app.whenReady().then(() => {
   capture = new CaptureManager({ emit: send, launch: launchCaptureHelper, elevated: () => (elevated ??= elevate.isElevated()) });
   npStore = new notepad.NotepadStore(app.getPath('userData'));
   npWatcher = new notepad.FileWatcher(send);
+  const updateTarget = getInstallTarget({ isPackaged: app.isPackaged });
+  const updateCache = path.join(app.getPath('userData'), 'updates');
+  const updateManager = new UpdateManager({
+    version: VERSION,
+    mode: updateTarget.mode || 'unsupported',
+    reason: updateTarget.reason,
+    cacheDir: updateCache,
+    onState: () => updates?.changed(),
+  });
+  updates = new UpdateController({
+    manager: updateManager, target: updateTarget, cacheDir: updateCache,
+    busyReasons: () => {
+      const reasons = [];
+      if (connections.conns.size) reasons.push('Disconnect active terminal connections before updating.');
+      if (sftp.sessions.size || sftp.pending.size) reasons.push('Close SFTP sessions before updating.');
+      if (sftp.queue.active.size || sftp.queue.jobs.some((job) => ['queued', 'running'].includes(job.status))) reasons.push('Finish or cancel file transfers before updating.');
+      if (capture.sessions.size || capture.startRequests.size || capture.builtin.sessions.size || capture.builtin.startRequests.size) reasons.push('Stop packet capture before updating.');
+      if (toolJobs.size) reasons.push('Stop running tools and AI requests before updating.');
+      if (pendingPrompts.size) reasons.push('Finish the open connection prompts before updating.');
+      if (knowledge.busy) reasons.push('Wait for the knowledge library to finish its current operation.');
+      return reasons;
+    },
+    launch: launchUpdate,
+    quit: () => setImmediate(() => app.quit()),
+    onState: (state) => send('app:updateState', state),
+  });
   registerIpc();
   createWindow();
+});
+
+// Let download cancellation close its stream and remove its own partial file
+// before Electron exits. A committed installer must retain its staged payload.
+let updateShutdownPending = false;
+let updateShutdownComplete = false;
+app.on('before-quit', (event) => {
+  if (!updates || updates.committed) return;
+  if (updateShutdownComplete) {
+    // Consume this single retry. If a close prompt cancels it, a future quit
+    // still has to cancel any downloads started in the meantime.
+    updateShutdownComplete = false;
+    return;
+  }
+  event.preventDefault();
+  if (updates.installing || updateShutdownPending) return;
+  updateShutdownPending = true;
+  Promise.resolve(updates.shutdown()).catch(() => {}).finally(() => {
+    updateShutdownPending = false;
+    updateShutdownComplete = true;
+    app.quit();
+  });
 });
 
 app.on('window-all-closed', () => {

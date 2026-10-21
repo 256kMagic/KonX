@@ -729,3 +729,13 @@ pre.follow-chunk.fb { color: #73b9ff; background: rgba(59, 156, 242, 0.08); }
 .np-hashname { color: var(--muted); font-weight: 600; }
 .np-hashval { word-break: break-all; font-size: 12px; user-select: text; }
 .np-verdict:empty { display: none; }
+
+/* Explicit application updates share the existing theme and modal surfaces. */
+.welcome-update, .update-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.welcome-update { margin: 12px 0 18px; }
+.update-panel, .update-settings { overflow-wrap: anywhere; }
+.update-status { color: var(--text-strong); }
+.update-progress { width: 100%; height: 10px; accent-color: var(--accent); }
+.update-problems { white-space: pre-line; color: var(--warn); border-left: 3px solid var(--warn); padding: 8px 12px; margin: 12px 0; }
+.update-actions { margin-top: 16px; }
+.update-settings p { max-width: 65ch; line-height: 1.6; }

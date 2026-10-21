@@ -5,7 +5,7 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const INVOKE_PREFIXES = ['app:', 'clipboard:', 'dialog:', 'settings:', 'sessions:', 'hostkeys:', 'conn:', 'serial:', 'sftp:', 'xfer:', 'local:', 'tools:', 'ui:', 'cap:', 'np:'];
 const SEND_CHANNELS = ['conn:write', 'conn:resize', 'np:backup'];
-const EVENT_CHANNELS = ['conn:data', 'conn:status', 'ui:prompt', 'xfer:update', 'sftp:changed', 'sftp:closed', 'sftp:edited', 'sftp:edit-error', 'tools:event', 'cap:packets', 'cap:state', 'np:changed', 'np:found', 'np:findDone'];
+const EVENT_CHANNELS = ['app:updateState', 'conn:data', 'conn:status', 'ui:prompt', 'xfer:update', 'sftp:changed', 'sftp:closed', 'sftp:edited', 'sftp:edit-error', 'tools:event', 'cap:packets', 'cap:state', 'np:changed', 'np:found', 'np:findDone'];
 
 contextBridge.exposeInMainWorld('api', {
   invoke(channel, ...args) {
