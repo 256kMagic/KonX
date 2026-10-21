@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.0 — 2026-10-20 (test build)
+## 0.5.0 — 2026-10-20
 
 ### Added
 
@@ -8,7 +8,7 @@
 - Compact top header with **Pause effects**/**Resume effects**, a saved **Animate theme effects** preference, and automatic reduced-motion support. Decorative output backgrounds keep tables, forms, and explanations readable.
 - **Follow application theme** terminal palette for coordinated colors and backgrounds, enabled by default for new profiles. Existing profiles retain their selected global and per-session palettes; select the new option in **Settings → Appearance** to opt in. Classic Dark/Light application themes and all existing opaque terminal schemes remain available.
 
-See the [0.5.0 test-build notes](docs/releases/0.5.0.md) and [Appearance guide](docs/USER_GUIDE.md#appearance-and-motion).
+See the [0.5.0 release notes](docs/releases/0.5.0.md) and [Appearance guide](docs/USER_GUIDE.md#appearance-and-motion).
 
 Validation: 439 automated tests pass, including real Electron checks for all six themes, coordinated terminal/editor output, selection, compact toolbar layout, saved motion controls, and Windows reduced motion. All 76 source files match the package; unpacked, portable, and installed application checks pass.
 
