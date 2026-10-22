@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.18.0 — 2026-10-22
+
+- Float open tabs inside KonX, drag their headers, resize all edges/corners, and maximize, restore, or dock them.
+- Add separate native pop-out windows for live views; Windows X returns a panel to the workspace without reconnecting or replacing its state.
+- Add resizable split dividers, stable tab dragging, existing-pane drops, geometry persistence, and Reset workspace.
+- Keep terminal input, mouse reporting, editor models, packet details, themes, menus, and dialogs working across window moves.
+- Retain child-window ownership through redocking and shutdown, and restrict application IPC to the main renderer frame.
+
+See the [workspace guide](docs/WORKSPACE_LAYOUTS.md) and [release notes](docs/releases/0.18.0.md).
+
 ## 0.17.0 — 2026-10-22
 
 - Add **Auto detect** for serial baud rate, including saved sessions and Quick Connect.

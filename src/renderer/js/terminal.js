@@ -4,6 +4,7 @@ import { h, icon, api, contextMenu, modal, toast, errMsg, debounce } from './ui.
 import { scheme, terminalTheme, usesThemeEffects } from './themes.js';
 import { mountThemeOutput } from './theme-effects.js';
 import { CiscoOutputHighlighter } from './cisco-highlighting.mjs';
+import { bridgeTerminalMouse } from './terminal-mouse-host.mjs';
 
 let seq = 0;
 
@@ -80,6 +81,8 @@ export class TerminalTab {
     this.el = h('div.view', this.logbar, this.wrap);
     this._renderLogging();
     this.term.open(this.wrap);
+    this.originalDocument = this.wrap.ownerDocument;
+    this.hostWindow = this.originalDocument.defaultView;
     this.ciscoHighlighter = new CiscoOutputHighlighter(this.term, { enabled: this._highlightingMode() === 'cisco' });
     mountThemeOutput(this.wrap);
     this.applyColors(s);
@@ -226,12 +229,38 @@ export class TerminalTab {
     if (this.disposed) return;
     this.active = true;
     const generation = ++this.visibilityGeneration;
-    requestAnimationFrame(() => {
+    const refresh = () => {
       if (this.disposed || !this.active || generation !== this.visibilityGeneration) return;
       this.refit();
       this.ciscoHighlighter?.refresh();
       if (focus) this.focus();
-    });
+    };
+    if (this.hostWindow) this.hostWindow.requestAnimationFrame(refresh);
+    else requestAnimationFrame(refresh);
+  }
+
+  // The workspace moves the existing DOM before calling this hook. Keep the
+  // terminal, its add-ons, selection, parser and connection identity intact.
+  onHostWindowChanged(hostWindow) {
+    if (this.disposed || !hostWindow || this.wrap.ownerDocument.defaultView !== hostWindow) return;
+    if (this.hostWindow === hostWindow) { this.refit(); return; }
+    ++this.visibilityGeneration;
+    this.mouseHostCleanup?.();
+    this.hostWindow = hostWindow;
+    this.term.open(this.wrap);
+    this.mouseHostCleanup = bridgeTerminalMouse(this.term, this.originalDocument, hostWindow);
+    this.ro.disconnect();
+    this.ro = new hostWindow.ResizeObserver(debounce(() => this.refit(), 30));
+    this.ro.observe(this.wrap);
+    // The highlighter owns animation callbacks in the window where it started.
+    // Rebuild just its decorations, never the underlying terminal buffer.
+    this.ciscoHighlighter?.dispose();
+    const settings = this.app.settings;
+    const background = scheme(this.meta.colorScheme || settings.colorScheme || 'app', settings.uiTheme).background;
+    this.ciscoHighlighter = new CiscoOutputHighlighter(this.term, { enabled: this._highlightingMode() === 'cisco', background });
+    this.refit();
+    this.term.refresh(0, this.term.rows - 1);
+    if (this.active) this.show({ focus: false });
   }
 
   hide() {
@@ -501,6 +530,8 @@ export class TerminalTab {
     this.disposed = true;
     this.hide();
     this.ro.disconnect();
+    this.mouseHostCleanup?.();
+    this.mouseHostCleanup = null;
     api.invoke('conn:close', this.id);
     this.ciscoHighlighter?.dispose();
     this.term.dispose();

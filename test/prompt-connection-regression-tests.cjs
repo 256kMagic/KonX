@@ -98,11 +98,15 @@ function modalHarness() {
   const source = fs.readFileSync(filename, 'utf8');
   const code = source.slice(source.indexOf('const modalStack ='), source.indexOf('export async function confirmDialog'))
     .replace('export function modal', 'function modal');
-  const context = { document, h, icon: () => h('span'), MutationObserver,
-    setTimeout(fn) { const id = ++nextTimer; timers.set(id, fn); return id; },
-    clearTimeout(id) { timers.delete(id); },
+  const host = {
+    document,
     addEventListener(name, fn) { assert.equal(name, 'keydown'); keyListeners.add(fn); },
     removeEventListener(name, fn) { assert.equal(name, 'keydown'); keyListeners.delete(fn); },
+  };
+  document.defaultView = host;
+  const context = { document, uiDocument: () => document, h, icon: () => h('span'), MutationObserver,
+    setTimeout(fn) { const id = ++nextTimer; timers.set(id, fn); return id; },
+    clearTimeout(id) { timers.delete(id); },
   };
   vm.runInNewContext(code + ';this.modal = modal;', context, { filename });
   return {

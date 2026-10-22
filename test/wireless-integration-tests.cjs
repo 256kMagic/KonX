@@ -20,18 +20,19 @@ async function runWirelessIntegrationTests(test) {
         if (name === 'electron') return { app: { whenReady: () => ({ then() {} }), on: (name, callback) => appEvents.set(name, callback), quit: () => quitCalls++ },
           ipcMain: { handle: (name, callback) => handlers.set(name, callback), on() {} } };
         if (name === './wifi') return { run: client.run };
+        if (name === './workspace-windows') return load(name);
         if (name.startsWith('./')) return {};
         return load(name);
       },
     };
-    vm.runInNewContext(fs.readFileSync(filename, 'utf8') + '\nwin={isDestroyed:()=>false,webContents:{send:receive}}; mist=client; registerIpc();', context, { filename });
-    const config = await handlers.get('tools:mistConfigure')({}, { region: 'global01', token: secret });
+    vm.runInNewContext(fs.readFileSync(filename, 'utf8') + '\nwin={isDestroyed:()=>false,webContents:{send:receive,mainFrame:{}}}; globalThis.ipcEvent={sender:win.webContents,senderFrame:win.webContents.mainFrame}; mist=client; registerIpc();', context, { filename });
+    const config = await handlers.get('tools:mistConfigure')(context.ipcEvent, { region: 'global01', token: secret });
     assert.equal(config.hasToken, true);
     assert.equal(calls[0].token, secret);
     assert.ok(!JSON.stringify(config).includes(secret));
-    assert.ok(!JSON.stringify(await handlers.get('tools:mistConfig')({})).includes(secret));
-    await handlers.get('tools:start')({}, 'wifi', { action: 'survey' }, 'wifi-fixture');
-    await handlers.get('tools:start')({}, 'mist', { action: 'self' }, 'mist-fixture');
+    assert.ok(!JSON.stringify(await handlers.get('tools:mistConfig')(context.ipcEvent)).includes(secret));
+    await handlers.get('tools:start')(context.ipcEvent, 'wifi', { action: 'survey' }, 'wifi-fixture');
+    await handlers.get('tools:start')(context.ipcEvent, 'mist', { action: 'self' }, 'mist-fixture');
     await new Promise((resolve) => setImmediate(resolve));
     appEvents.get('window-all-closed')();
     await new Promise((resolve) => setImmediate(resolve));

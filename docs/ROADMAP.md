@@ -28,6 +28,8 @@ Version 0.16.1 gives staged update executables a KonX name and target version. S
 
 Version 0.17.0 adds serial baud-rate detection with explicit probing, visible progress, cancellation, and readable-output confirmation. See the [serial guide](SERIAL_AUTO_BAUD.md) and [release validation](releases/0.17.0.md).
 
+Version 0.18.0 adds movable/resizable floating panels, split dividers, native pop-out windows, and dock-back controls while preserving live view ownership. See the [workspace guide](WORKSPACE_LAYOUTS.md) and [release validation](releases/0.18.0.md).
+
 ## Scope
 
 Device collection starts with connected Cisco IOS/IOS-XE SSH sessions and fixed read-only commands in a separate channel. Trace results show candidates and unresolved links when evidence is incomplete. Imported reports and a synthetic demo support offline use.

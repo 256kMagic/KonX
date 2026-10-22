@@ -11,6 +11,7 @@ import { applyApplicationTheme } from './theme-effects.js';
 import { updateKonx } from './updates.js';
 import { incidentEvidence } from './incident-evidence.mjs';
 import { WorkspaceLayout } from './workspace-layout.js';
+import { WorkspacePopouts } from './workspace-popouts.js';
 
 const RECENT_KEY = 'konx.recent';
 
@@ -266,6 +267,7 @@ class App {
     this.active = null;
     this.cmdHistory = [];
     this.buildLayout();
+    this.popouts = new WorkspacePopouts(this);
     this.workspaceLayout = new WorkspaceLayout(this);
     this.sessions = new SessionTree(this);
     this.sideSessions.replaceWith(this.sessions.el);
@@ -279,6 +281,7 @@ class App {
     this.theme = applyApplicationTheme(this.settings);
     document.documentElement.style.setProperty('--sidebar-w', (this.settings.sidebarWidth || 260) + 'px');
     this.updateThemeHeader();
+    this.popouts?.updateTheme();
   }
 
   updateThemeHeader() {
@@ -526,7 +529,10 @@ class App {
     this.workspaceLayout.activate(tab);
     this.renderTabs(true);
     this.updateStatus(tab);
-    if (focus) this.workspaceLayout.focusTarget(tab);
+    if (focus) {
+      this.popouts.focus(tab);
+      this.workspaceLayout.focusTarget(tab);
+    }
   }
 
   async closeTab(tab) {
@@ -583,52 +589,80 @@ class App {
 
   renderTabs(revealActive = false) {
     const scrollLeft = this.tabbar.scrollLeft;
-    this.tabbar.replaceChildren(
-      ...this.tabs.map((t, i) => {
+    const live = new Set(this.tabs.map(t => t.tabElement).filter(Boolean));
+    for (const node of [...this.tabbar.children]) if (!live.has(node)) node.remove();
+    this.tabs.forEach((t, i) => {
         const dotCls = t.kind === 'terminal' || t.kind === 'sftp' ? t.state : t.state === 'running' ? 'connecting' : '';
-        const el = h(
+        let el = t.tabElement;
+        if (!el) {
+          el = t.tabElement = h(
           'div.tab',
-          { class: t === this.active ? 'active' : '', draggable: true, title: t.title },
+          { draggable: true, 'data-tab-id': t.id },
           t.kind === 'terminal' || t.kind === 'sftp' ? h('span.dot', { class: dotCls + (t.activity ? ' activity' : '') }) : h('span.ticon', icon(t.icon)),
           h('span.title', t.title),
           h('button.close', { title: 'Close (Ctrl+Shift+W)', onclick: (e) => (e.stopPropagation(), this.closeTab(t)) }, icon('x'))
         );
         el.addEventListener('mousedown', (e) => {
-          // Activating rebuilds the tab bar; keep X in place until its click fires.
-          if (e.button === 0 && !e.target.closest('button.close')) this.activate(t);
+          el.konxWasDragged = false;
+          if (e.button === 0 && !e.target.closest('button.close')) this.activate(t, { focus: false });
           if (e.button === 1) {
             e.preventDefault();
             this.closeTab(t);
           }
         });
+        el.addEventListener('click', e => {
+          if (!el.konxWasDragged && !e.target.closest('button.close')) this.activate(t);
+        });
         el.addEventListener('contextmenu', (e) => {
           e.preventDefault();
           this.tabMenu(e.clientX, e.clientY, t);
         });
-        el.addEventListener('dragstart', (e) => {
-          e.dataTransfer.setData('text/x-tab', String(i));
-          el.classList.add('dragging');
-        });
-        el.addEventListener('dragend', () => el.classList.remove('dragging'));
-        el.addEventListener('dragover', (e) => e.dataTransfer.types.includes('text/x-tab') && e.preventDefault());
+        this.bindTabDrag(el, t);
+        el.addEventListener('dragover', (e) => e.dataTransfer.types.includes('text/x-konx-tab') && e.preventDefault());
         el.addEventListener('drop', (e) => {
-          const from = Number(e.dataTransfer.getData('text/x-tab'));
-          if (isNaN(from) || from === i) return;
+          const id = e.dataTransfer.getData('text/x-konx-tab');
+          const from = this.tabs.findIndex(tab => tab.id === id), target = this.tabs.indexOf(t);
+          if (from < 0 || target < 0 || from === target) return;
+          e.preventDefault(); e.stopPropagation();
           const [moved] = this.tabs.splice(from, 1);
-          this.tabs.splice(i, 0, moved);
+          this.tabs.splice(target, 0, moved);
           this.renderTabs(true);
         });
-        return el;
-      })
-    );
+        }
+        const placement = this.workspaceLayout?.placement?.(t) || 'docked';
+        el.classList.toggle('active', t === this.active);
+        el.dataset.placement = placement;
+        el.title = t.title + (placement === 'external' ? ' — popped out' : placement === 'floating' ? ' — floating' : '');
+        el.querySelector('.title').textContent = t.title;
+        const dot = el.querySelector('.dot');
+        if (dot) dot.className = 'dot ' + dotCls + (t.activity ? ' activity' : '');
+        if (this.tabbar.children[i] !== el) this.tabbar.insertBefore(el, this.tabbar.children[i] || null);
+      });
     // Background activity and title updates must not undo manual tab scrolling.
     this.tabbar.scrollLeft = scrollLeft;
     this.scheduleTabLayout(revealActive);
     this.workspaceLayout?.refresh();
+    this.popouts?.refresh();
+  }
+
+  bindTabDrag(element, tab) {
+    element.draggable = true;
+    element.addEventListener('dragstart', e => {
+      if (e.target.closest('button,input,select,textarea')) { e.preventDefault(); return; }
+      e.dataTransfer.setData('text/x-konx-tab', tab.id);
+      e.dataTransfer.effectAllowed = 'move';
+      element.konxWasDragged = true;
+      this.draggedTab = tab; element.classList.add('dragging');
+    });
+    element.addEventListener('dragend', () => { this.draggedTab = null; element.classList.remove('dragging'); });
   }
 
   tabMenu(x, y, t) {
     contextMenu(x, y, [
+      { label: 'Float in workspace', icon: 'columns', action: () => this.workspaceLayout.float(t) },
+      { label: 'Pop out to window', icon: 'upload', action: () => this.popouts.open(t) },
+      this.workspaceLayout.placement?.(t) !== 'docked' && { label: 'Dock back', icon: 'download', action: () => this.workspaceLayout.dock(t) },
+      '-',
       { label: 'Rename…', icon: 'edit', action: async () => {
         const n = await promptText('Rename tab', 'Title', t.title, 'Rename');
         if (n) this.setTabTitle(t, n);
@@ -843,7 +877,7 @@ class App {
     const changed = Object.keys(next).filter(key => JSON.stringify(prior[key]) !== JSON.stringify(next[key]));
     this.settings = next;
     // A structural selection need not reapply terminal/editor colors or fonts.
-    if (changed.some(key => key !== 'uiLayout')) {
+    if (changed.some(key => !['uiLayout', 'workspaceGeometry'].includes(key))) {
       this.applyTheme();
       for (const t of this.tabs) if (t.applySettings) t.applySettings(this.settings);
       this.renderButtonBar();

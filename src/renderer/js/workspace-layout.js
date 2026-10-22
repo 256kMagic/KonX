@@ -1,5 +1,6 @@
-import { h, icon, toast, errMsg } from './ui.js';
+import { h, icon, toast, errMsg, api } from './ui.js';
 import { APP_LAYOUTS, normalizeLayout } from './workspace-layouts.mjs';
+import { normalizeWorkspaceGeometry, clampFloatBounds, expandFloatBounds, contractFloatBounds } from './workspace-panels-model.mjs';
 
 const incident = (tab) => tab?.toolKind === 'incidents';
 const label = (slot) => ({ primary: 'Main view', companion: 'Companion', dossier: 'Incident dossier' })[slot] || `View ${Number(slot.slice(5)) + 1}`;
@@ -66,6 +67,8 @@ export class WorkspaceLayoutModel {
 export class WorkspaceLayout {
   constructor(app) {
     this.app = app; this.model = new WorkspaceLayoutModel(); this.visible = new Set(); this.paneNodes = new Map();
+    this.floating = new Map(); this.external = new Map();
+    this.geometry = normalizeWorkspaceGeometry(app.settings.workspaceGeometry);
     this.contextHidden = { classic: true, workbench: false, 'incident-desk': true, 'operations-wall': true, focus: true };
     this.focusGeneration = 0; this.borrowed = null;
     this.layoutSelect = h('select.input.workspace-layout-select', { 'aria-label': 'Workspace layout', title: 'Workspace layout', onchange: async () => {
@@ -79,7 +82,9 @@ export class WorkspaceLayout {
     this.sessionToggle = h('button.btn.sm.workspace-sessions-toggle', { onclick: () => app.toggleSidebar() }, 'Sessions');
     this.wallCount = h('select.input.workspace-wall-count', { 'aria-label': 'Operations Wall pane count', onchange: () => this.setPaneCount(Number(this.wallCount.value)) }, [1, 2, 3, 4].map(n => h('option', { value: n }, `${n} pane${n === 1 ? '' : 's'}`)));
     this.restoreButton = h('button.btn.sm', { onclick: () => this.expand(null) }, 'Restore panes');
-    this.bar = h('div.workspace-bar', this.sessionToggle, this.contextToggle, this.wallCount, this.restoreButton, this.target);
+    this.floatButton = h('button.btn.sm.workspace-float-active', { onclick: () => this.app.active && this.float(this.app.active) }, 'Float panel');
+    this.resetButton = h('button.btn.sm.workspace-reset', { onclick: () => this.reset() }, 'Reset workspace');
+    this.bar = h('div.workspace-bar', this.sessionToggle, this.contextToggle, this.wallCount, this.restoreButton, this.floatButton, this.resetButton, this.target);
     app.main.insertBefore(this.bar, app.tabstrip);
     this.navigationTitle = h('strong', 'Case navigation');
     this.navigationHint = h('p.hint', 'Choose an existing Incident Workspace in the dossier pane. Its saved cases will appear here.');
@@ -93,32 +98,43 @@ export class WorkspaceLayout {
       h('div.workspace-context-head', 'Context', h('button.btn.sm', { 'aria-label': 'Collapse context', onclick: () => this.toggleContext() }, icon('x'))),
       h('div.workspace-context-body', this.contextTitle, this.contextStatus, h('strong', 'Running work'), this.jobs));
     this.panes = h('div.workspace-panes'); this.parking = h('div.workspace-parking', { 'aria-hidden': 'true' });
+    this.panes.addEventListener('scroll', () => this._positionSplitters(), { passive: true });
+    this.floatLayer = h('div.workspace-float-layer');
     this.shell = h('div.workspace-shell', this.navigation, this.panes, this.context);
-    app.views.append(this.shell, this.parking);
+    app.views.append(this.shell, this.floatLayer, this.parking);
     this.resize = new ResizeObserver(() => this.refit()); this.resize.observe(app.views);
     this.set(app.settings.uiLayout);
   }
   get() {
     return { layout: this.model.layout, primaryId: this.model.primaryId, companionId: this.model.companionId, dossierId: this.model.dossierId,
       wallIds: [...this.model.wallIds], wallCount: this.model.wallCount, focusedId: this.app.active?.id || null, expandedSlot: this.model.expandedSlot,
+      floatingIds: [...this.floating.keys()].map(tab => tab.id), externalIds: [...this.external.keys()].map(tab => tab.id),
+      geometry: normalizeWorkspaceGeometry(this.geometry),
       visibleIds: [...this.visible].map(t => t.id) };
   }
   set(id) {
+    this.gesture?.cancel();
     const next = normalizeLayout(id), prior = this.model.layout;
     if (prior !== 'focus' && next === 'focus') { this.sidebarBeforeFocus = this.app.root.classList.contains('no-sidebar'); this.app.root.classList.add('no-sidebar'); }
     else if (prior === 'focus' && next !== 'focus') this.app.root.classList.toggle('no-sidebar', !!this.sidebarBeforeFocus);
-    if (prior !== next) this.model.set(next, this.app.tabs, this.app.active?.id);
-    else this.model.prune(this.app.tabs);
+    if (prior !== next) this.model.set(next, this._dockable(), this.placement(this.app.active) === 'docked' ? this.app.active?.id : null);
+    else this.model.prune(this._dockable());
     this.app.root.dataset.layout = next; this.layoutSelect.value = next;
     if (next === 'focus') { if (this.app.tabstrip !== this.app.main.lastElementChild) this.app.main.append(this.app.tabstrip); }
     else if (this.app.tabstrip.nextElementSibling !== this.app.views) this.app.main.insertBefore(this.app.tabstrip, this.app.views);
     this.refresh(); this.app.scheduleTabLayout(true);
   }
   mount(tab) { tab.active = false; tab.el.inert = true; this.parking.append(tab.el); }
-  activate(tab) { this.model.activate(tab.id, this.app.tabs); this.refresh(); }
+  activate(tab) {
+    if (this.placement(tab) === 'docked') this.model.activate(tab.id, this._dockable());
+    if (this.floating.has(tab)) this._raise(tab);
+    this.refresh();
+  }
+  _dockable() { return this.app.tabs.filter(tab => !this.floating.has(tab) && !this.external.has(tab)); }
+  placement(tab) { return this.external.has(tab) ? 'external' : this.floating.has(tab) ? 'floating' : 'docked'; }
   pin(slot, id) {
     try {
-      this.model.pin(slot, id || null, this.app.tabs);
+      this.model.pin(slot, id || null, this._dockable());
       const selected = this.app.tabs.find(t => t.id === id);
       if (selected) this.app.activate(selected, { focus: false });
       else if (!this.model.slots().some(s => s.id === this.app.active?.id)) {
@@ -137,27 +153,191 @@ export class WorkspaceLayout {
   setPaneCount(count) {
     if (![1, 2, 3, 4].includes(count)) return;
     this.model.wallCount = count; this.model.expandedSlot = null;
-    if (this.model.layout === 'operations-wall' && this.app.active) this.model.activate(this.app.active.id, this.app.tabs);
+    if (this.model.layout === 'operations-wall' && this.app.active && this.placement(this.app.active) === 'docked') this.model.activate(this.app.active.id, this._dockable());
     this.refresh();
   }
   toggleContext() { this.contextHidden[this.model.layout] = !this.contextHidden[this.model.layout]; this.refresh(); }
+  _viewport() { return { width: this.app.views.clientWidth, height: this.app.views.clientHeight }; }
+  _rememberGeometry() {
+    const value = normalizeWorkspaceGeometry(this.geometry);
+    this.app.settings.workspaceGeometry = value;
+    // Serialize writes so finishing an earlier disk save cannot overwrite a
+    // later gesture. Never serialize tabs or their connection specifications.
+    this.saveGeometry = (this.saveGeometry || Promise.resolve()).catch(() => {}).then(() => api.invoke('settings:set', { workspaceGeometry: value }))
+      .catch(error => toast('Could not save workspace geometry: ' + errMsg(error), 'err'));
+  }
+  _raise(tab) {
+    const entry = this.floating.get(tab); if (!entry) return;
+    this.floating.delete(tab); this.floating.set(tab, entry);
+    let z = 1; for (const item of this.floating.values()) item.el.style.zIndex = String(z++);
+  }
+  _setFloatBounds(entry, bounds, refit = true) {
+    entry.bounds = clampFloatBounds(bounds, this._viewport());
+    const { x, y, width, height } = entry.bounds;
+    Object.assign(entry.el.style, { left: x + 'px', top: y + 'px', width: width + 'px', height: height + 'px' });
+    if (refit) this.refit();
+  }
+  _gesture(event, element, update, finish) {
+    if (event.button !== 0 || this.gesture) return;
+    event.preventDefault(); this.cancelFocus();
+    const owner = element.ownerDocument.defaultView, pointer = event.pointerId;
+    const move = next => { if (next.pointerId === pointer) update(next); };
+    const end = (next, cancelled = false) => {
+      if (next?.pointerId != null && next.pointerId !== pointer) return;
+      owner.removeEventListener('pointermove', move); owner.removeEventListener('pointerup', done);
+      owner.removeEventListener('pointercancel', cancel); owner.removeEventListener('keydown', key); owner.removeEventListener('blur', cancel);
+      element.removeEventListener('lostpointercapture', cancel);
+      this.gesture = null;
+      try { if (element.hasPointerCapture(pointer)) element.releasePointerCapture(pointer); } catch {}
+      document.documentElement.classList.remove('workspace-gesturing'); finish(cancelled);
+    };
+    const done = next => end(next), cancel = next => end(next, true);
+    const key = next => { if (next.key === 'Escape') { next.preventDefault(); cancel(); } };
+    this.gesture = { cancel: () => cancel() };
+    owner.addEventListener('pointermove', move); owner.addEventListener('pointerup', done); owner.addEventListener('pointercancel', cancel);
+    owner.addEventListener('keydown', key); owner.addEventListener('blur', cancel); element.addEventListener('lostpointercapture', cancel);
+    try { element.setPointerCapture(pointer); } catch {}
+    document.documentElement.classList.add('workspace-gesturing');
+  }
+  float(tab, bounds) {
+    if (!tab || !this.app.tabs.includes(tab)) return false;
+    if (this.external.has(tab)) return Promise.resolve(this.app.popouts?.dock(tab)).then(() => this.external.has(tab) ? false : this.float(tab, bounds));
+    if (this.floating.has(tab)) {
+      const entry = this.floating.get(tab);
+      if (bounds && !entry.maximized) {
+        this._setFloatBounds(entry, bounds); this.geometry.lastFloatRect = contractFloatBounds(entry.bounds, this._viewport()); this._rememberGeometry();
+      }
+      this.app.activate(tab); return true;
+    }
+    const previousSlot = this.model.slots().find(slot => slot.id === tab.id)?.slot;
+    this.model.remove(tab.id);
+    if (this.borrowed?.tab === tab) this.restoreLibrary();
+    const title = h('span.workspace-float-title', tab.title);
+    const maximize = h('button.btn.sm', { 'aria-label': 'Maximize floating panel', onclick: () => this.maximize(tab) }, 'Maximize');
+    const body = h('div.workspace-pane-body');
+    const head = h('div.workspace-pane-head.workspace-float-head', title,
+      h('button.btn.sm', { onclick: () => this.dock(tab), 'aria-label': 'Dock floating panel' }, 'Dock'),
+      h('button.btn.sm', { onclick: () => this.app.popouts?.open(tab), 'aria-label': 'Pop out floating panel' }, 'Pop out'), maximize,
+      h('button.btn.sm', { onclick: () => this.app.closeTab(tab), 'aria-label': 'Close panel tab' }, icon('x')));
+    const el = h('section.workspace-pane.workspace-floating', { 'aria-label': 'Floating panel: ' + tab.title, 'data-tab-id': tab.id }, head, body);
+    const entry = { el, head, title, body, maximize, previousSlot, bounds: null, maximized: false };
+    this.floating.set(tab, entry); this.floatLayer.append(el); body.append(tab.el);
+    head.addEventListener('pointerdown', event => {
+      if (event.target.closest('button,select,input') || entry.maximized) return;
+      const initial = { ...entry.bounds }, startX = event.clientX, startY = event.clientY;
+      this.app.activate(tab, { focus: false });
+      this._gesture(event, head, next => this._setFloatBounds(entry, { ...initial, x: initial.x + next.clientX - startX, y: initial.y + next.clientY - startY }), cancelled => {
+        if (cancelled) this._setFloatBounds(entry, initial);
+        else { this.geometry.lastFloatRect = contractFloatBounds(entry.bounds, this._viewport()); this._rememberGeometry(); }
+      });
+    });
+    head.addEventListener('dblclick', event => { if (!event.target.closest('button,select,input')) this.maximize(tab); });
+    for (const edge of ['n', 'e', 's', 'w', 'ne', 'se', 'sw', 'nw']) {
+      const handle = h('div.workspace-float-resize', { 'data-edge': edge, 'aria-hidden': 'true' }); el.append(handle);
+      handle.addEventListener('pointerdown', event => {
+        if (entry.maximized) return;
+        const initial = { ...entry.bounds }, startX = event.clientX, startY = event.clientY;
+        this.app.activate(tab, { focus: false });
+        this._gesture(event, handle, next => {
+          const viewport = this._viewport(), minW = Math.min(300, viewport.width), minH = Math.min(220, viewport.height);
+          let left = initial.x, right = initial.x + initial.width, top = initial.y, bottom = initial.y + initial.height;
+          if (edge.includes('w')) left = Math.max(0, Math.min(right - minW, initial.x + next.clientX - startX));
+          if (edge.includes('e')) right = Math.min(viewport.width, Math.max(left + minW, initial.x + initial.width + next.clientX - startX));
+          if (edge.includes('n')) top = Math.max(0, Math.min(bottom - minH, initial.y + next.clientY - startY));
+          if (edge.includes('s')) bottom = Math.min(viewport.height, Math.max(top + minH, initial.y + initial.height + next.clientY - startY));
+          this._setFloatBounds(entry, { x: left, y: top, width: right - left, height: bottom - top });
+        }, cancelled => {
+          if (cancelled) this._setFloatBounds(entry, initial);
+          else { this.geometry.lastFloatRect = contractFloatBounds(entry.bounds, this._viewport()); this._rememberGeometry(); }
+        });
+      });
+    }
+    for (const name of ['pointerdown', 'focusin']) body.addEventListener(name, () => { if (this.app.active !== tab) this.app.activate(tab, { focus: false }); });
+    this._setFloatBounds(entry, bounds || expandFloatBounds(this.geometry.lastFloatRect, this._viewport()));
+    this.geometry.lastFloatRect = contractFloatBounds(entry.bounds, this._viewport());
+    this.app.activate(tab, { focus: false }); this._rememberGeometry(); return true;
+  }
+  maximize(tab) {
+    const entry = this.floating.get(tab); if (!entry) return;
+    this.gesture?.cancel();
+    if (!entry.maximized) { entry.restoreBounds = { ...entry.bounds }; entry.maximized = true; this._setFloatBounds(entry, { x: 0, y: 0, ...this._viewport() }); }
+    else { entry.maximized = false; this._setFloatBounds(entry, entry.restoreBounds); }
+    entry.el.classList.toggle('workspace-maximized', entry.maximized);
+    entry.maximize.textContent = entry.maximized ? 'Restore' : 'Maximize';
+    entry.maximize.setAttribute('aria-label', entry.maximized ? 'Restore floating panel' : 'Maximize floating panel');
+    this.app.activate(tab, { focus: false });
+  }
+  _dockSlot(tab, preferred) {
+    const slots = this.model.slots();
+    const valid = slot => slots.some(item => item.slot === slot) && (slot !== 'dossier' || incident(tab));
+    return valid(preferred) ? preferred : slots.find(item => !item.id && valid(item.slot))?.slot || slots.find(item => valid(item.slot))?.slot;
+  }
+  dock(tab, slot) {
+    if (!tab || !this.app.tabs.includes(tab)) return false;
+    if (this.external.has(tab)) return Promise.resolve(this.app.popouts?.dock(tab)).then(() => this.external.has(tab) ? false : this.dock(tab, slot));
+    this.gesture?.cancel();
+    const entry = this.floating.get(tab), target = this._dockSlot(tab, slot || entry?.previousSlot);
+    if (!target) return false;
+    if (entry) { this.parking.append(tab.el); entry.el.remove(); this.floating.delete(tab); }
+    this.model.pin(target, tab.id, this._dockable()); this.app.activate(tab, { focus: false }); this._rememberGeometry(); return true;
+  }
+  attachExternal(tab, { body, window: child }) {
+    if (!tab || !this.app.tabs.includes(tab) || !body || !child) return false;
+    this.gesture?.cancel();
+    const entry = this.floating.get(tab), previousSlot = entry?.previousSlot || this.model.slots().find(slot => slot.id === tab.id)?.slot;
+    if (this.borrowed?.tab === tab) this.restoreLibrary();
+    this.model.remove(tab.id); body.append(tab.el);
+    if (entry) { entry.el.remove(); this.floating.delete(tab); }
+    this.external.set(tab, { body, window: child, previousSlot });
+    this.refresh(); return true;
+  }
+  releaseExternal(tab) {
+    const entry = this.external.get(tab); if (!entry) return false;
+    this.external.delete(tab); this.parking.append(tab.el);
+    if (this.app.tabs.includes(tab)) {
+      const target = this._dockSlot(tab, entry.previousSlot);
+      if (target) this.model.pin(target, tab.id, this._dockable());
+    }
+    this.refresh(); return true;
+  }
+  async reset() {
+    this.gesture?.cancel();
+    try { for (const tab of [...this.external.keys()]) await this.app.popouts?.dock(tab); }
+    catch (error) { toast('Could not dock a window: ' + errMsg(error), 'err'); return; }
+    this.geometry = normalizeWorkspaceGeometry(null);
+    for (const tab of [...this.floating.keys()]) this.dock(tab);
+    this.model.expandedSlot = null; this.model.wallCount = 4;
+    this.refresh(); this._rememberGeometry();
+  }
   pane(slot) {
     if (this.paneNodes.has(slot)) return this.paneNodes.get(slot);
     const title = h('span', label(slot));
     const select = h('select.input.workspace-pane-select', { 'aria-label': `${label(slot)}: choose an open tab`, onchange: () => this.pin(slot, select.value) });
     const focus = h('button.btn.sm.workspace-pane-focus', { onclick: () => this.focus(slot) }, 'Focus');
     const expand = h('button.btn.sm.workspace-pane-expand', { onclick: () => this.expand(slot) }, 'Expand');
-    const head = h('div.workspace-pane-head', title, select, focus, expand);
+    const float = h('button.btn.sm.workspace-pane-float', { onclick: () => this.float(this.app.tabs.find(tab => tab.id === this.model.read(slot))) }, 'Float');
+    const popout = h('button.btn.sm.workspace-pane-popout', { onclick: () => { const tab = this.app.tabs.find(tab => tab.id === this.model.read(slot)); if (tab) this.app.popouts?.open(tab); } }, 'Pop out');
+    const head = h('div.workspace-pane-head', title, select, focus, expand, float, popout);
     const empty = h('div.workspace-empty', h('p', slot === 'dossier' ? 'Choose an existing Incident Workspace above. Opening or pinning a view never adds evidence.' : 'Choose an open tab above. Your other tabs remain available in the tab strip.'));
     const body = h('div.workspace-pane-body', empty);
     const el = h('section.workspace-pane', { 'data-slot': slot, 'aria-label': label(slot) }, head, body);
+    el.addEventListener('dragover', event => { if (event.dataTransfer?.types.includes('text/x-konx-tab')) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; el.classList.add('workspace-drop-target'); } });
+    el.addEventListener('dragleave', event => { if (!el.contains(event.relatedTarget)) el.classList.remove('workspace-drop-target'); });
+    el.addEventListener('drop', event => {
+      el.classList.remove('workspace-drop-target');
+      if (!event.dataTransfer?.types.includes('text/x-konx-tab')) return;
+      event.preventDefault(); event.stopPropagation();
+      const tab = this.app.tabs.find(item => item.id === event.dataTransfer.getData('text/x-konx-tab'));
+      if (!tab || (slot === 'dossier' && !incident(tab))) return;
+      Promise.resolve(this.dock(tab, slot)).catch(error => toast(errMsg(error), 'err'));
+    });
     if (slot === 'companion') el.classList.add('workspace-companion');
     if (slot === 'dossier') el.classList.add('workspace-dossier');
     for (const event of ['pointerdown', 'focusin']) body.addEventListener(event, () => {
       const tab = this.app.tabs.find(t => t.id === this.model.read(slot));
       if (tab && this.app.active !== tab) this.app.activate(tab, { focus: false });
     });
-    const pane = { el, head, title, select, focus, expand, body, empty, optionSignature: null };
+    const pane = { el, head, title, select, focus, expand, float, popout, body, empty, optionSignature: null };
     this.paneNodes.set(slot, pane); this.panes.append(el); return pane;
   }
   restoreLibrary() {
@@ -175,7 +355,7 @@ export class WorkspaceLayout {
     this.navigationHint.classList.toggle('hidden', !!this.borrowed);
   }
   refresh() {
-    this.model.prune(this.app.tabs);
+    this.model.prune(this._dockable());
     const slots = this.model.slots(), nextVisible = new Set();
     this.updateLibrary();
     this.app.root.classList.toggle('context-collapsed', this.contextHidden[this.model.layout]);
@@ -187,10 +367,10 @@ export class WorkspaceLayout {
       const pane = this.pane(slot), tab = this.app.tabs.find(t => t.id === id), shown = !this.model.expandedSlot || this.model.expandedSlot === slot;
       pane.el.classList.toggle('hidden', !shown); pane.el.dataset.expanded = String(this.model.expandedSlot === slot);
       pane.el.classList.toggle('workspace-focused', !!tab && tab === this.app.active);
-      pane.focus.disabled = pane.expand.disabled = !tab; pane.focus.textContent = tab === this.app.active ? 'Focused' : 'Focus';
+      pane.focus.disabled = pane.expand.disabled = pane.float.disabled = pane.popout.disabled = !tab; pane.focus.textContent = tab === this.app.active ? 'Focused' : 'Focus';
       pane.expand.textContent = this.model.expandedSlot === slot ? 'Restore' : 'Expand';
       pane.empty.classList.toggle('hidden', !!tab);
-      const choices = this.app.tabs.filter(t => slot !== 'dossier' || incident(t));
+      const choices = this._dockable().filter(t => slot !== 'dossier' || incident(t));
       const signature = JSON.stringify(choices.map(t => [t.id, t.title]));
       if (pane.optionSignature !== signature) {
         pane.select.replaceChildren(h('option', { value: '' }, 'Choose open tab…'), ...choices.map(t => h('option', { value: t.id }, t.title)));
@@ -198,6 +378,17 @@ export class WorkspaceLayout {
       }
       pane.select.value = id || '';
       if (tab && shown) { nextVisible.add(tab); if (tab.el.parentElement !== pane.body) pane.body.append(tab.el); }
+    }
+    for (const [tab, entry] of this.floating) {
+      if (!this.app.tabs.includes(tab)) continue;
+      nextVisible.add(tab); entry.title.textContent = tab.title; entry.el.setAttribute('aria-label', 'Floating panel: ' + tab.title);
+      entry.el.classList.toggle('workspace-focused', tab === this.app.active);
+      if (tab.el.parentElement !== entry.body) entry.body.append(tab.el);
+    }
+    for (const [tab, entry] of this.external) {
+      if (!this.app.tabs.includes(tab)) continue;
+      nextVisible.add(tab);
+      if (tab.el.parentElement !== entry.body) entry.body.append(tab.el);
     }
     for (const tab of this.visible) if (!nextVisible.has(tab)) { tab.hide?.(); tab.active = false; }
     for (const tab of this.app.tabs) {
@@ -213,6 +404,7 @@ export class WorkspaceLayout {
     this.sessionToggle.textContent = this.app.root.classList.contains('no-sidebar') ? 'Show sessions' : 'Hide sessions';
     this.wallCount.classList.toggle('hidden', this.model.layout !== 'operations-wall'); this.wallCount.value = String(this.model.wallCount);
     this.restoreButton.classList.toggle('hidden', !this.model.expandedSlot);
+    this.floatButton.disabled = !this.app.active || this.placement(this.app.active) !== 'docked';
     this.updateContext(); this.refit();
   }
   updateContext() {
@@ -229,11 +421,72 @@ export class WorkspaceLayout {
       this.jobs.replaceChildren(...(jobs.length ? jobs.map(t => h('button.workspace-job', { onclick: () => this.app.activate(t) }, icon(t.icon || 'activity'), h('span', t.title))) : [h('p.hint', 'No running work.')]));
     }
   }
+  _applyGeometry() {
+    const layout = this.model.layout, ratio = this.geometry.ratios[layout], narrow = innerWidth <= 1150;
+    const slots = this.model.slots();
+    let columns = null, rows = null;
+    this.splitAxes = [];
+    if (ratio && !this.model.expandedSlot && slots.length > 1) {
+      const width = Math.max(1, this.panes.clientWidth - 24), height = Math.max(1, this.panes.clientHeight - 24);
+      if (narrow) {
+        const total = Math.max(height, slots.length * 320), first = Math.max(220, total * ratio.rows);
+        rows = `${first}px repeat(${slots.length - 1}, minmax(220px, ${(total - first) / (slots.length - 1)}px))`;
+        columns = 'minmax(0,1fr)'; this.splitAxes = ['rows']; this.splitSizes = { rows: total };
+      } else {
+        columns = `minmax(220px,${ratio.columns}fr) minmax(220px,${1 - ratio.columns}fr)`;
+        this.splitAxes = ['columns']; this.splitSizes = { columns: Math.max(440, width) };
+        if (layout === 'operations-wall' && slots.length > 2) {
+          rows = `minmax(180px,${ratio.rows}fr) minmax(180px,${1 - ratio.rows}fr)`;
+          this.splitAxes.push('rows'); this.splitSizes.rows = Math.max(360, height);
+        } else rows = 'minmax(0,1fr)';
+      }
+    }
+    this.panes.style.gridTemplateColumns = columns || '';
+    this.panes.style.gridTemplateRows = rows || '';
+    for (const axis of ['columns', 'rows']) {
+      let handle = this.splitters?.[axis];
+      if (!handle) {
+        handle = h('div.workspace-splitter', { 'data-axis': axis, role: 'separator', tabindex: '0',
+          'aria-label': axis === 'columns' ? 'Resize workspace columns' : 'Resize workspace rows', 'aria-orientation': axis === 'columns' ? 'vertical' : 'horizontal' });
+        (this.splitters ||= {})[axis] = handle; this.panes.append(handle);
+        handle.addEventListener('pointerdown', event => {
+          const ratios = this.geometry.ratios[this.model.layout]; if (!ratios || !this.splitAxes.includes(axis)) return;
+          const initial = ratios[axis], start = axis === 'columns' ? event.clientX : event.clientY, total = this.splitSizes[axis];
+          this._gesture(event, handle, next => {
+            ratios[axis] = Math.max(0.2, Math.min(0.8, initial + ((axis === 'columns' ? next.clientX : next.clientY) - start) / total)); this.refit();
+          }, cancelled => { if (cancelled) { ratios[axis] = initial; this.refit(); } else this._rememberGeometry(); });
+        });
+        handle.addEventListener('keydown', event => {
+          const ratios = this.geometry.ratios[this.model.layout]; if (!ratios || !this.splitAxes.includes(axis)) return;
+          const positive = axis === 'columns' ? event.key === 'ArrowRight' : event.key === 'ArrowDown';
+          const negative = axis === 'columns' ? event.key === 'ArrowLeft' : event.key === 'ArrowUp';
+          if (!positive && !negative && !['Home', 'End'].includes(event.key)) return;
+          event.preventDefault(); ratios[axis] = event.key === 'Home' ? 0.2 : event.key === 'End' ? 0.8 : Math.max(0.2, Math.min(0.8, ratios[axis] + (positive ? 0.025 : -0.025)));
+          this.refit(); this._rememberGeometry();
+        });
+      }
+      handle.classList.toggle('hidden', !this.splitAxes.includes(axis));
+      handle.setAttribute('aria-valuemin', '20'); handle.setAttribute('aria-valuemax', '80'); handle.setAttribute('aria-valuenow', String(Math.round((ratio?.[axis] || 0.5) * 100)));
+    }
+    this._positionSplitters();
+    for (const entry of this.floating.values()) this._setFloatBounds(entry, entry.maximized ? { x: 0, y: 0, ...this._viewport() } : entry.bounds, false);
+  }
+  _positionSplitters() {
+    if (!this.splitters) return;
+    const slots = this.model.slots(), first = this.paneNodes.get(slots[0]?.slot)?.el;
+    if (!first) return;
+    const base = this.panes.getBoundingClientRect(), rect = first.getBoundingClientRect();
+    const left = rect.left - base.left + this.panes.scrollLeft, top = rect.top - base.top + this.panes.scrollTop;
+    const columns = this.splitters.columns, rows = this.splitters.rows;
+    Object.assign(columns.style, { left: left + rect.width + 'px', top: top + 'px', width: '8px', height: Math.max(rect.height, this.panes.scrollHeight - 16) + 'px' });
+    Object.assign(rows.style, { left: left + 'px', top: top + rect.height + 'px', height: '8px', width: Math.max(rect.width, this.panes.clientWidth - 16) + 'px' });
+  }
   refit() {
     if (this.fitFrame) return;
-    this.fitFrame = requestAnimationFrame(() => { this.fitFrame = 0; for (const tab of this.visible) tab.refit?.(); });
+    this.fitFrame = requestAnimationFrame(() => { this.fitFrame = 0; this._applyGeometry(); for (const tab of this.visible) tab.refit?.(); });
   }
   focusTarget(tab) {
+    if (this.external.has(tab)) { this.app.popouts?.focus(tab); return; }
     const generation = ++this.focusGeneration, previouslyFocused = document.activeElement;
     setTimeout(() => {
       const focusUnchanged = document.activeElement === previouslyFocused || document.activeElement === document.body;
@@ -242,7 +495,12 @@ export class WorkspaceLayout {
   }
   cancelFocus() { this.focusGeneration++; }
   detach(tab) {
+    this.gesture?.cancel();
     this.cancelFocus();
+    this.app.popouts?.disposeTab?.(tab);
+    if (this.external.has(tab)) { this.parking.append(tab.el); this.external.delete(tab); }
+    const floating = this.floating.get(tab);
+    if (floating) { this.parking.append(tab.el); floating.el.remove(); this.floating.delete(tab); }
     if (this.borrowed?.tab === tab) this.restoreLibrary();
     if (this.visible.delete(tab)) { tab.hide?.(); tab.active = false; }
     this.model.remove(tab.id);

@@ -522,6 +522,11 @@ const fakeCrypt = {
   await require('./serial-connections-tests.cjs').runSerialConnectionsTests(test);
   await require('./serial-lifecycle-tests.cjs').runSerialLifecycleTests(test);
   await require('./serial-ui-tests.cjs').runSerialUiTests(test);
+  await require('./workspace-panels-model-tests.cjs').runWorkspacePanelsModelTests(test);
+  await require('./workspace-panels-ui-tests.cjs').runWorkspacePanelsUiTests(test);
+  await require('./workspace-window-tests.cjs').runWorkspaceWindowTests(test);
+  await require('./workspace-popout-ui-tests.cjs').runWorkspacePopoutUiTests(test);
+  await require('./widget-host-ui-tests.cjs').runWidgetHostUiTests(test);
 
   const failed = results.filter((r) => !r[0]);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

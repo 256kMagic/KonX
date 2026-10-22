@@ -25,6 +25,7 @@
     if (quickLogin) checks.quickLogin = quickLogin;
     if (ciscoHighlighting) checks.ciscoHighlighting = ciscoHighlighting;
     if (serialAutoBaud) checks.serialAutoBaud = serialAutoBaud;
+    if (workspaceWindows) checks.workspaceWindows = workspaceWindows;
     // Portable launchers do not necessarily forward their app's stdout. Write
     // test evidence only to the parent-provided private artifact file.
     await api.invoke('np:write', options.resultPath, new TextEncoder().encode(JSON.stringify(checks, null, 2)));
@@ -69,11 +70,13 @@
     (versionParts[1] === 15 && parseInt(info.version.split('.')[2], 10) >= 2);
   const supportsCiscoHighlighting = versionParts[0] > 0 || versionParts[1] >= 16;
   const supportsSerialAutoBaud = versionParts[0] > 0 || versionParts[1] >= 17;
+  const supportsWorkspaceWindows = versionParts[0] > 0 || versionParts[1] >= 18;
   let sessionManagement = null;
   let logging = null;
   let quickLogin = null;
   let ciscoHighlighting = null;
   let serialAutoBaud = null;
+  let workspaceWindows = null;
   const sessionName = 'Package smoke synthetic saved session';
   const serialName = 'Package smoke serial auto fixture';
   const serialControl = name => document.querySelector('.modal [name="' + name + '"]');
@@ -394,6 +397,36 @@
     assert(JSON.parse(json).checks.length === report.checks.length && html.includes('<!doctype html>'), 'Assessment export failed');
     assert(!json.includes('SYNTHETIC_CONFIG_SECRET') && !html.includes('SYNTHETIC_CONFIG_SECRET') && !json.includes('fixture-user'), 'Assessment exposed fixture credentials');
     assert(!security.jsonButton.disabled && !security.htmlButton.disabled, 'Assessment export controls remain disabled');
+    if (supportsWorkspaceWindows) {
+      const workspace = app.workspaceLayout, node = security.el, originalReport = security.report;
+      const source = security.config.value, originalTabs = [...app.tabs];
+      assert(app.jobs.size === 0 && app.popouts.entries.size === 0, 'Workspace smoke requires idle tools and no existing popouts');
+      assert(workspace.float(security, { x: 40, y: 30, width: Math.min(600, app.views.clientWidth - 80),
+        height: Math.min(420, app.views.clientHeight - 60) }), 'Packaged report did not float');
+      const floating = workspace.floating.get(security);
+      assert(floating?.body.contains(node) && floating.el.getBoundingClientRect().width > 0 && workspace.placement(security) === 'floating',
+        'Packaged floating panel did not contain the existing report');
+      await workspace.saveGeometry;
+      const geometry = workspace.get().geometry;
+      assert(await app.popouts.open(security), 'Packaged report did not open in a native window');
+      const entry = app.popouts.entries.get(security.id), child = entry?.window;
+      assert(child && child !== window && !child.closed && child.opener === window && workspace.placement(security) === 'external',
+        'Pop-out did not create an owned child window');
+      await until(() => node.ownerDocument === child.document && node.getBoundingClientRect().width > 0 &&
+        child.document.querySelector('[aria-label="Dock back to KonX"]')?.getBoundingClientRect().width > 0, 'visible packaged pop-out report');
+      assert(security.report === originalReport && security.config.value === source && app.byId.get(security.id) === security &&
+        originalTabs.length === app.tabs.length && originalTabs.every(tab => app.tabs.includes(tab)), 'Pop-out replaced the report, inputs or tab');
+      child.document.querySelector('[aria-label="Dock back to KonX"]').click();
+      await until(() => child.closed && app.popouts.entries.size === 0 && app.popouts.closing.size === 0 &&
+        app.popouts.pending.size === 0 && workspace.placement(security) === 'docked', 'packaged native close acknowledgement');
+      assert(security.el === node && node.ownerDocument === document && security.report === originalReport && security.config.value === source,
+        'Docking changed the original report or its input');
+      assert(app.jobs.size === 0 && !security.jobId, 'Floating or popping out a report started a job');
+      await workspace.saveGeometry;
+      assert(JSON.stringify((await api.invoke('settings:get')).workspaceGeometry) === JSON.stringify(geometry), 'Workspace geometry did not reach persistent settings');
+      workspaceWindows = { floated: true, nativePopout: true, docked: true, nativeCloseAcknowledged: true,
+        originalTabAndNodeRetained: true, reportAndInputRetained: true, noAutomaticJobs: true, geometrySaved: true, geometry };
+    }
     app.activate(mist);
     await until(() => !mist.configBusy && !mist.saveButton.disabled, 'Mist settings after tab activation');
     mist.token.value = options.token;
@@ -464,6 +497,25 @@
       quickLogin = { savedId: saved.id, reconnectedWithoutPrompt: true, removed: true };
     }
     if (supportsLayouts) assert(app.settings.uiLayout === 'focus' && app.workspaceLayout.get().layout === 'focus', 'Workspace layout did not survive packaged restart');
+    if (supportsWorkspaceWindows) {
+      const workspace = app.workspaceLayout, expected = options.workspaceGeometry;
+      assert(expected?.version === 1 && JSON.stringify(workspace.get().geometry) === JSON.stringify(expected) &&
+        JSON.stringify(app.settings.workspaceGeometry) === JSON.stringify(expected), 'Workspace geometry did not survive the packaged restart');
+      assert(workspace.floating.size === 0 && workspace.external.size === 0 && app.popouts.entries.size === 0,
+        'Restart unexpectedly recreated live floating or native views');
+      const node = security.el;
+      assert(workspace.float(security), 'Saved panel geometry could not be reopened');
+      const floating = workspace.floating.get(security), rect = expected.lastFloatRect;
+      const width = app.views.clientWidth, height = app.views.clientHeight;
+      assert(floating?.body.contains(node) && ['x', 'y', 'width', 'height'].every(key =>
+        Math.abs(floating.bounds[key] - rect[key] * (['x', 'width'].includes(key) ? width : height)) <= 2),
+        'Reopened floating panel did not use saved bounds');
+      assert(workspace.dock(security) && workspace.placement(security) === 'docked' && security.el === node && app.jobs.size === 0,
+        'Restored floating panel failed to dock without starting work');
+      await workspace.saveGeometry;
+      workspaceWindows = { persistedAcrossRestart: true, geometryApplied: true, docked: true, originalNodeRetained: true,
+        noLiveViewsRestored: true, noAutomaticJobs: true, geometry: expected };
+    }
     assert(mist.config.hasToken && !mist.testButton.disabled, 'Encrypted Mist token did not survive app restart');
     assert(mist.token.value === '', 'Saved credential must not be returned to the input');
     mist.forgetButton.click();
@@ -523,4 +575,13 @@
     }
     await complete({ phase: options.phase, version: info.version, ...(deviceSnapshots ? { deviceSnapshots } : {}), ...(incidentWorkspace ? { incidentWorkspace } : {}), ...(runbooks ? { runbooks } : {}), encryptedTokenPersisted: true, tokenForgotten: true, encryptedAiKeyPersisted: true, aiKeyForgotten: true, customNotePersisted: true, customNoteRemoved: true, vectorIndexReady: true, noAutomaticJobs: true });
   } else throw new Error('Unknown package smoke phase');
-})()
+})().catch(async error => {
+  const options = window.__KONX_TOOLS_SMOKE;
+  const failure = { passed: false, phase: options.phase, version: options.version,
+    error: error?.stack || String(error) };
+  // NSIS portable launchers do not forward the application's console. Keep
+  // assertion evidence in the same parent-owned file as successful checks.
+  try { await window.api.invoke('np:write', options.resultPath, new TextEncoder().encode(JSON.stringify(failure, null, 2))); }
+  catch (writeError) { console.error('Could not persist package smoke failure', writeError); }
+  throw error;
+})

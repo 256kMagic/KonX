@@ -28,6 +28,7 @@ export class NotepadTab {
     this.closed = [];
     this.opts = { wordWrap: false, minimap: true, whitespace: false, fontSize: null, sendDelay: 150, ...(app.settings.notepad || {}) };
     this.build();
+    this.hostWindow = this.el.ownerDocument.defaultView;
     this.ready = this.init().catch((e) => {
       if (!this.disposed) this.host.replaceChildren(h('div.np-loading', `The editor could not start: ${errMsg(e)}`));
       throw e;
@@ -141,6 +142,7 @@ export class NotepadTab {
     ];
     this.beforeUnload = () => this.flush();
     addEventListener('beforeunload', this.beforeUnload);
+    if (this.hostWindow && this.hostWindow !== window) this.hostWindow.addEventListener('beforeunload', this.beforeUnload);
     await this.restore();
     this.restoring = false;
   }
@@ -1093,6 +1095,27 @@ export class NotepadTab {
     this.flush();
   }
 
+  onHostWindowChanged(hostWindow) {
+    if (this.disposed || !hostWindow || this.el.ownerDocument.defaultView !== hostWindow) return;
+    if (this.hostWindow !== hostWindow) {
+      ++this.visibilityGeneration;
+      if (this.beforeUnload) {
+        // Keep the primary window's final flush, and track the current pop-out
+        // separately so an unexpected child close also saves unsaved backups.
+        if (this.hostWindow && this.hostWindow !== window) this.hostWindow.removeEventListener('beforeunload', this.beforeUnload);
+        if (hostWindow !== window) hostWindow.addEventListener('beforeunload', this.beforeUnload);
+      }
+      this.hostWindow = hostWindow;
+    }
+    this.refit();
+  }
+
+  refit() {
+    if (this.disposed || !this.active) return;
+    if (this.host?.offsetParent) this.editor?.layout();
+    if (this.diffHost?.offsetParent) this.diffEditor?.layout();
+  }
+
   focus() {
     if (this.disposed || !this.active || this.app.active !== this) return;
     if (this.editor) this.editor.focus();
@@ -1114,6 +1137,7 @@ export class NotepadTab {
     this.visibilityGeneration++;
     clearTimeout(this.statusTimer);
     if (this.beforeUnload) removeEventListener('beforeunload', this.beforeUnload);
+    if (this.beforeUnload && this.hostWindow && this.hostWindow !== window) this.hostWindow.removeEventListener('beforeunload', this.beforeUnload);
     (this.unwatch || []).forEach((u) => u());
     if (this.diffEditor) this.diffEditor.dispose();
     if (this.editor) this.editor.dispose();

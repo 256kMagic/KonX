@@ -34,18 +34,20 @@ function tools(runner, replyGate) {
         ipcMain: { handle: (name, fn) => handlers.set(name, fn), on() {} },
       };
       if (name === './nettools') return nettools;
+      if (name === './workspace-windows') return localRequire(name);
       if (name.startsWith('./')) return {};
       return localRequire(name);
     },
   };
   vm.runInNewContext(fs.readFileSync(filename, 'utf8') + `
-    win = { isDestroyed: () => false, webContents: { send: receive } };
+    win = { isDestroyed: () => false, webContents: { send: receive, mainFrame: {} } };
+    globalThis.ipcEvent = { sender: win.webContents, senderFrame: win.webContents.mainFrame };
     registerIpc();
   `, context, { filename });
 
   const api = { async invoke(channel, ...args) {
     calls.push([channel, ...args]);
-    const answer = await handlers.get(channel)({}, ...args);
+    const answer = await handlers.get(channel)(context.ipcEvent, ...args);
     if (channel === 'tools:start' && replyGate) await replyGate.promise;
     return answer;
   } };

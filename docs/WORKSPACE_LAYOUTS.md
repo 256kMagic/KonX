@@ -1,10 +1,26 @@
-# Workspace layouts
+# Workspace layouts and windows
 
 Available from KonX 0.14.0. Choose **Settings → Appearance → Workspace layout**, then **Save**. Layout controls the placement of sessions and tools; **Application theme** controls colors and motion. Terminal palettes remain separate, including saved per-session palettes.
 
 The **Workspace layout** dropdown in the top toolbar is a shortcut. A choice there applies and saves immediately.
 
 Existing profiles keep **Classic** until you choose another layout. **Cancel** discards a layout choice made in Settings. An unknown layout value falls back to Classic.
+
+## Move, resize, and pop out panels
+
+From **KonX 0.18.0**, right-click any open tab and choose **Float in workspace** or **Pop out to window**. Pane headers also provide **Float** and **Pop out** controls. These actions move the existing view: terminal connections, capture packets, editor models, and tool results stay with it.
+
+- **Move inside KonX:** float the panel, then drag its title bar. Click inside a panel to bring it forward and make it the active command target.
+- **Resize:** drag a floating panel's edge or corner. Use **Maximize** / **Restore**, or double-click its title bar. Bounds stay within the workspace when the main window gets smaller.
+- **Dock:** click **Dock**, or right-click its tab and choose **Dock back**. Drag a tab onto an existing pane to place it there; drag tabs along the tab strip to reorder them.
+- **Resize split panes:** drag the divider in Workbench, Incident Desk, or Operations Wall. The divider also supports arrow keys when focused. Smaller windows stack panes with a horizontal divider that you drag up or down.
+- **Use another monitor:** choose **Pop out**, then move or resize the separate Windows window normally. **Dock back** returns it to the main workspace; **Float in KonX** returns it as a floating panel.
+- **Close a pop-out window:** its Windows **X** docks the live panel back into KonX. **Close tab** closes the tab using its existing behavior. Notepad retains its unsaved session backups; closing an individual unsaved document still offers Save, Don't save, and Cancel.
+- **Reset:** **Reset workspace** returns floating and popped-out panels to the main workspace and restores default split ratios and floating geometry. It does not close tabs or reconnect sessions.
+
+All application themes apply to pop-outs. Menus and dialogs follow the window being used. The main application remains the owner of the work, so exiting KonX closes the workspace and its child windows after the normal connection and cleanup checks. Up to 16 native pop-outs can be open at once.
+
+Saved geometry contains split ratios and the last floating rectangle only. Restarting does not recreate pop-outs, restore live connections, or automatically rerun tools. A terminal selection can clear when resizing changes its rows or wraps text, following the terminal's normal resize behavior; its scrollback remains available.
 
 ## Choose a workspace
 

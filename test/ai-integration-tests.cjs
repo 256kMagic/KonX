@@ -28,12 +28,13 @@ async function runAiIntegrationTests(test) {
       require(name) {
         if (name === 'electron') return { app: { whenReady: () => ({ then() {} }), on: (name, callback) => appEvents.set(name, callback), quit: () => quit++ },
           shell: { openExternal: async (url) => calls.push(url) }, ipcMain: { handle: (name, callback) => handlers.set(name, callback), on() {} } };
+        if (name === './workspace-windows') return load(name);
         if (name.startsWith('./')) return {};
         return load(name);
       },
     };
-    vm.runInNewContext(fs.readFileSync(filename, 'utf8') + '\nwin={isDestroyed:()=>false,webContents:{send:receive}}; ai=client; knowledge=library; registerIpc();', context, { filename });
-    const invoke = (name, ...args) => handlers.get(name)({}, ...args);
+    vm.runInNewContext(fs.readFileSync(filename, 'utf8') + '\nwin={isDestroyed:()=>false,webContents:{send:receive,mainFrame:{}}}; globalThis.ipcEvent={sender:win.webContents,senderFrame:win.webContents.mainFrame}; ai=client; knowledge=library; registerIpc();', context, { filename });
+    const invoke = (name, ...args) => handlers.get(name)(context.ipcEvent, ...args);
     assert.equal((await invoke('tools:knowledgeStatus')).documents, 30);
     assert.equal((await invoke('tools:knowledgeList', {}))[0].id, article.id);
     assert.equal((await invoke('tools:knowledgeGet', article.id)).title, article.title);

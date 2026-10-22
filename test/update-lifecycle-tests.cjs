@@ -23,7 +23,7 @@ function cancellableEvent() {
 // owners are replaced. No app, network request, filesystem write or installer runs.
 function fixture() {
   const filename = path.join(__dirname, '../src/main/main.js');
-  const load = createRequire(filename), handlers = new Map(), calls = [], sent = [];
+  const load = createRequire(filename), handlers = new Map(), sendHandlers = new Map(), calls = [], sent = [];
   const behavior = { cancel: async () => {}, getReady: async () => ({ version: '0.7.0', mode: 'installed' }) };
   let ready, window, manager, promptChoice = 0;
   const app = new EventEmitter();
@@ -49,16 +49,21 @@ function fixture() {
     constructor() {
       super(); window = this; this.destroyed = false;
       this.webContents = new EventEmitter();
+      this.webContents.mainFrame = {};
       this.webContents.send = (...args) => sent.push(args);
-      this.webContents.setWindowOpenHandler = () => {};
+      this.webContents.setWindowOpenHandler = handler => { this.openWindow = handler; };
+      this.webContents.getBackgroundThrottling = () => true;
+      this.webContents.setBackgroundThrottling = value => { this.throttling = value; };
     }
     isDestroyed() { return this.destroyed; }
     loadFile() {}
     show() {}
+    static getFocusedWindow() { return null; }
   }
   const connections = {
     conns: new Map(), hasSerialOwnership: false,
     open() { calls.push('open-connection'); return { ok: true }; },
+    write() { calls.push('write-connection'); }, resize() { calls.push('resize-connection'); },
     closeAll() { calls.push('close-connections'); this.conns.clear(); },
     async waitForSerialCleanup() { calls.push('close-serial'); this.hasSerialOwnership = false; this.conns.clear(); },
   };
@@ -89,6 +94,7 @@ function fixture() {
   const modules = {
     './store': { Store: class { getSettings() { return {}; } } },
     './connections': { ConnectionManager: class { constructor() { return connections; } } },
+    './workspace-windows': load('./workspace-windows'),
     './sftp': { SftpManager: class { constructor() { return sftp; } } },
     './capture': { CaptureManager: class { constructor() { return capture; } } },
     './knowledge': { KnowledgeLibrary: class { constructor() { return knowledge; } } },
@@ -139,7 +145,7 @@ function fixture() {
         app, BrowserWindow, Menu: { setApplicationMenu() {} }, safeStorage: {}, shell: {}, clipboard: {},
         dialog: { showMessageBoxSync(_window, options) { calls.push(options?.type === 'error' ? 'shutdown-error' : 'connection-prompt'); return promptChoice; },
           showOpenDialog: (...args) => dialogs.open(...args), showSaveDialog: (...args) => dialogs.save(...args) },
-        ipcMain: { handle: (name, callback) => handlers.set(name, callback), on() {} },
+        ipcMain: { handle: (name, callback) => handlers.set(name, callback), on: (name, callback) => sendHandlers.set(name, callback) },
       };
       if (Object.hasOwn(modules, name)) return modules[name];
       if (name.startsWith('./')) return {};
@@ -154,8 +160,11 @@ function fixture() {
     get jobs() { return vm.runInContext('toolJobs', context); },
     get controller() { return vm.runInContext('updates', context); },
     get window() { return window; },
+    get popouts() { return vm.runInContext('workspaceWindows', context); },
     setPromptChoice(value) { promptChoice = value; },
-    invoke(name, ...args) { return handlers.get(name)({}, ...args); },
+    invoke(name, ...args) { return handlers.get(name)({ sender: window.webContents, senderFrame: window.webContents.mainFrame }, ...args); },
+    invokeFrom(event, name, ...args) { return handlers.get(name)(event, ...args); },
+    sendFrom(event, name, ...args) { return sendHandlers.get(name)(event, ...args); },
     nativeClose() {
       const event = cancellableEvent(); window.emit('close', event);
       if (!event.defaultPrevented) { window.destroyed = true; window.emit('closed'); app.emit('window-all-closed'); }

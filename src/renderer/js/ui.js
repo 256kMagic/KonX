@@ -2,6 +2,41 @@
 
 export const api = window.api;
 
+// Views retain one JavaScript owner while their live DOM can move into a KonX
+// child window. Transient UI belongs to the window the user is interacting with.
+let interactionWindow = window;
+export function uiDocument() {
+  try { if (!interactionWindow.closed && interactionWindow.document.body) return interactionWindow.document; } catch {}
+  return document;
+}
+export function registerUiWindow(host) {
+  const activate = () => { interactionWindow = host; };
+  const outside = e => { activate(); if (openMenu && !openMenu.contains(e.target)) closeMenu(); };
+  const escape = e => { if (e.key === 'Escape') closeMenu(); };
+  host.addEventListener('focus', activate);
+  host.addEventListener('pointerdown', activate, true);
+  host.addEventListener('focusin', activate, true);
+  host.addEventListener('contextmenu', activate, true);
+  host.addEventListener('mousedown', outside);
+  host.addEventListener('blur', closeMenu);
+  host.addEventListener('keydown', escape);
+  return () => {
+    host.removeEventListener('focus', activate);
+    host.removeEventListener('pointerdown', activate, true);
+    host.removeEventListener('focusin', activate, true);
+    host.removeEventListener('contextmenu', activate, true);
+    host.removeEventListener('mousedown', outside);
+    host.removeEventListener('blur', closeMenu);
+    host.removeEventListener('keydown', escape);
+    if (interactionWindow === host) interactionWindow = window;
+  };
+}
+export function returnUiToMain(host) {
+  closeMenu();
+  for (const entry of [...modalStack]) if (entry.host === host) entry.rehost(window);
+  if (interactionWindow === host) interactionWindow = window;
+}
+
 // The DOM turns null/undefined/false children into the text "null" etc. Views here pass
 // optional parts as `cond ? node : null`, so skip those, as h() already does.
 for (const name of ['replaceChildren', 'append']) {
@@ -167,10 +202,11 @@ export function csv(rows) {
 // ---------------------------------------------------------------- toast
 
 export function toast(msg, type = '') {
-  let box = document.getElementById('toasts');
+  const doc = uiDocument();
+  let box = doc.getElementById('toasts');
   if (!box) {
     box = h('div#toasts');
-    document.body.append(box);
+    doc.body.append(box);
   }
   const t = h('div.toast', { class: type }, msg);
   box.append(t);
@@ -190,6 +226,7 @@ export function closeMenu() {
 /** items: [{label, icon, action, disabled, danger, shortcut} | '-'] */
 export function contextMenu(x, y, items) {
   closeMenu();
+  const doc = uiDocument(), host = doc.defaultView;
   const menu = h('div.ctx');
   for (const it of items) {
     if (!it) continue;
@@ -211,17 +248,13 @@ export function contextMenu(x, y, items) {
     });
     menu.append(row);
   }
-  document.body.append(menu);
+  doc.body.append(menu);
   const r = menu.getBoundingClientRect();
-  menu.style.left = Math.min(x, innerWidth - r.width - 6) + 'px';
-  menu.style.top = Math.min(y, innerHeight - r.height - 6) + 'px';
+  menu.style.left = Math.max(6, Math.min(x, host.innerWidth - r.width - 6)) + 'px';
+  menu.style.top = Math.max(6, Math.min(y, host.innerHeight - r.height - 6)) + 'px';
   openMenu = menu;
 }
-addEventListener('mousedown', (e) => {
-  if (openMenu && !openMenu.contains(e.target)) closeMenu();
-});
-addEventListener('blur', closeMenu);
-addEventListener('keydown', (e) => e.key === 'Escape' && closeMenu());
+registerUiWindow(window);
 
 // ---------------------------------------------------------------- modal
 
@@ -233,11 +266,13 @@ const modalStack = [];
  */
 export function modal({ title, icon: ic, body, buttons = [{ label: 'OK', value: true, primary: true }], width, footerLeft, onSubmit, onReady, submitOnEnter = true }) {
   return new Promise((resolve) => {
+    let doc = uiDocument(), host = doc.defaultView;
     const back = h('div.modal-back');
     const box = h('div.modal', { style: width ? { width: `min(${width}px, calc(100vw - 40px))` } : {} });
     const entry = {
       back,
-      prevFocus: document.activeElement,
+      host,
+      prevFocus: doc.activeElement,
       focus: () => {
         if (!back.isConnected) return;
         const first = box.querySelector('input:not([type=checkbox]), select, textarea') || box.querySelector('.btn.primary');
@@ -247,11 +282,12 @@ export function modal({ title, icon: ic, body, buttons = [{ label: 'OK', value: 
     let closed = false;
     let focusTimer;
     let observer;
-    const isTop = () => !closed && back.isConnected && modalStack[modalStack.length - 1] === entry;
+    const topForHost = () => modalStack.findLast(item => item.host === host);
+    const isTop = () => !closed && back.isConnected && topForHost() === entry;
     const close = (v) => {
       if (closed) return;
       closed = true;
-      const wasTop = modalStack[modalStack.length - 1] === entry;
+      const wasTop = topForHost() === entry;
       modalStack.splice(modalStack.indexOf(entry), 1);
       // If a covered dialog is removed, its child dialog should still restore
       // focus to a live element when it closes.
@@ -261,9 +297,9 @@ export function modal({ title, icon: ic, body, buttons = [{ label: 'OK', value: 
       clearTimeout(focusTimer);
       if (observer) observer.disconnect();
       back.remove();
-      removeEventListener('keydown', onKey, true);
+      host.removeEventListener('keydown', onKey, true);
       if (wasTop) {
-        const top = modalStack[modalStack.length - 1];
+        const top = topForHost();
         const prev = entry.prevFocus;
         if (prev && prev.isConnected && (!top || top.back.contains(prev))) prev.focus();
         else if (top) top.focus();
@@ -293,7 +329,7 @@ export function modal({ title, icon: ic, body, buttons = [{ label: 'OK', value: 
         }
       }
     };
-    addEventListener('keydown', onKey, true);
+    host.addEventListener('keydown', onKey, true);
     box.append(
       h('header', ic ? icon(ic) : null, h('span', title), h('button.x', { onclick: () => close(null), title: 'Close' }, icon('x'))),
       h('div.body', body),
@@ -309,12 +345,19 @@ export function modal({ title, icon: ic, body, buttons = [{ label: 'OK', value: 
     back.addEventListener('mousedown', (e) => {
       if (e.target === back) close(null);
     });
-    document.body.append(back);
+    doc.body.append(back);
     modalStack.push(entry);
     focusTimer = setTimeout(() => { if (isTop()) entry.focus(); }, 0);
     // Keep listeners, promises and focus tidy if a view removes a dialog.
     observer = new MutationObserver(() => { if (!back.isConnected) close(null); });
-    observer.observe(document.body, { childList: true });
+    observer.observe(doc.body, { childList: true });
+    entry.rehost = next => {
+      observer.disconnect(); host.removeEventListener('keydown', onKey, true);
+      host = next; doc = host.document; entry.host = host;
+      modalStack.splice(modalStack.indexOf(entry), 1); modalStack.push(entry);
+      host.addEventListener('keydown', onKey, true); doc.body.append(back);
+      observer.observe(doc.body, { childList: true }); entry.focus();
+    };
     if (onReady) onReady({ close });
   });
 }

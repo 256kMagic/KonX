@@ -130,6 +130,8 @@ export class CaptureTab {
   dragSplit(splitter) {
     splitter.addEventListener('mousedown', (e) => {
       e.preventDefault();
+      this.splitCleanup?.();
+      const host = splitter.ownerDocument.defaultView;
       const startY = e.clientY;
       const startH = this.left.querySelector('.cap-bottom').getBoundingClientRect().height;
       const move = (ev) => {
@@ -138,11 +140,15 @@ export class CaptureTab {
         this.list.render();
       };
       const up = () => {
-        removeEventListener('mousemove', move);
-        removeEventListener('mouseup', up);
+        host.removeEventListener('mousemove', move);
+        host.removeEventListener('mouseup', up);
+        host.removeEventListener('blur', up);
+        if (this.splitCleanup === up) this.splitCleanup = null;
       };
-      addEventListener('mousemove', move);
-      addEventListener('mouseup', up);
+      this.splitCleanup = up;
+      host.addEventListener('mousemove', move);
+      host.addEventListener('mouseup', up);
+      host.addEventListener('blur', up);
     });
   }
 
@@ -1045,6 +1051,9 @@ export class CaptureTab {
     this.active = false;
   }
 
+  refit() { if (this.active && !this.disposed) this.list.render(); }
+  onHostWindowChanged() { this.splitCleanup?.(); this.refit(); }
+
   focus() {
     this.list.scroller.focus();
   }
@@ -1064,6 +1073,7 @@ export class CaptureTab {
 
   dispose() {
     this.disposed = true;
+    this.splitCleanup?.();
     this.rtpAbort?.abort();
     this.acceptLivePackets = false;
     this.captureGeneration = (this.captureGeneration || 0) + 1;

@@ -93,14 +93,14 @@ async function nativeLoader(executable) {
   return JSON.parse(marker[1]);
 }
 
-async function launch(executable, root, run, profile, version, phase, logging = null, quickLogin = null) {
+async function launch(executable, root, run, profile, version, phase, logging = null, quickLogin = null, workspaceGeometry = null) {
   const demoPath = path.join(run, phase + '-demo.js');
   const screenshot = path.join(run, phase + '.png');
   const resultPath = path.join(run, phase + '-checks.json');
   // The second launch receives no password; its real SSH authentication must
   // use the credential the first launch saved through the Home checkbox.
   const loginOptions = quickLogin && (phase === 'save' ? quickLogin : { ...quickLogin, password: undefined });
-  fs.writeFileSync(demoPath, 'window.__KONX_TOOLS_SMOKE = ' + JSON.stringify({ version, phase, token: TOKEN, resultPath, logging, quickLogin: loginOptions }) + ';\n' +
+  fs.writeFileSync(demoPath, 'window.__KONX_TOOLS_SMOKE = ' + JSON.stringify({ version, phase, token: TOKEN, resultPath, logging, quickLogin: loginOptions, workspaceGeometry }) + ';\n' +
     fs.readFileSync(path.join(__dirname, 'smoke-tools-demo.js'), 'utf8'));
   const env = {
     ...process.env, KONX_USERDATA: profile, KONX_CAPTURE: screenshot,
@@ -137,9 +137,10 @@ async function launch(executable, root, run, profile, version, phase, logging = 
   const checks = fs.existsSync(resultPath) ? JSON.parse(fs.readFileSync(resultPath, 'utf8')) : marker ? JSON.parse(marker[1]) : null;
   const passed = !timedOut && !spawnError && exitCode === 0 && checks?.version === version && checks?.phase === phase &&
     checks.noAutomaticJobs === true && !output.includes('capture failed') && fs.existsSync(screenshot) && fs.statSync(screenshot).size > 0;
-  const result = { passed, phase, exitCode, timedOut, spawnError, checks, screenshot, output };
+  const error = checks?.passed === false ? checks.error || 'Renderer smoke checks failed' : null;
+  const result = { passed, phase, exitCode, timedOut, spawnError, error, checks, screenshot, output };
   fs.writeFileSync(path.join(run, phase + '-result.json'), JSON.stringify(result, null, 2));
-  assert(passed, 'Packaged ' + phase + ' smoke failed; inspect ' + path.join(run, phase + '-result.json'));
+  assert(passed, 'Packaged ' + phase + ' smoke failed' + (error ? ': ' + error : '') + '; inspect ' + path.join(run, phase + '-result.json'));
   return result;
 }
 
@@ -162,12 +163,23 @@ async function main() {
   const supportsQuickLogin = major > 0 || minor > 15 || (minor === 15 && patch >= 2);
   const supportsCiscoHighlighting = major > 0 || minor >= 16;
   const supportsSerialAutoBaud = major > 0 || minor >= 17;
+  const supportsWorkspaceWindows = major > 0 || minor >= 18;
   let logging, quickLogin;
   try {
     result.nativeLoader = await nativeLoader(executable);
     if (supportsLoggingSwitch) logging = await loggingPeer(run);
     if (supportsQuickLogin) quickLogin = await quickLoginPeer();
     result.phases.push(await launch(executable, root, run, profile, version, 'save', logging?.options, quickLogin?.options));
+    if (supportsWorkspaceWindows) {
+      const checks = result.phases[0].checks.workspaceWindows;
+      assert(checks?.floated && checks?.nativePopout && checks?.docked && checks?.nativeCloseAcknowledged &&
+        checks?.originalTabAndNodeRetained && checks?.reportAndInputRetained && checks?.noAutomaticJobs && checks?.geometrySaved,
+        'Packaged floating/native workspace did not retain and redock its report');
+      const settings = JSON.parse(fs.readFileSync(path.join(profile, 'settings.json'), 'utf8'));
+      assert(checks.geometry?.version === 1 && JSON.stringify(settings.workspaceGeometry) === JSON.stringify(checks.geometry),
+        'Packaged workspace geometry did not persist to disk');
+      result.workspaceWindows = checks;
+    }
     if (supportsSerialAutoBaud) {
       const checks = result.phases[0].checks.serialAutoBaud;
       assert(checks?.nativeSerialAvailable && checks?.manualDefault && checks?.autoAndProbeSaved && checks?.framingRetained && checks?.reopened && checks?.noPortOpened,
@@ -229,7 +241,14 @@ async function main() {
       assert(!Object.hasOwn(session, 'password') && !sessionsText.includes(TOKEN + '-session') && !sessionsText.includes(Buffer.from(TOKEN + '-session').toString('base64')), 'Synthetic session password was written without encryption');
       result.sessionCiphertextStored = true;
     }
-    result.phases.push(await launch(executable, root, run, profile, version, 'forget', null, quickLogin?.options));
+    result.phases.push(await launch(executable, root, run, profile, version, 'forget', null, quickLogin?.options, result.workspaceWindows?.geometry));
+    if (supportsWorkspaceWindows) {
+      const checks = result.phases[1].checks.workspaceWindows;
+      assert(checks?.persistedAcrossRestart && checks?.geometryApplied && checks?.docked && checks?.originalNodeRetained &&
+        checks?.noLiveViewsRestored && checks?.noAutomaticJobs && JSON.stringify(checks.geometry) === JSON.stringify(result.workspaceWindows.geometry),
+        'Packaged workspace geometry did not restore and apply after restart');
+      Object.assign(result.workspaceWindows, { persistedAcrossRestart: true, geometryApplied: true, noLiveViewsRestored: true });
+    }
     if (supportsSerialAutoBaud) {
       const checks = result.phases[1].checks.serialAutoBaud;
       assert(checks?.savedId === result.serialAutoBaud.savedId && checks?.persistedAcrossRestart && checks?.reopened && checks?.removed && checks?.noPortOpened,

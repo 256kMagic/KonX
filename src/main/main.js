@@ -8,6 +8,7 @@ if (process.env.KONX_USERDATA) app.setPath('userData', process.env.KONX_USERDATA
 
 const { Store } = require('./store');
 const { ConnectionManager } = require('./connections');
+const { WorkspaceWindows, isPrimaryFrame } = require('./workspace-windows');
 const { SftpManager } = require('./sftp');
 const localfs = require('./localfs');
 const nettools = require('./nettools');
@@ -53,16 +54,19 @@ let incidents;
 let remoteResults;
 let runbookStore;
 let updates;
+let workspaceWindows;
 const toolJobs = new Map();
 let remoteReservations = 0;
 let toolsShuttingDown = false;
-let serialQuitApproved = false;
+let ownedConnectionQuitApproved = false;
 
 function ownedToolJobs() { return [...toolJobs.values()].filter(signal => ['remote-capture', 'runbook'].includes(signal.kind)); }
 function hasToolOwnership() { return remoteReservations > 0 || ownedToolJobs().length > 0 || !!remoteResults?.hasOpenHandles || !!remoteCapture.hasPendingCleanup || !!runbookStore?.hasOwnership; }
 function hasSerialOwnership() { return !!connections?.hasSerialOwnership; }
+function hasPopoutOwnership() { return !!workspaceWindows?.hasOwnership; }
+function dialogOwner() { return workspaceWindows?.dialogOwner() || (win && !win.isDestroyed() ? win : undefined); }
 function confirmConnectionQuit() {
-  return dialog.showMessageBoxSync(win, {
+  return dialog.showMessageBoxSync(dialogOwner(), {
     type: 'question', buttons: ['Disconnect and quit', 'Cancel'], defaultId: 0, cancelId: 1,
     message: `You have ${connections.conns.size} active connection(s).`, detail: 'Close them and exit?',
   }) === 0;
@@ -83,7 +87,8 @@ function ask(payload) {
     send('ui:prompt', { id, ...payload });
   });
 }
-ipcMain.handle('ui:promptResponse', (_e, id, value) => {
+ipcMain.handle('ui:promptResponse', (event, id, value) => {
+  if (!isPrimaryFrame(event, win)) throw new Error('Only the primary KonX window may answer connection prompts.');
   const r = pendingPrompts.get(id);
   pendingPrompts.delete(id);
   if (r) r(value);
@@ -118,10 +123,7 @@ function createWindow() {
   else runCapture();
 
   // Links open in the system browser, never inside the app.
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
-    return { action: 'deny' };
-  });
+  workspaceWindows = new WorkspaceWindows({ primary: win, BrowserWindow, emit: send, openExternal: url => shell.openExternal(url) });
   win.webContents.on('will-navigate', (e) => e.preventDefault());
   win.on('close', (e) => {
     if (updates?.installing && !updates.committed) {
@@ -131,13 +133,13 @@ function createWindow() {
     // Native close must retain the window and SSH transport until capture jobs
     // and their registered file handles have finished cleanup. A failed close
     // can then be shown to the user instead of silently exiting headlessly.
-    if (hasToolOwnership() || hasSerialOwnership()) {
+    if (hasToolOwnership() || hasSerialOwnership() || hasPopoutOwnership()) {
       e.preventDefault();
       app.quit();
       return;
     }
-    if (connections.conns.size && !CAPTURE && !serialQuitApproved && !confirmConnectionQuit()) e.preventDefault();
-    serialQuitApproved = false;
+    if (connections.conns.size && !CAPTURE && !ownedConnectionQuitApproved && !confirmConnectionQuit()) e.preventDefault();
+    ownedConnectionQuitApproved = false;
   });
   win.on('closed', () => (win = null));
 }
@@ -204,7 +206,17 @@ function launchCaptureHelper(args) {
 }
 
 function registerIpc() {
-  const handle = (ch, fn) => ipcMain.handle(ch, (_e, ...args) => updates ? updates.invoke(ch, () => fn(...args)) : fn(...args));
+  const handle = (ch, fn) => ipcMain.handle(ch, (event, ...args) => {
+    if (!isPrimaryFrame(event, win)) throw new Error('Only the primary KonX window may use application IPC.');
+    // Redocking acknowledges view cleanup even while an updater has frozen new work.
+    if (ch === 'app:popoutClose') return fn(...args);
+    return updates ? updates.invoke(ch, () => fn(...args)) : fn(...args);
+  });
+  handle('app:popoutPrepare', () => {
+    if (toolsShuttingDown || updateShutdownPending) throw new Error('KonX is closing. Wait before opening another window.');
+    return workspaceWindows.prepare();
+  });
+  handle('app:popoutClose', id => workspaceWindows.close(id));
 
   // app
   handle('app:info', () => ({
@@ -233,15 +245,15 @@ function registerIpc() {
   handle('clipboard:read', () => clipboard.readText());
   handle('clipboard:write', (t) => clipboard.writeText(String(t)));
   handle('dialog:openFile', async (opts = {}) => {
-    const r = await dialog.showOpenDialog(win, { properties: ['openFile', ...(opts.multi ? ['multiSelections'] : [])], ...opts });
+    const r = await dialog.showOpenDialog(dialogOwner(), { properties: ['openFile', ...(opts.multi ? ['multiSelections'] : [])], ...opts });
     return r.canceled ? null : opts.multi ? r.filePaths : r.filePaths[0];
   });
   handle('dialog:openDir', async (opts = {}) => {
-    const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'], ...opts });
+    const r = await dialog.showOpenDialog(dialogOwner(), { properties: ['openDirectory'], ...opts });
     return r.canceled ? null : r.filePaths[0];
   });
   handle('dialog:saveText', async (defaultName, text) => {
-    const r = await dialog.showSaveDialog(win, { defaultPath: defaultName });
+    const r = await dialog.showSaveDialog(dialogOwner(), { defaultPath: defaultName });
     if (r.canceled || !r.filePath) return null;
     await fs.promises.writeFile(r.filePath, text);
     return r.filePath;
@@ -266,7 +278,7 @@ function registerIpc() {
     let items;
     if (kind === 'securecrt') {
       const def = importers.defaultSecureCrtDir();
-      const r = await dialog.showOpenDialog(win, {
+      const r = await dialog.showOpenDialog(dialogOwner(), {
         title: 'Select your SecureCRT "Sessions" folder',
         defaultPath: fs.existsSync(def) ? def : undefined,
         properties: ['openDirectory'],
@@ -275,7 +287,7 @@ function registerIpc() {
       items = importers.importSecureCrt(r.filePaths[0]);
     } else {
       const def = path.join(app.getPath('home'), '.ssh', 'config');
-      const r = await dialog.showOpenDialog(win, { title: 'Select an OpenSSH config file', defaultPath: def, properties: ['openFile'] });
+      const r = await dialog.showOpenDialog(dialogOwner(), { title: 'Select an OpenSSH config file', defaultPath: def, properties: ['openFile'] });
       if (r.canceled) return null;
       items = importers.importSshConfig(r.filePaths[0]);
     }
@@ -298,8 +310,8 @@ function registerIpc() {
     if (toolsShuttingDown || updateShutdownPending) throw new Error('KonX is closing. Wait before opening another connection.');
     return connections.open(id, spec, size);
   });
-  ipcMain.on('conn:write', (_e, id, data, binary) => connections.write(id, data, binary));
-  ipcMain.on('conn:resize', (_e, id, cols, rows) => connections.resize(id, cols, rows));
+  ipcMain.on('conn:write', (event, id, data, binary) => { if (isPrimaryFrame(event, win)) connections.write(id, data, binary); });
+  ipcMain.on('conn:resize', (event, id, cols, rows) => { if (isPrimaryFrame(event, win)) connections.resize(id, cols, rows); });
   handle('conn:close', (id) => connections.close(id));
   handle('conn:break', (id) => connections.sendBreak(id));
   handle('conn:startLog', (id) => {
@@ -393,7 +405,7 @@ function registerIpc() {
   });
   handle('tools:deviceConnections', () => deviceCollector.listConnections(connections));
   handle('tools:comparisonOpen', async () => {
-    const result = await dialog.showOpenDialog(win, { title: 'Select capture for comparison', properties: ['openFile'],
+    const result = await dialog.showOpenDialog(dialogOwner(), { title: 'Select capture for comparison', properties: ['openFile'],
       filters: [{ name: 'Packet captures', extensions: ['pcap', 'pcapng', 'cap', 'dmp'] }] });
     if (result.canceled || !result.filePaths[0] || !win || win.isDestroyed()) return null;
     const file = result.filePaths[0];
@@ -411,14 +423,14 @@ function registerIpc() {
   handle('tools:runbookSave', runbookOperation(params => runbookStore.save(params)));
   handle('tools:runbookRemove', runbookOperation(id => runbookStore.remove(id)));
   handle('tools:runbookImport', runbookOperation(async () => {
-    const result = await dialog.showOpenDialog(win, { title: 'Import diagnostic runbook', properties: ['openFile'], filters: [{ name: 'Runbook JSON', extensions: ['json'] }] });
+    const result = await dialog.showOpenDialog(dialogOwner(), { title: 'Import diagnostic runbook', properties: ['openFile'], filters: [{ name: 'Runbook JSON', extensions: ['json'] }] });
     if (result.canceled || !result.filePaths[0]) return null;
     requireRunbookReady();
     return runbookStore.importFile(result.filePaths[0]);
   }));
   handle('tools:runbookExport', runbookOperation(async id => {
     await runbookStore.get(id);
-    const result = await dialog.showSaveDialog(win, { title: 'Export saved diagnostic runbook', defaultPath: 'konx-runbook.json', filters: [{ name: 'Runbook JSON', extensions: ['json'] }] });
+    const result = await dialog.showSaveDialog(dialogOwner(), { title: 'Export saved diagnostic runbook', defaultPath: 'konx-runbook.json', filters: [{ name: 'Runbook JSON', extensions: ['json'] }] });
     if (result.canceled || !result.filePath) return null;
     requireRunbookReady();
     return runbookStore.exportFile(id, result.filePath);
@@ -434,7 +446,7 @@ function registerIpc() {
   handle('tools:incidentImport', async (id, params) => {
     if (!['capture', 'terminal', 'tool', 'syslog', 'other'].includes(params?.kind)) throw new Error('Choose a supported evidence type.');
     await incidents.get(id);
-    const result = await dialog.showOpenDialog(win, { title: 'Add incident evidence', properties: ['openFile'],
+    const result = await dialog.showOpenDialog(dialogOwner(), { title: 'Add incident evidence', properties: ['openFile'],
       filters: params.kind === 'capture' ? [{ name: 'Packet captures', extensions: ['pcap', 'pcapng', 'cap'] }] : [{ name: 'Evidence files', extensions: ['*'] }] });
     if (result.canceled || !result.filePaths[0]) return null;
     return incidents.addFile(id, { ...params, sourcePath: result.filePaths[0] });
@@ -442,7 +454,7 @@ function registerIpc() {
   handle('tools:incidentExport', async (id, format) => {
     if (!['html', 'json'].includes(format)) throw new Error('Choose HTML or JSON incident export.');
     const content = format === 'html' ? await incidents.exportHtml(id) : await incidents.exportJson(id);
-    const result = await dialog.showSaveDialog(win, { title: 'Export incident report', defaultPath: `konx-incident.${format}`,
+    const result = await dialog.showSaveDialog(dialogOwner(), { title: 'Export incident report', defaultPath: `konx-incident.${format}`,
       filters: [{ name: format === 'html' ? 'HTML report' : 'JSON report', extensions: [format] }] });
     if (result.canceled || !result.filePath) return null;
     await fs.promises.writeFile(result.filePath, content, 'utf8');
@@ -466,7 +478,7 @@ function registerIpc() {
   handle('tools:deviceCommands', () => deviceAnalysis.COMMANDS);
   handle('tools:deviceDemo', () => deviceAnalysis.analyzeDevices(JSON.parse(fs.readFileSync(path.join(__dirname, '../../assets/device-inspector-demo.json'), 'utf8'))));
   handle('tools:deviceImport', async () => {
-    const result = await dialog.showOpenDialog(win, { title: 'Open Device Inspector report', properties: ['openFile'], filters: [{ name: 'Device report', extensions: ['json'] }] });
+    const result = await dialog.showOpenDialog(dialogOwner(), { title: 'Open Device Inspector report', properties: ['openFile'], filters: [{ name: 'Device report', extensions: ['json'] }] });
     if (result.canceled || !result.filePaths[0]) return null;
     const file = await fs.promises.open(result.filePaths[0], 'r');
     try {
@@ -488,7 +500,7 @@ function registerIpc() {
     const report = deviceAnalysis.analyzeDevices(input);
     const serialized = JSON.stringify(report, null, 2);
     if (Buffer.byteLength(serialized) > MAX_DEVICE_REPORT_BYTES) throw new Error('Serialized device report exceeds the 20 MiB file limit.');
-    const result = await dialog.showSaveDialog(win, { defaultPath: `konx-device-${new Date().toISOString().slice(0, 10)}.json`, filters: [{ name: 'Device report', extensions: ['json'] }] });
+    const result = await dialog.showSaveDialog(dialogOwner(), { defaultPath: `konx-device-${new Date().toISOString().slice(0, 10)}.json`, filters: [{ name: 'Device report', extensions: ['json'] }] });
     if (result.canceled || !result.filePath) return null;
     await fs.promises.writeFile(result.filePath, serialized);
     return result.filePath;
@@ -530,7 +542,7 @@ function registerIpc() {
 
   // notepad
   handle('np:open', async (opts = {}) => {
-    const r = await dialog.showOpenDialog(win, { title: 'Open', defaultPath: opts.defaultPath, properties: ['openFile', 'multiSelections'] });
+    const r = await dialog.showOpenDialog(dialogOwner(), { title: 'Open', defaultPath: opts.defaultPath, properties: ['openFile', 'multiSelections'] });
     if (r.canceled) return [];
     return r.filePaths.map((f) => {
       try {
@@ -547,7 +559,7 @@ function registerIpc() {
     return r;
   });
   handle('np:saveAs', async (defaultPath, bytes) => {
-    const r = await dialog.showSaveDialog(win, { defaultPath, filters: [{ name: 'All files', extensions: ['*'] }, { name: 'Text', extensions: ['txt', 'cfg', 'conf', 'log'] }] });
+    const r = await dialog.showSaveDialog(dialogOwner(), { defaultPath, filters: [{ name: 'All files', extensions: ['*'] }, { name: 'Text', extensions: ['txt', 'cfg', 'conf', 'log'] }] });
     if (r.canceled || !r.filePath) return null;
     const w = notepad.writeFile(r.filePath, bytes);
     return { path: r.filePath, mtime: w.mtime };
@@ -555,7 +567,8 @@ function registerIpc() {
   handle('np:watch', (entries) => npWatcher.set(entries));
   handle('np:session:get', () => npStore.getSession());
   handle('np:session:set', (s) => npStore.setSession(s));
-  ipcMain.on('np:backup', (_e, id, text) => {
+  ipcMain.on('np:backup', (event, id, text) => {
+    if (!isPrimaryFrame(event, win)) return;
     try {
       if (text == null) npStore.deleteBackup(id);
       else npStore.writeBackup(id, text);
@@ -563,11 +576,11 @@ function registerIpc() {
   });
   handle('np:backup:read', (id) => npStore.readBackup(id));
   handle('np:pickDir', async (defaultPath) => {
-    const r = await dialog.showOpenDialog(win, { defaultPath, properties: ['openDirectory'] });
+    const r = await dialog.showOpenDialog(dialogOwner(), { defaultPath, properties: ['openDirectory'] });
     return r.canceled ? null : r.filePaths[0];
   });
   handle('np:pickFile', async () => {
-    const r = await dialog.showOpenDialog(win, { properties: ['openFile'] });
+    const r = await dialog.showOpenDialog(dialogOwner(), { properties: ['openFile'] });
     return r.canceled ? null : r.filePaths[0];
   });
   const npFinds = new Map();
@@ -597,22 +610,22 @@ function registerIpc() {
   handle('cap:readFile', (p) => capture.readFile(p));
   handle('cap:sample', () => readCaptureFile(path.join(__dirname, '../../assets/samples/branch-office.pcapng')));
   handle('cap:open', async () => {
-    const r = await dialog.showOpenDialog(win, { title: 'Open capture file', filters: [{ name: 'Captures', extensions: ['pcapng', 'pcap', 'cap', 'dmp', 'etl'] }, { name: 'All files', extensions: ['*'] }], properties: ['openFile'] });
+    const r = await dialog.showOpenDialog(dialogOwner(), { title: 'Open capture file', filters: [{ name: 'Captures', extensions: ['pcapng', 'pcap', 'cap', 'dmp', 'etl'] }, { name: 'All files', extensions: ['*'] }], properties: ['openFile'] });
     if (r.canceled) return null;
     return { name: path.basename(r.filePaths[0]), bytes: await capture.readFile(r.filePaths[0]) };
   });
   handle('cap:save', async (defaultName, bytes) => {
-    const r = await dialog.showSaveDialog(win, { defaultPath: defaultName, filters: [{ name: 'pcapng', extensions: ['pcapng'] }] });
+    const r = await dialog.showSaveDialog(dialogOwner(), { defaultPath: defaultName, filters: [{ name: 'pcapng', extensions: ['pcapng'] }] });
     if (r.canceled || !r.filePath) return null;
     await fs.promises.writeFile(r.filePath, Buffer.from(bytes));
     return r.filePath;
   });
   handle('cap:saveBody', (defaultName, bytes) => saveCaptureBody(defaultName, bytes, {
-    chooseFile: (options) => dialog.showSaveDialog(win, options),
+    chooseFile: (options) => dialog.showSaveDialog(dialogOwner(), options),
     writeFile: (filePath, data) => fs.promises.writeFile(filePath, data),
   }));
   handle('cap:saveSip', (format, bytes) => saveSipExport(format, bytes, {
-    chooseFile: (options) => dialog.showSaveDialog(win, options),
+    chooseFile: (options) => dialog.showSaveDialog(dialogOwner(), options),
     writeFile: (filePath, data) => fs.promises.writeFile(filePath, data),
   }));
 }
@@ -684,7 +697,7 @@ app.whenReady().then(() => {
 let updateShutdownPending = false;
 let updateShutdownComplete = false;
 app.on('before-quit', (event) => {
-  if (!updates && !hasToolOwnership() && !hasSerialOwnership()) return;
+  if (!updates && !hasToolOwnership() && !hasSerialOwnership() && !hasPopoutOwnership()) return;
   if (updateShutdownComplete) {
     // Consume this single retry. If a close prompt cancels it, a future quit
     // still has to cancel any downloads started in the meantime.
@@ -692,14 +705,14 @@ app.on('before-quit', (event) => {
     toolsShuttingDown = false;
     return;
   }
-  if (updates?.committed && !hasToolOwnership() && !hasSerialOwnership()) return;
+  if (updates?.committed && !hasToolOwnership() && !hasSerialOwnership() && !hasPopoutOwnership()) return;
   event.preventDefault();
   if ((updates?.installing && !updates.committed) || updateShutdownPending) return;
   // Serial shutdown must release its handles before the window can close, so
   // obtain the existing disconnect consent before starting that cleanup.
-  if (hasSerialOwnership() && connections.conns.size && !CAPTURE && !serialQuitApproved) {
+  if ((hasSerialOwnership() || hasPopoutOwnership()) && connections.conns.size && !CAPTURE && !ownedConnectionQuitApproved) {
     if (!confirmConnectionQuit()) return;
-    serialQuitApproved = true;
+    ownedConnectionQuitApproved = true;
   }
   updateShutdownPending = true;
   toolsShuttingDown = true;
@@ -714,8 +727,11 @@ app.on('before-quit', (event) => {
     let updateCleanup;
     try { updateCleanup = updates && !updates.committed ? Promise.resolve(updates.shutdown()).catch(() => {}) : Promise.resolve(); }
     catch { updateCleanup = Promise.resolve(); }
+    const popoutCleanup = workspaceWindows ? workspaceWindows.redockAll().then(() => null, error => error.message) : Promise.resolve(null);
     await Promise.allSettled(jobs.map(signal => signal.task));
     const cleanupErrors = [];
+    const popoutError = await popoutCleanup;
+    if (popoutError) cleanupErrors.push(popoutError);
     for (const cleanup of [() => remoteCapture.closePending(), () => remoteResults?.close(), () => runbookStore?.close(),
       () => hasSerialOwnership() ? connections.waitForSerialCleanup() : undefined]) {
       try { await cleanup(); } catch (error) { cleanupErrors.push(error.message); }
@@ -732,8 +748,8 @@ app.on('before-quit', (event) => {
   }, error => {
     updateShutdownPending = false;
     toolsShuttingDown = false;
-    serialQuitApproved = false;
-    dialog.showMessageBoxSync(win && !win.isDestroyed() ? win : undefined, {
+    ownedConnectionQuitApproved = false;
+    dialog.showMessageBoxSync(dialogOwner(), {
       type: 'error', buttons: ['OK'], title: 'KonX could not finish closing',
       message: 'Connection or tool cleanup did not finish. KonX has stayed open.',
       detail: `${error.message}\nTry quitting again to retry cleanup.`,
