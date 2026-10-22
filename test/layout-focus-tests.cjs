@@ -58,6 +58,9 @@ function harness() {
       fit: { fit() { live(); counts.fit++; } }, wrap: { offsetParent: {} },
       ro: { disconnect() { counts.unobserve++; } },
       _hideOverlay() { live(); }, _showOverlay() { live(); },
+      // This fixture bypasses DOM construction to control focus scheduling.
+      // Logging controls have their own real Electron workflow coverage.
+      _renderLogging() { live(); },
     });
     return { tab, counts };
   }

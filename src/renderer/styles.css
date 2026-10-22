@@ -241,6 +241,21 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
 #statusbar .err { color: var(--err); }
 
 /* ---------------------------------------------------------------- terminal view */
+.term-logbar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 5px 8px; flex: 0 0 auto; min-width: 0;
+  padding: 5px 8px; background: var(--panel); border-bottom: 1px solid var(--border);
+}
+.term-log-switch { flex: 0 0 auto; }
+.term-log-switch:focus-visible, .term-log-reveal:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.term-log-track { width: 26px; height: 14px; border: 1px solid var(--muted); border-radius: 9px; position: relative; flex: 0 0 auto; }
+.term-log-track::after { content: ''; position: absolute; left: 2px; top: 2px; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.term-log-switch[aria-checked="true"] .term-log-track { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 20%, var(--panel)); box-shadow: 0 0 7px color-mix(in srgb, var(--ok) 55%, transparent); }
+.term-log-switch[aria-checked="true"] .term-log-track::after { left: 14px; background: var(--ok); }
+.term-log-switch[aria-checked="true"] .term-log-state { color: var(--ok); font-weight: 600; }
+.term-log-state { min-width: 20px; color: var(--muted); }
+.term-log-path { min-width: 70px; flex: 1 1 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 11px; }
+.term-log-reveal { flex: 0 0 auto; }
+.term-log-error { flex: 1 1 100%; min-width: 0; color: var(--err); font-size: 12px; overflow-wrap: anywhere; }
 .term-wrap { flex: 1; position: relative; min-height: 0; padding: 4px 0 0 6px; }
 .term-wrap .xterm { height: 100%; }
 /* xterm draws its own scrollbar; the native viewport scroller only leaks a black strip. */

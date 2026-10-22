@@ -27,6 +27,9 @@ export class TerminalTab {
     this.info = null;
     this.disposed = false;
     this.visibilityGeneration = 0;
+    this.logRequest = null;
+    this.lastLogPath = '';
+    this.logError = '';
 
     const s = app.settings;
     this.term = new Terminal({
@@ -50,7 +53,24 @@ export class TerminalTab {
     this.wrap = h('div.term-wrap');
     this.overlay = null;
     this.findbar = null;
-    this.el = h('div.view', this.wrap);
+    this.logState = h('span.term-log-state', 'Off');
+    this.logSwitch = h('button.btn.sm.term-log-switch', {
+      type: 'button', role: 'switch', 'aria-label': 'Log console to text file',
+      'aria-checked': 'false', onclick: () => this.toggleLog(),
+    }, h('span.term-log-track', { 'aria-hidden': 'true' }), 'Log to text file', this.logState);
+    this.logPath = h('span.term-log-path');
+    this.logReveal = h('button.btn.sm.ghost.term-log-reveal', {
+      type: 'button', title: 'Show log in folder', 'aria-label': 'Show log in folder',
+      onclick: async () => {
+        if (!this.lastLogPath || this.disposed) return;
+        try { await api.invoke('app:showItem', this.lastLogPath); }
+        catch (error) { if (!this.disposed) toast(errMsg(error), 'err'); }
+      },
+    }, icon('folder-open'));
+    this.logErrorEl = h('span.term-log-error.hidden', { role: 'alert' });
+    this.logbar = h('div.term-logbar', this.logSwitch, this.logPath, this.logReveal, this.logErrorEl);
+    this.el = h('div.view', this.logbar, this.wrap);
+    this._renderLogging();
     this.term.open(this.wrap);
     mountThemeOutput(this.wrap);
     this.applyColors(s);
@@ -95,6 +115,9 @@ export class TerminalTab {
     if (this.disposed) return;
     this._hideOverlay();
     this.state = 'connecting';
+    this.logRequest = null;
+    this.logError = '';
+    this._renderLogging();
     this.app.tabStateChanged(this);
     this.refit();
     const r = await api.invoke('conn:open', this.id, this.spec, { cols: this.term.cols, rows: this.term.rows }).catch((e) => ({ ok: false, error: errMsg(e) }));
@@ -112,13 +135,17 @@ export class TerminalTab {
     if (this.disposed) return;
     this.state = st.state;
     if (st.info) this.info = st.info;
+    if (this.info?.logging) this.lastLogPath = this.info.logging;
     if (st.state === 'connected') {
       this._hideOverlay();
     }
     if (st.state === 'disconnected') {
+      this.logRequest = null;
+      if (this.info) this.info = { ...this.info, logging: null };
       this.term.write(`\r\n\x1b[90m[${st.message || 'Disconnected'}]\x1b[0m\r\n`);
       this._showOverlay(st.message || 'Disconnected');
     }
+    this._renderLogging();
     this.app.tabStateChanged(this);
   }
 
@@ -226,7 +253,7 @@ export class TerminalTab {
     if (i.via) segs.push({ icon: 'route', text: 'via ' + i.via });
     if (i.cipher) segs.push({ icon: 'lock', text: i.cipher });
     segs.push({ text: `${this.term.cols}×${this.term.rows}` });
-    if (i.logging) segs.push({ icon: 'log', text: 'Logging', cls: 'ok', title: i.logging });
+    if (this.state === 'connected' && i.logging) segs.push({ icon: 'log', text: 'Logging', cls: 'ok', title: i.logging });
     return segs;
   }
 
@@ -352,12 +379,37 @@ export class TerminalTab {
   }
 
   async toggleLog() {
+    if (this.disposed || this.state !== 'connected' || this.logRequest) return;
+    const request = {};
+    this.logRequest = request;
+    this.logError = '';
+    this._renderLogging();
     try {
       if (this.info && this.info.logging) await api.invoke('conn:stopLog', this.id);
       else await api.invoke('conn:startLog', this.id);
     } catch (e) {
-      toast(errMsg(e), 'err');
+      if (!this.disposed && this.logRequest === request) this.logError = errMsg(e);
+    } finally {
+      if (!this.disposed && this.logRequest === request) {
+        this.logRequest = null;
+        this._renderLogging();
+      }
     }
+  }
+
+  _renderLogging() {
+    const logging = this.state === 'connected' && !!this.info?.logging;
+    this.logSwitch.setAttribute('aria-checked', String(logging));
+    this.logSwitch.setAttribute('aria-busy', String(!!this.logRequest));
+    this.logSwitch.disabled = this.state !== 'connected' || !!this.logRequest;
+    this.logSwitch.title = this.state !== 'connected' ? 'Connect this console to start logging' : logging ? 'Stop logging this console' : 'Start logging this console to a text file';
+    this.logState.textContent = this.logRequest ? 'Working…' : logging ? 'On' : 'Off';
+    this.logPath.textContent = this.lastLogPath || 'No log file yet';
+    this.logPath.title = this.lastLogPath ? `${logging ? 'Logging to' : 'Last log file'}: ${this.lastLogPath}` : 'Start logging to save new console output';
+    this.logReveal.disabled = !this.lastLogPath;
+    this.logReveal.title = this.lastLogPath ? `Show log in folder: ${this.lastLogPath}` : 'No log file yet';
+    this.logErrorEl.textContent = this.logError;
+    this.logErrorEl.classList.toggle('hidden', !this.logError);
   }
 
   _menu(x, y) {
@@ -372,7 +424,7 @@ export class TerminalTab {
       { label: 'Open scrollback in Notepad', icon: 'edit', action: () => this.openScrollback() },
       '-',
       this.protocol === 'ssh' && { label: 'Open SFTP Tab', icon: 'file-transfer', disabled: !connected, action: () => this.app.openSftpFromTerminal(this) },
-      { label: this.info && this.info.logging ? 'Stop Logging' : 'Start Logging', icon: 'log', disabled: !connected, action: () => this.toggleLog() },
+      { label: this.info && this.info.logging ? 'Stop Logging' : 'Start Logging', icon: 'log', disabled: !connected || !!this.logRequest, action: () => this.toggleLog() },
       (this.protocol === 'serial' || this.protocol === 'telnet') && { label: 'Send Break', disabled: !connected, action: () => api.invoke('conn:break', this.id) },
       '-',
       connected

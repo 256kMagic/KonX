@@ -510,6 +510,12 @@ const fakeCrypt = {
   await require('./credential-store-tests.cjs').runCredentialStoreTests(test);
   await require('./session-management-ui-tests.cjs').runSessionManagementUiTests(test);
   await require('./layout-focus-tests.cjs').runLayoutFocusTests(test);
+  await require('./ssh-compatibility-tests.cjs').runSshCompatibilityTests(test);
+  await require('./ssh-key-tests.cjs').runSshKeyTests(test);
+  await require('./ssh-login-tests.cjs').runSshLoginTests(test);
+  await require('./ssh-settings-ui-tests.cjs').runSshSettingsUiTests(test);
+  await require('./terminal-logging-tests.cjs').runTerminalLoggingTests(test);
+  await require('./terminal-logging-ui-tests.cjs').runTerminalLoggingUiTests(test);
 
   const failed = results.filter((r) => !r[0]);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

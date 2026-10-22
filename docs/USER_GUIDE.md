@@ -1,6 +1,6 @@
 # KonX User Guide
 
-This guide covers KonX 0.15.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one window. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
+This guide covers KonX 0.15.1 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one window. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
 
 Version 0.4.0 adds [AI & Knowledge](AI_KNOWLEDGE_GUIDE.md): provider API keys, explanations of selected tool output, and an offline reference library backed by a background SQLite vector index. Older 0.3.0 builds do not include this feature.
 
@@ -21,6 +21,8 @@ Version 0.13.0 adds [Capture comparison](CAPTURE_COMPARISON.md): working/failing
 Version 0.14.0 adds [Workspace layouts](WORKSPACE_LAYOUTS.md). Four new layouts alongside Classic keep color themes independent while arranging existing sessions and tools for different ways of working. See the [release notes](releases/0.14.0.md).
 
 Version 0.15.0 improves [Session management](SESSION_MANAGEMENT.md): clear recent history on Home and save a username and encrypted password together on General when creating a session. See the [release notes](releases/0.15.0.md).
+
+Version 0.15.1 adds a visible [console logging switch](#session-logging) and [SSH compatibility](SSH_COMPATIBILITY.md): a per-session transport choice, OpenSSH/PEM/PKCS#8/PuTTY key loading, and clearer login errors. See the [release notes](releases/0.15.1.md) for supported algorithms and validation limits.
 
 For downloads, build instructions, and project information, see the [README](../README.md) and [GitHub releases](https://github.com/256kMagic/KonX/releases).
 
@@ -46,6 +48,7 @@ For downloads, build instructions, and project information, see the [README](../
 - [Capture comparison](CAPTURE_COMPARISON.md)
 - [Workspace layouts](WORKSPACE_LAYOUTS.md)
 - [Session management](SESSION_MANAGEMENT.md)
+- [SSH compatibility](SSH_COMPATIBILITY.md)
 - [Network tools](#network-tools)
 - [Security Suite](SECURITY_SUITE.md)
 - [Wi-Fi and Mist/Marvis](WIRELESS_MIST_GUIDE.md)
@@ -60,7 +63,7 @@ Examples use reserved documentation addresses such as `192.0.2.10`, `198.51.100.
 
 ## Install, run, and update
 
-Download a Windows x64 executable from the [0.15.0 release](https://github.com/256kMagic/KonX/releases/tag/v0.15.0).
+Download a Windows x64 executable from the [0.15.1 release](https://github.com/256kMagic/KonX/releases/tag/v0.15.1).
 
 | Download | Use it when | How to start |
 | --- | --- | --- |
@@ -69,7 +72,7 @@ Download a Windows x64 executable from the [0.15.0 release](https://github.com/2
 
 The portable executable still uses a Windows user profile for settings, saved sessions, and editor recovery. It does **not** automatically place all data beside the executable or make encrypted credentials transferable between computers. See [Application data and backups](#application-data-and-backups).
 
-**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.15.0.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
+**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.15.1.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
 
 For updates from **installed 0.6.2 or later**, or **portable 0.6.0 or later**:
 
@@ -80,7 +83,7 @@ For updates from **installed 0.6.2 or later**, or **portable 0.6.0 or later**:
 
 Installed copies retain their installation folder and mode. Portable copies retain their filename and location; the containing folder must be writable. Both continue to use the existing Windows profile. No update is applied just because you close KonX, and no release checks run in the background. See [Updating KonX](UPDATING.md) for cancellation, failures, and release preparation.
 
-Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.15.0 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
+Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.15.1 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
 
 Npcap is optional for packet capture; SSH, SFTP, Notepad, and the other tools do not require it. Updating KonX does not install or update Npcap.
 
@@ -120,7 +123,8 @@ Saved keys are managed under **Settings → Known Hosts**. Removing a key makes 
    - **Password / keyboard-interactive** for passwords and server challenge prompts.
    - **Public key file** for a private-key file and optional passphrase.
    - **SSH agent (Pageant / OpenSSH)** for an available SSH agent. The default Windows connection is the OpenSSH agent pipe; an existing `SSH_AUTH_SOCK` takes precedence.
-4. Use **Save** to keep the session, or **Save & Connect** to start it.
+4. Under **Connection**, keep **SSH transport compatibility** on **Automatic — modern preferred, legacy allowed**, or choose **Modern transport only** if required by your environment.
+5. Use **Save** to keep the session, or **Save & Connect** to start it.
 
 Saved passwords and passphrases use Electron's Windows-backed encryption. If secure encryption is unavailable, password saving is disabled; a typed password can still be used once with **Save & Connect**. Unchecking **Save password on this computer** also uses a typed password once without replacing any previously saved password.
 
@@ -204,9 +208,21 @@ Use a saved session for key authentication, agent authentication, detailed seria
 
 ### SSH connection options
 
-**Connection** contains **Jump host (ProxyJump)**, **Keepalive (seconds)**, **Connect timeout (seconds)**, and **Terminal type**. The default terminal type is `xterm-256color`; other options include `xterm`, `vt100`, `vt220`, `linux`, and `ansi`.
+**Connection** contains **Jump host (ProxyJump)**, **SSH transport compatibility**, **Keepalive (seconds)**, **Connect timeout (seconds)**, and **Terminal type**. The default terminal type is `xterm-256color`; other options include `xterm`, `vt100`, `vt220`, `linux`, and `ansi`.
+
+**Automatic — modern preferred, legacy allowed** offers modern algorithms first, with legacy choices available when needed and supported by the runtime. It is also the default for existing sessions without a saved choice. **Modern transport only** excludes legacy server host signatures, key exchange, ciphers, and MACs; it does not control the separate user-key signature negotiation. Host fingerprint verification still applies. Unknown stored compatibility values require an explicit choice before connecting.
 
 A jump host must be another saved SSH session. Save the jump session first, then select it in the destination session. KonX authenticates each hop and verifies each server's host key. It supports a bounded chain of jump hosts and rejects excessive nesting; avoid circular references.
+
+Each jump uses its own transport setting. Standalone SFTP uses the selected session's setting; SFTP opened from a terminal reuses its established connection. SSH audits use the same algorithm policy and report the negotiated choices without authenticating or running commands.
+
+### SSH private keys and login prompts
+
+Under **Authentication → Public key file**, select an OpenSSH, PEM, PKCS#8, or PuTTY v2/v3 private key. Supported key algorithms are RSA, ECDSA NIST P-256/P-384/P-521, and Ed25519, with supported encrypted variants. Windows KonX cannot use DSA (`ssh-dss`); SSH 1, FIDO/security-key files, OpenSSH certificates, and Ed448 are outside this release's supported scope. A `.pub` file alone is not a private key. See the [format and encryption details](SSH_COMPATIBILITY.md#supported-private-keys).
+
+KonX reads and unlocks the key before starting the network connection timeout. It converts supported formats in memory without rewriting the selected file. A missing, malformed, unsupported, or still-locked key stops the connection with an error; it is not silently replaced with password authentication. A server can still reject a valid key and offer another authentication method.
+
+Closing or disconnecting a pending login cancels it, including a username/passphrase prompt or a pending jump-host connection. Replies arriving after cancellation or timeout cannot resume the login or save a host fingerprint. Host-key and server authentication prompts during the connection still use the session's connection timeout; allow enough time to review them.
 
 ### SSH port forwarding
 
@@ -262,9 +278,15 @@ The context menu also offers **Select All**, **Clear Scrollback**, **Open scroll
 
 ### Session logging
 
-Right-click a connected terminal and choose **Start Logging** or **Stop Logging**. To start automatically for a saved session, enable **Terminal & Log → Log this session automatically** and optionally choose a filename template and **Timestamp each line**.
+Click **Log to text file** above an SSH, Telnet, raw TCP, or serial console to start saving its new output. The switch lights green and reads **On** only after the backend successfully opens the file and confirms logging. Click it again to stop. Each console has its own logging state; switching tabs or layouts does not switch another console's logging.
 
-The default log folder is `Documents\KonX\Logs`, unless **Settings → Terminal → Default log folder** overrides it. Logs are appended as text with terminal control sequences stripped.
+The strip shows the file path. Hover over a shortened path to see it in full, or click the folder button to reveal the file in Explorer. The last confirmed file remains available after stopping or disconnecting, while that tab remains open. In a narrow Workbench or Focus layout, **Hide context** uncovers controls behind the context panel.
+
+The switch is disabled while a start/stop request is pending and whenever the console is disconnected. Failed starts leave it Off and show an error; retry after correcting the folder or permission issue. A later write failure turns it off and reports the failure in the console. Closing or disconnecting the console stops its logger.
+
+The right-click **Start Logging / Stop Logging** action controls the same logger. To start automatically for a saved session, enable **Terminal & Log → Log this session automatically** and optionally choose a filename template and **Timestamp each line**. Clicking the console switch controls the current connection without changing that saved preference.
+
+The default log folder is `Documents\KonX\Logs`, unless **Settings → Terminal → Default log folder** overrides it. Automatically generated filenames end in `.txt` and include the session name, date/time, and a unique suffix. An explicit saved filename/template is preserved, including an existing `.log` extension. Logs append text with terminal control sequences stripped; they record output received after logging starts, not earlier scrollback. To save earlier output, use **Open scrollback in Notepad** and save the document.
 
 | Filename token | Value |
 | --- | --- |
@@ -273,7 +295,7 @@ The default log folder is `Documents\KonX\Logs`, unless **Settings → Terminal 
 | `%Y`, `%M`, `%D` | Year, month, day |
 | `%h`, `%m`, `%s` | Hour, minute, second |
 
-For example, `%S_%Y-%M-%D_%h%m%s.log` makes a timestamped session filename. Terminal logs may contain configuration, command output, or other sensitive text displayed by the server.
+For example, `%S_%Y-%M-%D_%h%m%s.txt` makes a timestamped session filename. Explicit templates can resolve to the same file for repeated connections, which then append to it. Terminal logs may contain configuration, command output, or other sensitive text displayed by the server.
 
 ### Command buttons and sending to several terminals
 
@@ -698,6 +720,8 @@ Run this from the folder containing the portable executable. The environment var
 | **A JavaScript error dialog appears** | Copy its exact text before dismissing it, if possible. KonX 0.3.0 also saves startup errors, uncaught main-process JavaScript errors, and unhandled-rejection warnings to `diagnostics/javascript-errors.log` inside the active KonX profile, normally `%APPDATA%\KonX`. The previous log is `javascript-errors.previous.log`. A closed dialog's text can then be recovered from these files. Earlier 0.2.x builds do not include this logging. |
 | **SSH times out or is refused** | Check the host, SSH port, reachability, VPN, firewall, and server service. Use Ping/Port Scanner where authorized. Review the session's timeout and jump host. |
 | **SSH authentication fails** | Verify username, authentication method, key-file path, key passphrase, and server policy. Check the OpenSSH agent when using the default Windows agent method. Answer keyboard-interactive challenges as requested. |
+| **An older SSH device cannot negotiate** | Check **Connection → SSH transport compatibility**. Automatic permits supported legacy SSH 2 transport; Modern transport only excludes it. See the [supported algorithms and limits](SSH_COMPATIBILITY.md). |
+| **A private key cannot be loaded** | Read the specific format, passphrase, integrity, or resource-limit error. Select the private file rather than its `.pub` half. Windows DSA, SSH 1, FIDO key files, certificates, and Ed448 are unsupported. See the [key guide](SSH_COMPATIBILITY.md#supported-private-keys). |
 | **Unexpected host-key change** | Compare the old and new fingerprints with a trusted administrator. Replace the saved key only after establishing the reason. |
 | **Imported sessions behave differently** | Review the limited importer support above. Enter missing credentials, jump-host links, forwards, terminal settings, and actions in the session editor. |
 | **Serial port missing or cannot open** | Refresh the list; verify drivers, cable, COM number, and serial parameters; close other programs using the port. Check whether the build includes serial support. |

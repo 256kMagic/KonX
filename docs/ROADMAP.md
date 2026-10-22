@@ -18,6 +18,8 @@ Version 0.14.0 adds Docked Workbench, Incident Desk, Operations Wall, and Focus 
 
 Version 0.15.0 adds clearable recent session history and places username and encrypted password saving together on General in the session editor. See the [session management guide](SESSION_MANAGEMENT.md) and [release validation](releases/0.15.0.md).
 
+Version 0.15.1 adds a visible per-console text logging switch and extends SSH 2 transport compatibility and private-key loading for terminals, SFTP, and jump hosts, with shared transport policy for SSH audits and explicit runtime limits. See [Session logging](USER_GUIDE.md#session-logging), the [SSH compatibility guide](SSH_COMPATIBILITY.md), and [release validation](releases/0.15.1.md).
+
 ## Scope
 
 Device collection starts with connected Cisco IOS/IOS-XE SSH sessions and fixed read-only commands in a separate channel. Trace results show candidates and unresolved links when evidence is incomplete. Imported reports and a synthetic demo support offline use.

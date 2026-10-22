@@ -344,6 +344,7 @@ class SftpManager {
     let clientEnded = false;
     let channelEnded = false;
     let cancelled = false;
+    const login = new AbortController();
     let rejectClosed;
     const closed = new Promise((_resolve, reject) => { rejectClosed = reject; });
     // A close can precede the first asynchronous operation (for example, a
@@ -365,6 +366,7 @@ class SftpManager {
     };
     const cancel = (error = new Error('SFTP connection cancelled')) => {
       cancelled = true;
+      login.abort(error);
       rejectClosed(error);
       dispose();
     };
@@ -406,6 +408,7 @@ class SftpManager {
         session = this.deps.connections.resolveSession(spec);
         if ((session.protocol || 'ssh') !== 'ssh') throw new Error('SFTP needs an SSH session');
         const hooks = {
+          signal: login.signal,
           knownHost: (h, pt) => this.deps.store.hostKeyFor(h, pt),
           saveHost: (h, pt, rec) => this.deps.store.saveHostKey(h, pt, rec),
           ask: async (payload) => {

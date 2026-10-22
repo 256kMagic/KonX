@@ -5,10 +5,41 @@
 // credential persistence and removal across a restart.
 const fs = require('node:fs');
 const path = require('node:path');
+const net = require('node:net');
+const crypto = require('node:crypto');
 const { spawn, execFile } = require('node:child_process');
 
 const TOKEN = 'KonX_Synthetic_Mist_Token_For_Package_Smoke_Only';
 const assert = (value, message) => { if (!value) throw new Error(message); };
+
+async function loggingPeer(run) {
+  const sockets = new Set();
+  const nonce = crypto.randomBytes(12).toString('hex');
+  const logDirectory = path.join(run, 'logs');
+  fs.mkdirSync(logDirectory);
+  const options = { host: '127.0.0.1', port: null, logPath: path.join(logDirectory, 'synthetic-console.txt'),
+    onMarker: 'KONX_LOG_ON_' + nonce, offMarker: 'KONX_LOG_OFF_' + nonce };
+  const observed = { connections: 0, received: '' };
+  const server = net.createServer(socket => {
+    sockets.add(socket); observed.connections++;
+    socket.on('close', () => sockets.delete(socket));
+    socket.on('error', () => {});
+    socket.on('data', bytes => {
+      observed.received += bytes.toString('utf8');
+      if (observed.received.length > 8192) return socket.destroy();
+      socket.write(bytes);
+    });
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, options.host, resolve);
+  });
+  options.port = server.address().port;
+  return { options, observed, close: async () => {
+    for (const socket of sockets) socket.destroy();
+    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  } };
+}
 
 async function nativeLoader(executable) {
   const archive = path.join(path.dirname(executable), 'resources', 'app.asar');
@@ -23,11 +54,11 @@ async function nativeLoader(executable) {
   return JSON.parse(marker[1]);
 }
 
-async function launch(executable, root, run, profile, version, phase) {
+async function launch(executable, root, run, profile, version, phase, logging = null) {
   const demoPath = path.join(run, phase + '-demo.js');
   const screenshot = path.join(run, phase + '.png');
   const resultPath = path.join(run, phase + '-checks.json');
-  fs.writeFileSync(demoPath, 'window.__KONX_TOOLS_SMOKE = ' + JSON.stringify({ version, phase, token: TOKEN, resultPath }) + ';\n' +
+  fs.writeFileSync(demoPath, 'window.__KONX_TOOLS_SMOKE = ' + JSON.stringify({ version, phase, token: TOKEN, resultPath, logging }) + ';\n' +
     fs.readFileSync(path.join(__dirname, 'smoke-tools-demo.js'), 'utf8'));
   const env = {
     ...process.env, KONX_USERDATA: profile, KONX_CAPTURE: screenshot,
@@ -84,9 +115,26 @@ async function main() {
   fs.mkdirSync(profile);
   console.log('Isolated package smoke artifacts: ' + run);
   const result = { passed: false, executable, expectedVersion: version, run, phases: [] };
+  const [major, minor, patch] = version.match(/^(\d+)\.(\d+)\.(\d+)/).slice(1).map(Number);
+  const supportsLoggingSwitch = major > 0 || minor > 15 || (minor === 15 && patch >= 1);
+  let logging;
   try {
     result.nativeLoader = await nativeLoader(executable);
-    result.phases.push(await launch(executable, root, run, profile, version, 'save'));
+    if (supportsLoggingSwitch) logging = await loggingPeer(run);
+    result.phases.push(await launch(executable, root, run, profile, version, 'save', logging?.options));
+    if (logging) {
+      const checks = result.phases[0].checks.logging;
+      assert(checks?.switchedOn && checks?.switchedOff && checks?.litStateMatchesStatus && checks?.bothMarkersDisplayed,
+        'Packaged console logging switch did not pass its UI/status checks');
+      assert(checks.path === logging.options.logPath, 'Logging escaped its parent-selected synthetic file');
+      assert(logging.observed.connections === 1 && [logging.options.onMarker, logging.options.offMarker].every(marker => logging.observed.received.includes(marker)),
+        'The local fixture did not receive both console markers');
+      const logged = fs.readFileSync(logging.options.logPath, 'utf8');
+      assert(logged.includes(logging.options.onMarker), 'Enabled console logging omitted the echoed marker');
+      assert(!logged.includes(logging.options.offMarker), 'Console logging continued after the switch was turned off');
+      result.logging = { ...checks, onMarkerStored: true, offMarkerExcluded: true, loopbackOnly: true };
+      await logging.close(); logging = null;
+    }
     const savedText = fs.readFileSync(path.join(profile, 'mist.json'), 'utf8');
     const saved = JSON.parse(savedText);
     assert(saved.version === 1 && typeof saved.tokenEnc === 'string' && saved.tokenEnc.length > 32, 'Expected an encrypted Mist credential on disk');
@@ -115,8 +163,11 @@ async function main() {
     result.error = error.stack || String(error);
     throw error;
   } finally {
-    fs.writeFileSync(path.join(run, 'result.json'), JSON.stringify(result, null, 2));
-    console.log((result.passed ? 'PASS: ' : 'FAIL: ') + path.join(run, 'result.json'));
+    try { if (logging) await logging.close(); }
+    finally {
+      fs.writeFileSync(path.join(run, 'result.json'), JSON.stringify(result, null, 2));
+      console.log((result.passed ? 'PASS: ' : 'FAIL: ') + path.join(run, 'result.json'));
+    }
   }
 }
 

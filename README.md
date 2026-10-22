@@ -8,19 +8,19 @@ Connect to a switch, move files over SFTP, edit its configuration, and investiga
 
 [Download the latest release](https://github.com/256kMagic/KonX/releases/latest) · [User guide](docs/USER_GUIDE.md) · [Report an issue](https://github.com/256kMagic/KonX/issues)
 
-**KonX 0.15.0** adds clearable recent session history and easier encrypted credential saving when creating sessions. See the [Session management guide](docs/SESSION_MANAGEMENT.md) and [release notes](docs/releases/0.15.0.md).
+**KonX 0.15.1** adds a visible console logging switch, modern and legacy SSH transport compatibility, broader private-key formats, and clearer login errors. See [console logging](docs/USER_GUIDE.md#session-logging), the [SSH compatibility guide](docs/SSH_COMPATIBILITY.md), and [release notes](docs/releases/0.15.1.md).
 
 ![KonX terminal workspace](docs/screenshots/terminal.png)
 
 ## Download and install
 
-The **0.15.0** release targets **Windows x64**. Node.js is only needed when running from source.
+The **0.15.1** release targets **Windows x64**. Node.js is only needed when running from source.
 
 | Download | Use it for |
 | --- | --- |
-| [KonX-Setup-0.15.0.exe](https://github.com/256kMagic/KonX/releases/download/v0.15.0/KonX-Setup-0.15.0.exe) | A per-user installation with Start menu and desktop shortcuts, an uninstaller, and a choice of installation folder. |
-| [KonX-0.15.0-portable.exe](https://github.com/256kMagic/KonX/releases/download/v0.15.0/KonX-0.15.0-portable.exe) | Run without installing, including from a USB drive. Application settings are still stored in the Windows user profile. |
-| [SHA256SUMS.txt](https://github.com/256kMagic/KonX/releases/download/v0.15.0/SHA256SUMS.txt) | SHA-256 checksums for the release files. |
+| [KonX-Setup-0.15.1.exe](https://github.com/256kMagic/KonX/releases/download/v0.15.1/KonX-Setup-0.15.1.exe) | A per-user installation with Start menu and desktop shortcuts, an uninstaller, and a choice of installation folder. |
+| [KonX-0.15.1-portable.exe](https://github.com/256kMagic/KonX/releases/download/v0.15.1/KonX-0.15.1-portable.exe) | Run without installing, including from a USB drive. Application settings are still stored in the Windows user profile. |
+| [SHA256SUMS.txt](https://github.com/256kMagic/KonX/releases/download/v0.15.1/SHA256SUMS.txt) | SHA-256 checksums for the release files. |
 | [SIP sample capture](https://github.com/256kMagic/KonX/releases/download/v0.2.0/sip-demo.pcapng) | Three synthetic calls for trying the ladder, SDP details, and call exports. |
 
 1. Download the installer or portable executable from the release above.
@@ -32,22 +32,25 @@ The current executables are unsigned. Windows SmartScreen may show an unrecogniz
 To calculate a downloaded file's checksum in PowerShell:
 
 ~~~powershell
-Get-FileHash .\KonX-Setup-0.15.0.exe -Algorithm SHA256
+Get-FileHash .\KonX-Setup-0.15.1.exe -Algorithm SHA256
 ~~~
 
-Compare the hash with `SHA256SUMS.txt`. Installed 0.6.0 and 0.6.1 copies need one manual upgrade because their update button is broken: save your work, close KonX, and run the 0.15.0 installer using the existing installation folder and mode. Installed 0.6.2 and portable 0.6.0 or later copies can use **Update KonX**. Version 0.5.0 and earlier also need a manual installer upgrade or portable-file replacement. An all-users installation in Program Files can require administrator approval.
+Compare the hash with `SHA256SUMS.txt`. Installed 0.6.0 and 0.6.1 copies need one manual upgrade because their update button is broken: save your work, close KonX, and run the 0.15.1 installer using the existing installation folder and mode. Installed 0.6.2 and portable 0.6.0 or later copies can use **Update KonX**. Version 0.5.0 and earlier also need a manual installer upgrade or portable-file replacement. An all-users installation in Program Files can require administrator approval.
 
 ### Update from inside KonX
 
 In installed 0.6.2 or later, or portable 0.6.0 or later, choose **Update KonX** on Home or under **Settings → Updates**. One press checks the public GitHub release, downloads the appropriate Windows x64 file, verifies its SHA-256 checksum, then updates and restarts when no work is active. Installed copies keep their installation folder and mode; portable copies keep the same executable filename and location. Both retain the existing Windows profile, settings, sessions, credentials, and Knowledge library. Save documents and notes, disconnect sessions, and stop captures or jobs first. KonX keeps a verified update ready when these steps are still needed.
 
-No GitHub token or background update check is used. The updater runs only in installed or portable releases; a source checkout or unpacked build explains why updating is unavailable. See the [0.15.0 release notes](docs/releases/0.15.0.md) and [update guide](docs/UPDATING.md) for the current release and upgrade path.
+No GitHub token or background update check is used. The updater runs only in installed or portable releases; a source checkout or unpacked build explains why updating is unavailable. See the [0.15.1 release notes](docs/releases/0.15.1.md) and [update guide](docs/UPDATING.md) for the current release and upgrade path.
 
-## What's new in 0.15.0
+## What's new in 0.15.1
 
-Clear recent session history from Home, and save a username and encrypted password together when creating a session.
+- **One-click console logging:** use **Log to text file** above each console. Its switch lights green after logging starts, shows the file path, and opens the containing folder. Each console has its own state; the control turns off on disconnect or a logging failure. [Logging guide](docs/USER_GUIDE.md#session-logging).
+- **SSH transport compatibility:** prefer modern algorithms while permitting supported legacy choices, or select **Modern transport only** per session. Terminal, SFTP, jump hosts, and SSH audits use the same transport policy.
+- **More private-key formats:** load OpenSSH, PEM, PKCS#8, and PuTTY v2/v3 files, including supported encrypted keys. RSA, ECDSA NIST P-256/P-384/P-521, and Ed25519 are supported; Windows builds cannot use DSA (`ssh-dss`).
+- **Clearer login failures:** invalid keys stop with a useful error, key unlocking happens before the network timeout starts, and cancelled or expired logins ignore late prompt replies.
 
-See the [Session management guide](docs/SESSION_MANAGEMENT.md) and [phased roadmap](docs/ROADMAP.md).
+See the [SSH compatibility guide](docs/SSH_COMPATIBILITY.md) and [phased roadmap](docs/ROADMAP.md).
 
 Existing workspace features remain available:
 
@@ -68,7 +71,7 @@ Existing workspace features remain available:
 - **AI & Knowledge:** encrypted connections for OpenAI, Claude, Gemini, Nyquest, and a custom OpenAI-compatible endpoint; 46 bundled articles and editable notes in an offline background SQLite vector index; and **Explain with AI** with explicit context sharing. Library search works without an AI key. [AI and knowledge guide](docs/AI_KNOWLEDGE_GUIDE.md).
 - **Reliability fixes and diagnostics:** improved SFTP cancellation and file preservation, editor recovery, connection and capture handling, and local JavaScript error logs. See the [changelog](CHANGELOG.md) for these fixes and earlier packet/SIP improvements.
 
-See the [0.15.0 release notes](docs/releases/0.15.0.md) and [user guide](docs/USER_GUIDE.md) for workflows and limitations. To try SIP immediately, open the downloadable sample in **Packet Capture** and click **SIP Calls**.
+See the [0.15.1 release notes](docs/releases/0.15.1.md) and [user guide](docs/USER_GUIDE.md) for workflows and limitations. To try SIP immediately, open the downloadable sample in **Packet Capture** and click **SIP Calls**.
 
 ## Start working
 
@@ -91,6 +94,7 @@ The [user guide](docs/USER_GUIDE.md) covers connection settings, credentials, im
 - Imports from SecureCRT session folders and OpenSSH `config` files, including ProxyJump.
 - SSH host-key verification and warnings when a saved key changes.
 - Password, private-key/passphrase, SSH-agent, and keyboard-interactive authentication.
+- Per-session modern/legacy transport choice and OpenSSH, PEM, PKCS#8, and PuTTY v2/v3 private-key loading. See [supported keys and limits](docs/SSH_COMPATIBILITY.md).
 - Jump hosts and local, remote, and dynamic SOCKS5 forwarding.
 - Logon actions, Telnet auto-login, timestamped session logs, and filename templates.
 - A programmable button bar and a command window that can send to one or multiple sessions.
@@ -189,7 +193,7 @@ Other session metadata, settings, editor backups, terminal logs, and capture fil
 
 ## Run from source
 
-Use **Windows x64**, **Node.js 22.12 or newer**, npm, and Git. Other operating systems and architectures are not currently release targets.
+Use **Windows x64**, **Node.js 24.13 or newer**, npm, and Git. The SSH test fixtures use Node's native Argon2 implementation for an independent check of encrypted PuTTY keys. Other operating systems and architectures are not currently release targets.
 
 ~~~powershell
 git clone https://github.com/256kMagic/KonX.git
@@ -198,10 +202,11 @@ npm ci
 npm start
 ~~~
 
-Dependencies and packaged output are excluded from Git. `npm ci` installs the versions in `package-lock.json`. If your npm configuration blocks Electron's installation script and Electron reports that it did not install correctly, run:
+Dependencies and packaged output are excluded from Git. `npm ci` installs the versions in `package-lock.json` and applies the version-checked SSH compatibility patch. If your npm configuration blocks installation scripts, run:
 
 ~~~powershell
 node node_modules/electron/install.js
+node scripts/patch-ssh2.cjs
 ~~~
 
 Then retry `npm start`. Serial support depends on the optional `serialport` package and its native binding loading successfully.
@@ -212,7 +217,7 @@ Then retry `npm start`. Serial support depends on the optional `serialport` pack
 npm run dist
 ~~~
 
-The build creates versioned executables under `dist/`, such as `KonX-Setup-0.15.0.exe` and `KonX-0.15.0-portable.exe` for the current source version. `npm run dist:dir` creates the unpacked Windows application for inspection. Published release executables are attached to [GitHub Releases](https://github.com/256kMagic/KonX/releases); they are not checked into the source tree.
+The build creates versioned executables under `dist/`, such as `KonX-Setup-0.15.1.exe` and `KonX-0.15.1-portable.exe` for the current source version. `npm run dist:dir` creates the unpacked Windows application for inspection. Published release executables are attached to [GitHub Releases](https://github.com/256kMagic/KonX/releases); they are not checked into the source tree.
 
 ### Test and try a local device
 
@@ -221,6 +226,8 @@ npm test
 ~~~
 
 The automated suite covers connections, host-key/authentication handling, SFTP, session storage/imports, network tools, packet decoding/filtering/analysis, capture files, and editor operations. Regression checks also cover download cancellation and original-file preservation, editor reload/save recovery, prompt handling, capture-file isolation, malformed filters/files, large scans, and closing connection tabs. Some live-capture behavior additionally depends on Windows permissions, adapters, and installed drivers.
+
+After building, run `npm run test:package:ssh` to exercise modern/legacy handshakes, rekey, and private-key authentication using the packaged Windows runtime and key worker. These tests use synthetic keys and local loopback peers.
 
 Run `npm run test:traffic` for the focused offline reassembly, HTTP, body export, and traffic-view navigation tests. Run `npm run test:sip` for SIP/SDP parsing, call exports, and capture-snapshot navigation checks. These focused suites do not record network traffic or require a capture driver. The full suite also exercises the Electron interface, including session dialogs, tab overflow, and the SIP ladder.
 
@@ -261,9 +268,9 @@ Connect to `127.0.0.1` on port `2222`, username `test`, password `test`. These c
 
 KonX is an early **0.x** project. The Windows x64 release is the currently tested distribution. Packet filters implement KonX's supported syntax rather than the complete Wireshark filter language, capture insights are diagnostic aids, and serial/capture support depends on the available hardware and drivers.
 
-Version **0.15.0** improves session history and credential saving alongside the layouts and network workflows shipped in 0.7.0–0.14.0. It retains the updater fixes introduced in 0.6.2. Release checks use isolated profiles; they do not upgrade your installed copy. A complete installed 0.6.2 → 0.15.0 update with Windows elevation has not been tested for this release. Current validation and the six inherited known findings are recorded in the [0.15.0 release notes](docs/releases/0.15.0.md).
+Version **0.15.1** adds visible console logging and improves SSH transport and private-key compatibility while preserving the session history and credential controls from 0.15.0, the layouts and network workflows from 0.7.0–0.14.0, and the updater fixes from 0.6.2. SSH support depends on the key format, algorithm, encryption, and packaged runtime; it does not cover every SSH key or device. Release checks use isolated profiles and do not upgrade your installed copy. A complete installed upgrade to 0.15.1 with Windows elevation remains unverified. Current validation and the six inherited known findings are recorded in the [0.15.1 release notes](docs/releases/0.15.1.md).
 
-Detailed version history and validation limits are recorded in the [changelog](CHANGELOG.md) and [release notes](docs/releases/0.15.0.md).
+Detailed version history and validation limits are recorded in the [changelog](CHANGELOG.md) and [release notes](docs/releases/0.15.1.md).
 
 For help, start with the [user guide](docs/USER_GUIDE.md). Common first checks:
 

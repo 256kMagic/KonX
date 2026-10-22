@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.15.1 — 2026-10-22
+
+- Add a visible **Log to text file** switch to each console, with a green On indicator confirmed by the backend, the saved path, and a folder button. Keep state coherent across switch clicks, context-menu actions, tabs, layouts, failures, and disconnects.
+- Confirm the log file opens before reporting active logging. Use unique `.txt` filenames by default, preserve explicit saved templates, and record only new output; automatic session logging remains available.
+- Add a per-session **SSH transport compatibility** choice: Automatic prefers modern algorithms and permits supported legacy choices; Modern transport only excludes legacy transport. Apply one policy to terminals, SFTP, jump hosts, and SSH audits.
+- Load OpenSSH, traditional PEM, PKCS#8, and PuTTY v2/v3 private keys, including supported encrypted RSA, ECDSA NIST P-256/P-384/P-521, and Ed25519 identities. Decode PPK v3 Argon2d/i/id in a bounded worker and verify key integrity.
+- Explain unsupported keys and crypto capabilities explicitly. Windows Electron cannot use DSA (`ssh-dss`); SSH 1, FIDO key files, OpenSSH certificates, and Ed448 remain unsupported.
+- Report invalid key paths, passphrases, formats, integrity, and resource limits before connecting instead of silently falling back to password authentication. Unlock keys before the network timeout starts, without rewriting their files.
+- Cancel pending username/key prompts, key workers, logins, and jump forwarding; ignore late answers after timeout or closure and avoid saving a late host-key decision.
+- Report negotiated legacy transport in terminals and SSH audits while preserving host-fingerprint verification for authenticated connections.
+- Pin and verify a narrow `ssh2` 1.17.0 native group1 compatibility patch for Electron's missing named `modp2` group.
+
+See the [SSH compatibility guide](docs/SSH_COMPATIBILITY.md) and [release notes](docs/releases/0.15.1.md) for supported scope and validation.
+
 ## 0.15.0 — 2026-10-22
 
 - Clear recent session history from Home without deleting saved sessions, credentials, open connections, or unrelated preferences.

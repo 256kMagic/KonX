@@ -1,21 +1,27 @@
 {
   "name": "konx",
   "productName": "KonX",
-  "version": "0.15.0",
+  "version": "0.15.1",
   "description": "Windows terminal, SFTP, packet analysis, security, wireless and AI troubleshooting workspace",
   "main": "src/main/boot.js",
   "author": "KonX",
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
+    "postinstall": "node scripts/patch-ssh2.cjs",
+    "prestart": "node scripts/patch-ssh2.cjs --check",
     "start": "electron .",
+    "pretest": "node scripts/patch-ssh2.cjs --check",
     "test": "node test/run-tests.js",
     "test:traffic": "node test/traffic-tests.mjs",
     "test:sip": "node test/sip-focused.mjs",
+    "test:package:ssh": "node scripts/verify-ssh-package.cjs",
     "sample:sip": "node scripts/sample-sip.mjs",
     "test-server": "node test/ssh-test-server.js",
     "make-icon": "electron scripts/make-icon.js",
+    "predist": "node scripts/patch-ssh2.cjs --check",
     "dist": "electron-builder --win",
+    "predist:dir": "node scripts/patch-ssh2.cjs --check",
     "dist:dir": "electron-builder --win --dir",
     "release:prepare": "node scripts/prepare-release.cjs"
   },
@@ -77,13 +83,14 @@
     }
   },
   "dependencies": {
+    "@noble/hashes": "2.4.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-search": "^0.16.0",
     "@xterm/addon-web-links": "^0.12.0",
     "@xterm/xterm": "^6.0.0",
     "koffi": "^3.3.3",
     "monaco-editor": "^0.57.0",
-    "ssh2": "^1.17.0"
+    "ssh2": "1.17.0"
   },
   "devDependencies": {
     "electron": "^44.9.0",

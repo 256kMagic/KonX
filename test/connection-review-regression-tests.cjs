@@ -45,6 +45,7 @@ function sshHarness() {
       callback(null, channel);
     }
     end() { this.ends++; this.emit('close'); }
+    destroy() { this.destroyed = true; this.emit('close'); }
   }
   // Observe an accidentally asynchronous Promise executor without letting its
   // detached rejection terminate the main test runner.
@@ -54,8 +55,10 @@ function sshHarness() {
       if (returned?.catch) returned.catch((error) => executorErrors.push(error));
     });
   }
+  Object.setPrototypeOf(ObservedPromise, Promise);
   const ssh = load('ssh.js', {
-    fs, net: {}, crypto: require('node:crypto'), ssh2: { Client, utils: {} },
+    net: {}, crypto: require('node:crypto'), ssh2: { Client },
+    './ssh-policy': require('../src/main/ssh-policy'),
   }, { Promise: ObservedPromise, process });
   return { ssh, clients, executorErrors };
 }
@@ -173,10 +176,14 @@ async function runConnectionReviewRegressionTests(test) {
     let stream;
     const { manager, events } = connectionHarness({
       mkdirSync() {},
+      openSync() { return 123; },
+      fstatSync() { return { isFile: () => true }; },
+      closeSync() {},
       createWriteStream() {
         stream = new EventEmitter();
         stream.write = () => {};
         stream.end = () => {};
+        stream.destroy = () => { stream.destroyed = true; };
         return stream;
       },
     });
@@ -184,6 +191,7 @@ async function runConnectionReviewRegressionTests(test) {
       assert.equal((await manager.open('log-failed', { protocol: 'raw', host: 'test', logging: { enabled: true } })).ok, true);
       assert.doesNotThrow(() => stream.emit('error', new Error('Disk full')));
       assert.equal(manager.info('log-failed').logging, null);
+      assert.equal(stream.destroyed, true);
       assert.ok(events.some(([name, , data]) => name === 'conn:data' && data.toString().includes('Disk full')));
     } finally {
       manager.closeAll();

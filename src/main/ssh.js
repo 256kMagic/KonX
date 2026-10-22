@@ -1,10 +1,10 @@
 'use strict';
 // SSH2 client connection with host-key verification, interactive auth, jump hosts
 // and port forwarding. Independent of Electron so it can be exercised from tests.
-const fs = require('fs');
 const net = require('net');
 const crypto = require('crypto');
-const { Client, utils } = require('ssh2');
+const { Client } = require('ssh2');
+const { sshAlgorithms, legacyAlgorithms, negotiationError } = require('./ssh-policy');
 
 /** Read the key type (e.g. "ssh-ed25519") from a raw SSH wire-format public key. */
 function keyTypeOf(buf) {
@@ -30,21 +30,39 @@ function defaultAgent() {
  * Open an authenticated ssh2 Client.
  *
  * @param {object} s  session: host, port, username, auth ('password'|'key'|'agent'),
- *                    password, keyPath, passphrase, keepalive, readyTimeout, agentPath
+ *                    password, keyPath, passphrase, keepalive, connectTimeout, agentPath,
+ *                    sshCompatibility ('auto'|'modern', defaults to 'auto')
  * @param {object} hooks
  *   knownHost(host, port) -> {keyType, fingerprint} | null
  *   saveHost(host, port, {keyType, fingerprint})
  *   ask(payload) -> Promise<any>   interactive prompt shown by the UI
  *   log(msg)                        status messages for the terminal
+ *   signal                          optional AbortSignal for pending login
  * @param {object} [sock] pre-connected stream (jump host channel)
  * @returns {Promise<{client: Client, info: object}>}
  */
 async function connect(s, hooks, sock) {
+  const algorithms = sshAlgorithms(s.sshCompatibility);
+  if (s.auth === 'key' && !s.keyPath) throw new Error('Select a private key file under Authentication.');
+  const signal = hooks.signal;
+  signal?.throwIfAborted();
+  const askBeforeConnect = async payload => {
+    signal?.throwIfAborted();
+    let abort;
+    try {
+      return await new Promise((resolve, reject) => {
+        abort = () => reject(signal.reason instanceof Error ? signal.reason : new Error('SSH connection cancelled'));
+        signal?.addEventListener('abort', abort, { once: true });
+        if (signal?.aborted) return abort();
+        Promise.resolve().then(() => { signal?.throwIfAborted(); return hooks.ask(payload); }).then(resolve, reject);
+      });
+    } finally { signal?.removeEventListener('abort', abort); }
+  };
   const host = s.host;
   const port = Number(s.port) || 22;
   let username = s.username;
   if (!username) {
-    const r = await hooks.ask({
+    const r = await askBeforeConnect({
       kind: 'form',
       title: `Login to ${host}`,
       fields: [{ name: 'username', label: 'Username', type: 'text' }],
@@ -52,6 +70,12 @@ async function connect(s, hooks, sock) {
     if (!r || !r.username) throw new Error('Login cancelled');
     username = r.username;
   }
+  // Unlock keys before the network handshake timeout starts. A human entering a
+  // passphrase or a bounded KDF must not consume the device's connect timeout.
+  const keyData = s.auth === 'key'
+    ? await require('./ssh-key').loadPrivateKey(s.keyPath, s.passphrase, askBeforeConnect, signal)
+    : null;
+  signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
     const client = new Client();
     const info = { host, port, username, hostKey: null };
@@ -60,18 +84,20 @@ async function connect(s, hooks, sock) {
     let kbdFailed = 0;
     let lastMethod = null;
     const tried = new Set();
-    let keyData = null;
-
-    if (s.auth === 'key' && s.keyPath) {
-      try {
-        keyData = fs.readFileSync(s.keyPath);
-      } catch (e) {
-        hooks.log?.(`Could not read key file ${s.keyPath}: ${e.message}`);
-      }
-    }
+    let settled = false;
+    // Login completion is distinct from transport closure: host verification
+    // remains active when an authenticated connection performs an SSH rekey.
+    let unavailable = false;
+    client.once('close', () => { unavailable = true; });
+    const ask = async payload => {
+      if (settled) throw new Error('SSH login is no longer active');
+      const answer = await askBeforeConnect(payload);
+      if (settled) throw new Error('SSH login is no longer active');
+      return answer;
+    };
 
     const askPassword = async (message) => {
-      const r = await hooks.ask({
+      const r = await ask({
         kind: 'form',
         title: `Password for ${username}@${host}`,
         message,
@@ -80,7 +106,8 @@ async function connect(s, hooks, sock) {
       return r ? r.password : null;
     };
 
-    const authHandler = (methodsLeft, partialSuccess, cb) => {
+    const authHandler = (methodsLeft, partialSuccess, reply) => {
+      const cb = value => { if (!settled) reply(value); };
       (async () => {
         const allowed = (m) => !methodsLeft || methodsLeft.includes(m);
 
@@ -104,7 +131,7 @@ async function connect(s, hooks, sock) {
 
         const order = [];
         if (s.auth === 'agent') order.push('agent');
-        if (s.auth === 'key' && keyData) order.push('publickey');
+        if (s.auth === 'key') order.push('publickey');
         order.push('password', 'keyboard-interactive');
 
         for (const m of order) {
@@ -117,19 +144,7 @@ async function connect(s, hooks, sock) {
             return cb({ type: 'agent', username, agent: s.agentPath || defaultAgent() });
           }
           if (m === 'publickey') {
-            let passphrase = s.passphrase || undefined;
-            const parsed = utils.parseKey(keyData, passphrase);
-            if (parsed instanceof Error && /encrypted|passphrase/i.test(parsed.message)) {
-              const r = await hooks.ask({
-                kind: 'form',
-                title: 'Key passphrase',
-                message: `Passphrase for ${s.keyPath}`,
-                fields: [{ name: 'passphrase', label: 'Passphrase', type: 'password' }],
-              });
-              if (!r) continue;
-              passphrase = r.passphrase;
-            }
-            return cb({ type: 'publickey', username, key: keyData, passphrase });
+            return cb({ type: 'publickey', username, key: keyData });
           }
           if (m === 'password') {
             if (!password) {
@@ -147,8 +162,9 @@ async function connect(s, hooks, sock) {
         }
         cb(false);
       })().catch((e) => {
+        if (settled) return;
         hooks.log?.(`Authentication error: ${e.message}`);
-        cb(false);
+        onError(e);
       });
     };
 
@@ -156,6 +172,7 @@ async function connect(s, hooks, sock) {
       type: 'keyboard-interactive',
       username,
       prompt: (name, instructions, lang, prompts, finish) => {
+        if (settled) return;
         if (!prompts.length) return finish([]);
         // A single password prompt with a password on hand: answer it without asking.
         if (password && prompts.length === 1 && !prompts[0].echo && !message) {
@@ -163,8 +180,7 @@ async function connect(s, hooks, sock) {
           password = '';
           return finish([pw]);
         }
-        hooks
-          .ask({
+        ask({
             kind: 'form',
             title: name || `Login to ${host}`,
             message: [message, instructions].filter(Boolean).join('\n'),
@@ -174,18 +190,19 @@ async function connect(s, hooks, sock) {
               type: p.echo ? 'text' : 'password',
             })),
           })
-          .then((r) => finish(r ? prompts.map((_, i) => r['f' + i] || '') : []));
+          .then((r) => { if (!settled) finish(r ? prompts.map((_, i) => r['f' + i] || '') : []); })
+          .catch(error => { if (!settled) onError(error); });
       },
     });
 
     const hostVerifier = (key, verify) => {
+      if (unavailable) return false;
       const keyType = keyTypeOf(key);
       const fingerprint = fingerprintOf(key);
       info.hostKey = { keyType, fingerprint };
       const known = hooks.knownHost(host, port);
       if (known && known.fingerprint === fingerprint) return verify(true);
-      hooks
-        .ask({
+      askBeforeConnect({
           kind: 'hostkey',
           host,
           port,
@@ -195,49 +212,65 @@ async function connect(s, hooks, sock) {
           previous: known,
         })
         .then((answer) => {
+          if (unavailable) return;
           if (answer === 'save') hooks.saveHost(host, port, { keyType, fingerprint });
           verify(answer === 'save' || answer === 'once');
         })
-        .catch(() => verify(false));
+        .catch(() => { if (!unavailable) verify(false); });
       // Returning undefined tells ssh2 the verification is asynchronous.
       return undefined;
     };
 
     client.on('banner', (msg) => hooks.log?.(msg.replace(/\r?\n/g, '\r\n')));
     client.once('ready', () => {
+      if (settled) return;
+      settled = true;
       cleanup();
       resolve({ client, info });
     });
     const onError = (err) => {
+      if (settled) return;
+      settled = true;
+      unavailable = true;
       cleanup();
-      reject(err);
+      // Rejected authentication/negotiation must not retain an open connection.
+      // Keep an error sink while the failed client's transport finishes closing.
+      client.on('error', () => {});
+      client.destroy();
+      reject(negotiationError(err, s.sshCompatibility));
     };
     const onClose = () => {
-      cleanup();
-      reject(new Error('Connection closed during login'));
+      onError(new Error('Connection closed during login'));
     };
     const cleanup = () => {
+      signal?.removeEventListener('abort', onAbort);
       client.removeListener('error', onError);
       client.removeListener('close', onClose);
     };
+    const onAbort = () => onError(signal.reason instanceof Error ? signal.reason : new Error('SSH connection cancelled'));
+    signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted) { onAbort(); return; }
     client.on('error', onError);
     client.on('close', onClose);
     client.on('handshake', (neg) => {
       info.algorithms = neg;
+      info.legacyAlgorithms = legacyAlgorithms(neg);
+      if (info.legacyAlgorithms.length) hooks.log?.('Legacy SSH transport negotiated: ' + info.legacyAlgorithms.join(', '));
     });
 
-    client.connect({
+    try { client.connect({
       host: sock ? undefined : host,
       port: sock ? undefined : port,
       sock,
       username,
+      algorithms,
       authHandler,
       hostVerifier,
       readyTimeout: (Number(s.connectTimeout) || 20) * 1000,
       keepaliveInterval: (Number(s.keepalive) || 30) * 1000,
       keepaliveCountMax: 4,
       tryKeyboard: true,
-    });
+    }); } catch (error) { onError(error); }
   });
 }
 
@@ -253,10 +286,29 @@ async function connectChain(s, hooks, resolveJump, depth = 0) {
   hooks.log?.(`Connecting via jump host ${jumpSession.host}...`);
   const jump = await connectChain(jumpSession, hooks, resolveJump, depth + 1);
   let stream;
+  // Keep every acquired jump transport owned while its next channel/login is
+  // pending, including cancellation before a forwarding reply arrives.
+  const jumpError = () => { stream?.destroy(); jump.client.destroy(); };
+  jump.client.on('error', jumpError);
   try {
-    stream = await new Promise((res, rej) =>
-      jump.client.forwardOut('127.0.0.1', 0, s.host, Number(s.port) || 22, (err, ch) => (err ? rej(err) : res(ch)))
-    );
+    stream = await new Promise((resolve, reject) => {
+      const signal = hooks.signal;
+      let done = false;
+      const finish = (error, channel) => {
+        if (done) { channel?.destroy(); return; }
+        done = true;
+        signal?.removeEventListener('abort', abort);
+        jump.client.removeListener('close', closed);
+        if (error) reject(error); else resolve(channel);
+      };
+      const abort = () => finish(signal.reason instanceof Error ? signal.reason : new Error('SSH connection cancelled'));
+      const closed = () => finish(new Error('Jump host closed before forwarding completed'));
+      signal?.addEventListener('abort', abort, { once: true });
+      jump.client.once('close', closed);
+      if (signal?.aborted) return abort();
+      try { jump.client.forwardOut('127.0.0.1', 0, s.host, Number(s.port) || 22, finish); }
+      catch (error) { finish(error); }
+    });
     const target = await connect(s, hooks, stream);
     target.client.once('close', () => jump.client.end());
     target.info.via = jump.info;

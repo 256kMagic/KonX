@@ -300,7 +300,11 @@ function registerIpc() {
   ipcMain.on('conn:resize', (_e, id, cols, rows) => connections.resize(id, cols, rows));
   handle('conn:close', (id) => connections.close(id));
   handle('conn:break', (id) => connections.sendBreak(id));
-  handle('conn:startLog', (id) => connections.startLog(id));
+  handle('conn:startLog', (id) => {
+    const file = connections.startLog(id);
+    if (!file) throw new Error('Could not start logging. Check the console message and the log folder permissions.');
+    return file;
+  });
   handle('conn:stopLog', (id) => connections.stopLog(id));
   handle('conn:info', (id) => connections.info(id));
   handle('serial:list', () => serial.listPorts());

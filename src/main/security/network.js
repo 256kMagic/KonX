@@ -7,6 +7,7 @@ const https = require('https');
 const crypto = require('crypto');
 const { domainToASCII } = require('url');
 const { Client, utils } = require('ssh2');
+const { sshAlgorithms, legacyAlgorithms } = require('../ssh-policy');
 const { finding, makeReport, checkCancelled, onCancel } = require('./common');
 
 const TLS_REF = 'https://nodejs.org/api/tls.html';
@@ -151,6 +152,7 @@ async function scanSsh(params = {}, signal) {
       if (done) return;
       try {
         client.connect({ host, port, username: 'konx-audit', readyTimeout: timeout(params),
+          algorithms: sshAlgorithms(params.sshCompatibility),
           authHandler: () => false,
           hostVerifier: (key) => { hostKey = Buffer.from(key); return true; },
           debug: (message) => { if (message.startsWith('Remote ident: ')) banner = clean(message.slice(14), 260); },
@@ -163,8 +165,7 @@ async function scanSsh(params = {}, signal) {
       limitations: ['No authentication, credentials, shell, or remote commands. A handshake failure does not prove that the SSH service is insecure.'] });
   }
   const { hostKey, negotiated: n, banner } = observations;
-  const algorithms = [n.kex, n.srvHostKey, n.cs?.cipher, n.sc?.cipher, n.cs?.mac, n.sc?.mac].filter(Boolean);
-  const weak = algorithms.filter((a) => /(?:^ssh-rsa$|^ssh-dss$|group1-sha1|group14-sha1|^3des-|^arcfour|^blowfish-|^hmac-md5|^hmac-sha1|\-cbc$)/i.test(a));
+  const weak = legacyAlgorithms(n);
   let parsed;
   try { parsed = hostKey && utils.parseKey(hostKey); } catch {}
   let keyBits;
@@ -174,7 +175,7 @@ async function scanSsh(params = {}, signal) {
     finding({ id: 'ssh-banner', title: 'SSH identification', status: 'info', severity: 'info', evidence: banner || 'The SSH 2 handshake completed; the identification string was not available.',
       remediation: 'Treat banners as unverified service metadata; do not infer patch status or CVEs from a version string.', reference: SSH_REF }),
     finding({ id: 'ssh-algorithms', title: 'Negotiated SSH algorithms', status: weak.length ? 'warning' : 'info', severity: weak.length ? 'high' : 'info',
-      evidence: `Key exchange: ${clean(n.kex)}; host signature: ${clean(n.srvHostKey)}; client → server cipher/MAC: ${clean(n.cs?.cipher)}/${clean(n.cs?.mac || 'integrated')}; server → client cipher/MAC: ${clean(n.sc?.cipher)}/${clean(n.sc?.mac || 'integrated')}.${weak.length ? ` Legacy selections: ${weak.map((a) => clean(a)).join(', ')}.` : ''}`,
+      evidence: `Key exchange: ${clean(n.kex)}; host signature: ${clean(n.serverHostKey)}; client → server cipher/MAC: ${clean(n.cs?.cipher)}/${clean(n.cs?.mac || 'integrated')}; server → client cipher/MAC: ${clean(n.sc?.cipher)}/${clean(n.sc?.mac || 'integrated')}.${weak.length ? ` Legacy selections: ${weak.map((a) => clean(a)).join(', ')}.` : ''}`,
       remediation: 'Prefer current SSH 2 key exchange, signatures, and authenticated encryption. This shows one negotiated selection, not the server’s full offered algorithm list.', reference: SSH_REF }),
     finding({ id: 'ssh-hostkey', title: 'Observed SSH host key', status: weakKey ? 'warning' : hostKey ? 'info' : 'unknown', severity: weakKey ? 'high' : 'info',
       evidence: hostKey ? `Type: ${clean(parsed?.type || 'unknown')}${keyBits ? `; bits: ${keyBits}` : ''}; SHA256:${crypto.createHash('sha256').update(hostKey).digest('base64').replace(/=+$/, '')}. This key has not been authenticated against a trusted baseline.` : 'The peer host key was not available.',

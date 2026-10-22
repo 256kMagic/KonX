@@ -16,6 +16,7 @@
   const { TOOLS } = await import('./js/tools.js');
   const complete = async (checks) => {
     if (sessionManagement) checks.sessionManagement = sessionManagement;
+    if (logging) checks.logging = logging;
     // Portable launchers do not necessarily forward their app's stdout. Write
     // test evidence only to the parent-provided private artifact file.
     await api.invoke('np:write', options.resultPath, new TextEncoder().encode(JSON.stringify(checks, null, 2)));
@@ -54,7 +55,10 @@
   const supportsComparison = versionParts[0] > 0 || versionParts[1] >= 13;
   const supportsLayouts = versionParts[0] > 0 || versionParts[1] >= 14;
   const supportsSessionManagement = versionParts[0] > 0 || versionParts[1] >= 15;
+  const supportsLoggingSwitch = versionParts[0] > 0 || versionParts[1] > 15 ||
+    (versionParts[1] === 15 && parseInt(info.version.split('.')[2], 10) >= 1);
   let sessionManagement = null;
+  let logging = null;
   const sessionName = 'Package smoke synthetic saved session';
 
   if (options.phase === 'save') {
@@ -67,6 +71,49 @@
       assert(app.clearRecentSessions() && app.recentSessions().length === 0, 'Recent history did not clear');
       assert((await api.invoke('sessions:list')).sessions.some(item => item.id === saved.id && item.hasPassword), 'Clearing history removed a saved credential');
       sessionManagement = { usernameSaved: true, passwordPresencePrivate: true, historyCleared: true, savedSessionRetained: true };
+    }
+    if (supportsLoggingSwitch) {
+      const fixture = options.logging;
+      assert(fixture?.host === '127.0.0.1' && Number.isInteger(fixture.port) && fixture.port > 0 && fixture.logPath,
+        'Console logging requires the parent-owned loopback fixture and log file');
+      const consoleTab = app.openTerminal({ name: 'Synthetic logging console', protocol: 'raw', host: fixture.host, port: fixture.port,
+        logging: { enabled: false, path: fixture.logPath, timestamps: false } }, { name: 'Synthetic logging console', protocol: 'raw' });
+      const terminalContains = marker => {
+        const buffer = consoleTab.term.buffer.active, lines = [];
+        for (let i = 0; i < buffer.length; i++) lines.push(buffer.getLine(i)?.translateToString(true) || '');
+        return lines.join('').includes(marker);
+      };
+      try {
+        await until(() => ['connected', 'disconnected'].includes(consoleTab.state), 'synthetic raw console connection');
+        assert(consoleTab.state === 'connected', 'Local synthetic console did not connect');
+        const toggle = consoleTab.el.querySelector('button[role="switch"][aria-label="Log console to text file"]');
+        assert(toggle && !toggle.disabled && toggle.getBoundingClientRect().width > 0, 'Visible logging switch is missing');
+        const track = toggle.querySelector('.term-log-track');
+        assert(track && toggle.getAttribute('aria-checked') === 'false' &&
+          !(await api.invoke('conn:info', consoleTab.id)).logging, 'Fresh console logging must be off');
+        assert(getComputedStyle(track).boxShadow === 'none', 'Logging indicator is lit before logging starts');
+        toggle.click();
+        await until(() => toggle.getAttribute('aria-checked') === 'true' && toggle.getAttribute('aria-busy') === 'false', 'logging switch on');
+        const activeInfo = await api.invoke('conn:info', consoleTab.id);
+        assert(activeInfo.logging === fixture.logPath && consoleTab.info.logging === activeInfo.logging,
+          'Lit logging switch does not match the confirmed backend log file');
+        assert(getComputedStyle(track).boxShadow !== 'none' && consoleTab.logState.textContent === 'On', 'Active logging indicator did not light up');
+        assert(consoleTab.el.querySelector('.term-log-path').textContent === fixture.logPath, 'Confirmed log path is not visible');
+        consoleTab.sendText(fixture.onMarker + '\r\n');
+        await until(() => terminalContains(fixture.onMarker), 'echoed marker while logging is on');
+        toggle.click();
+        await until(() => toggle.getAttribute('aria-checked') === 'false' && toggle.getAttribute('aria-busy') === 'false', 'logging switch off');
+        assert(!(await api.invoke('conn:info', consoleTab.id)).logging && !consoleTab.info.logging,
+          'Logging switch turned off before the backend stopped logging');
+        assert(getComputedStyle(track).boxShadow === 'none' && consoleTab.logState.textContent === 'Off', 'Stopped logging indicator remained lit');
+        consoleTab.sendText(fixture.offMarker + '\r\n');
+        await until(() => terminalContains(fixture.offMarker), 'echoed marker while logging is off');
+        logging = { path: fixture.logPath, switchedOn: true, switchedOff: true, litStateMatchesStatus: true, bothMarkersDisplayed: true };
+      } finally {
+        await api.invoke('conn:close', consoleTab.id);
+        await app.closeTab(consoleTab);
+      }
+      assert(!app.byId.has(consoleTab.id), 'Synthetic console tab failed to close');
     }
     if (supportsLayouts) {
       const originalTabs = [...app.tabs], theme = app.settings.uiTheme, palette = app.settings.colorScheme;

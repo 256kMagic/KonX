@@ -362,12 +362,20 @@ export async function editSessionDialog(app, input = {}) {
 
   // ---- connection
   const jumpOptions = [['', '(none — connect directly)'], ...sessions.filter((x) => x.id !== s.id && (x.protocol || 'ssh') === 'ssh').map((x) => [x.id, `${x.name || x.host} (${x.host})`])];
+  const transportMode = s.sshCompatibility === undefined ? 'auto' : s.sshCompatibility;
+  const transportOptions = [['auto', 'Automatic — modern preferred, legacy allowed'], ['modern', 'Modern transport only']];
+  if (!transportOptions.some(([value]) => value === transportMode)) transportOptions.unshift(['', 'Choose a supported setting']);
   const conn = buildFields([
     { name: 'jumpId', label: 'Jump host (ProxyJump)', type: 'select', options: jumpOptions, span: 2 },
+    { name: 'sshCompatibility', label: 'SSH transport compatibility', type: 'select', options: transportOptions, span: 2,
+      hint: 'Automatic prefers modern algorithms and allows legacy transport only when needed. Applies to this session’s terminal and SFTP connections; jump hosts use their own settings.' },
     { name: 'keepalive', label: 'Keepalive (seconds)', type: 'number' },
     { name: 'connectTimeout', label: 'Connect timeout (seconds)', type: 'number', placeholder: '20' },
     { name: 'termType', label: 'Terminal type', type: 'select', options: [['xterm-256color', 'xterm-256color'], ['xterm', 'xterm'], ['vt100', 'vt100'], ['vt220', 'vt220'], ['linux', 'linux'], ['ansi', 'ansi']] },
   ], s);
+  conn.inputs.sshCompatibility.name = 'sshCompatibility';
+  conn.inputs.sshCompatibility.setAttribute('aria-label', 'SSH transport compatibility');
+  conn.inputs.sshCompatibility.value = transportOptions.some(([value]) => value === transportMode) ? transportMode : '';
 
   // ---- rows editors
   const actions = rowsEditor(s.logonActions || [], [
@@ -389,7 +397,7 @@ export async function editSessionDialog(app, input = {}) {
   ], s);
   const logging = buildFields([
     { name: 'enabled', label: 'Log this session automatically', type: 'checkbox', span: 2 },
-    { name: 'path', label: 'Log file', placeholder: `${app.info.logDir}\\%S_%Y-%M-%D_%h%m%s.log`, span: 2, hint: '%S session  %H host  %Y %M %D date  %h %m %s time' },
+    { name: 'path', label: 'Log file', placeholder: `${app.info.logDir}\\%S_%Y-%M-%D_%h%m%s.txt`, span: 2, hint: 'Blank creates a unique .txt file. %S session  %H host  %Y %M %D date  %h %m %s time' },
     { name: 'timestamps', label: 'Timestamp each line', type: 'checkbox' },
   ], s.logging || {});
   const notes = buildFields([{ name: 'notes', label: 'Notes', type: 'textarea', rows: 6, span: 2 }], s);
@@ -483,6 +491,13 @@ export async function editSessionDialog(app, input = {}) {
   const submitSave = (action) => {
     if (saving) return false;
     const value = collect();
+    if (value.protocol === 'ssh' && !['auto', 'modern'].includes(value.sshCompatibility)) {
+      saveError.textContent = 'Choose an SSH transport compatibility setting on Connection.';
+      saveError.classList.remove('hidden');
+      tabBtns[2].click();
+      conn.inputs.sshCompatibility.focus();
+      return false;
+    }
     if (value.protocol !== 'serial' && !value.host) {
       saveError.textContent = 'Enter a hostname.';
       saveError.classList.remove('hidden');

@@ -38,7 +38,7 @@ function harness(ssh) {
   const module = { exports: {} };
   const dependencies = { fs: {}, path, './ssh': ssh, './telnet': {}, './serial': {} };
   vm.runInNewContext(fs.readFileSync(filename, 'utf8'), {
-    module, Buffer, TextDecoder, setTimeout, clearTimeout, setImmediate,
+    module, Buffer, TextDecoder, AbortController, setTimeout, clearTimeout, setImmediate,
     require(name) {
       if (Object.hasOwn(dependencies, name)) return dependencies[name];
       throw new Error(`Unexpected dependency: ${name}`);

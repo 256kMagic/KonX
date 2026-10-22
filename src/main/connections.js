@@ -43,17 +43,60 @@ class SessionLogger {
   constructor(file, timestamps, onError) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     this.file = file;
-    this.stream = fs.createWriteStream(file, { flags: 'a' });
-    // File creation and later disk-full errors arrive asynchronously. They must
-    // not escape as unhandled stream errors and terminate the application.
-    this.stream.on('error', onError);
+    // Verify the destination before reporting logging as active. The stream
+    // takes ownership of this descriptor only after construction succeeds.
+    const fd = fs.openSync(file, 'a');
+    try {
+      if (!fs.fstatSync(fd).isFile()) throw new Error('The log destination must be a regular file.');
+      this.stream = fs.createWriteStream(file, { fd, autoClose: true });
+    }
+    catch (error) { fs.closeSync(fd); throw error; }
+    this.stream.on('error', error => {
+      this.closed = true;
+      this.stream.destroy();
+      onError(error);
+    });
     this.timestamps = timestamps;
     this.atLineStart = true;
     this.decoder = new TextDecoder('utf-8');
+    this.escape = '';
+    this.afterCr = false;
+    this.closed = false;
   }
 
   write(buf) {
-    let text = stripAnsi(this.decoder.decode(buf, { stream: true })).replace(/\r\n?/g, '\n');
+    if (this.closed) return;
+    this._text(this.decoder.decode(buf, { stream: true }));
+  }
+
+  _text(input) {
+    // Terminal control sequences and CRLF can cross socket reads. Keep only
+    // parser state, never an unbounded buffer of a partial OSC/DCS sequence.
+    let text = '';
+    for (const ch of input) {
+      if (this.escape === 'csi') { if (ch >= '@' && ch <= '~') this.escape = ''; continue; }
+      if (this.escape === 'osc' || this.escape === 'string') {
+        if (ch === '\x07' && this.escape === 'osc') this.escape = '';
+        else if (ch === '\x1b') this.escape += '-end';
+        continue;
+      }
+      if (this.escape.endsWith('-end')) {
+        if (ch === '\\') this.escape = '';
+        else if (ch !== '\x1b') this.escape = this.escape.slice(0, -4);
+        continue;
+      }
+      if (this.escape === 'charset') { this.escape = ''; continue; }
+      if (this.escape === 'esc') {
+        this.escape = ch === '[' ? 'csi' : ch === ']' ? 'osc' : 'PX^_'.includes(ch) ? 'string' : '()*+,-./'.includes(ch) ? 'charset' : '';
+        continue;
+      }
+      if (ch === '\x1b') { this.escape = 'esc'; continue; }
+      if (ch === '\r') { text += '\n'; this.afterCr = true; continue; }
+      if (ch === '\n' && this.afterCr) { this.afterCr = false; continue; }
+      this.afterCr = false;
+      if ((ch < ' ' && ch !== '\n' && ch !== '\t') || ch === '\x7f') continue;
+      text += ch;
+    }
     if (this.timestamps) {
       let out = '';
       for (const ch of text) {
@@ -66,14 +109,20 @@ class SessionLogger {
       }
       text = out;
     }
-    this.stream.write(text);
+    if (text) this.stream.write(text);
   }
 
   note(msg) {
+    if (this.closed) return;
+    this._text(this.decoder.decode());
     this.stream.write(`\n=== ${msg} at ${new Date().toLocaleString()} ===\n`);
+    this.atLineStart = true;
   }
 
   close() {
+    if (this.closed) return;
+    this._text(this.decoder.decode());
+    this.closed = true;
     this.stream.end();
   }
 }
@@ -238,6 +287,7 @@ class ConnectionManager {
       return { ok: false, error: e.message };
     }
 
+    c.ready = true;
     if (s.logging && s.logging.enabled) this.startLog(id);
     const info = this.info(id);
     this._status(id, 'connected', { info });
@@ -255,7 +305,9 @@ class ConnectionManager {
   async _openSsh(c) {
     const { store } = this.deps;
     const resolveJump = (jid) => store.getSessionSecret(jid);
-    const { client, info } = await ssh.connectChain(c.session, this._hooks(c.id), resolveJump);
+    const login = new AbortController();
+    c.end = () => login.abort(new Error('SSH connection cancelled'));
+    const { client, info } = await ssh.connectChain(c.session, { ...this._hooks(c.id), signal: login.signal }, resolveJump);
     let ended = false;
     const endClient = () => {
       if (ended) return;
@@ -420,12 +472,14 @@ class ConnectionManager {
 
   startLog(id) {
     const c = this.conns.get(id);
-    if (!c || c.logger) return c && c.logger ? c.logger.file : null;
+    if (!c || c.closed || !c.ready) return null;
+    if (c.logger) return c.logger.file;
     const s = c.session;
-    const dir = this.deps.defaultLogDir();
-    const template = (s.logging && s.logging.path) || path.join(dir, '%S_%Y-%M-%D_%h%m%s.log');
-    const file = expandLogPath(template, s);
+    let file;
     try {
+      const suffix = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+      const template = (s.logging && s.logging.path) || path.join(this.deps.defaultLogDir(), `%S_%Y-%M-%D_%h%m%s_${suffix}.txt`);
+      file = expandLogPath(template, s);
       const logger = new SessionLogger(file, !!(s.logging && s.logging.timestamps), (error) => {
         if (c.logger !== logger) return;
         c.logger = null;
