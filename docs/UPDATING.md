@@ -1,18 +1,18 @@
 # Updating KonX
 
-**Installed 0.6.0 and 0.6.1 need one manual upgrade to 0.15.2.** Their update button misidentifies the installed app and reads the installation location from the wrong registry key. The fixes introduced in 0.6.2 are retained in 0.15.2. Installed 0.6.2 and portable 0.6.0 or later copies can use **Update KonX** to obtain 0.15.2.
+**Installed 0.6.0 and 0.6.1 need one manual upgrade to 0.16.0.** Their update button misidentifies the installed app and reads the installation location from the wrong registry key. The fixes introduced in 0.6.2 are retained in 0.16.0. Installed 0.6.2 and portable 0.6.0 or later copies can use **Update KonX** to obtain 0.16.0.
 
-This guide covers KonX 0.15.2 for Windows x64. **Update KonX** checks for newer stable releases, downloads the correct file, verifies it, and restarts when work is safe. It is available for installed copies from 0.6.2 and portable copies from 0.6.0.
+This guide covers KonX 0.16.0 for Windows x64. **Update KonX** checks for newer stable releases, downloads the correct file, verifies it, and restarts when work is safe. It is available for installed copies from 0.6.2 and portable copies from 0.6.0.
 
-| Current copy | Upgrade to 0.15.2 |
+| Current copy | Upgrade to 0.16.0 |
 | --- | --- |
-| Installed 0.6.0 or 0.6.1 | Save work, close KonX, and run `KonX-Setup-0.15.2.exe` manually using the existing installation folder and per-user/all-users mode. |
-| Installed 0.6.2 through 0.15.1 | Choose **Update KonX** and finish any work listed before restart. Approve Windows elevation if requested for an all-users installation. |
-| Portable 0.6.0 through 0.15.1 | Choose **Update KonX**, or replace the portable executable manually after closing KonX. |
-| Version 0.5.0 or earlier | Save work, close KonX, and run the 0.15.2 installer or replace the portable executable manually. |
-| Installed or portable 0.15.2 | Use **Update KonX** for future stable releases. If no newer release exists, KonX reports that it is up to date. |
+| Installed 0.6.0 or 0.6.1 | Save work, close KonX, and run `KonX-Setup-0.16.0.exe` manually using the existing installation folder and per-user/all-users mode. |
+| Installed 0.6.2 through 0.15.2 | Choose **Update KonX** and finish any work listed before restart. Approve Windows elevation if requested for an all-users installation. |
+| Portable 0.6.0 through 0.15.2 | Choose **Update KonX**, or replace the portable executable manually after closing KonX. |
+| Version 0.5.0 or earlier | Save work, close KonX, and run the 0.16.0 installer or replace the portable executable manually. |
+| Installed or portable 0.16.0 | Use **Update KonX** for future stable releases. If no newer release exists, KonX reports that it is up to date. |
 
-Download [KonX-Setup-0.15.2.exe](https://github.com/256kMagic/KonX/releases/download/v0.15.2/KonX-Setup-0.15.2.exe), [KonX-0.15.2-portable.exe](https://github.com/256kMagic/KonX/releases/download/v0.15.2/KonX-0.15.2-portable.exe), and [SHA256SUMS.txt](https://github.com/256kMagic/KonX/releases/download/v0.15.2/SHA256SUMS.txt) from the same release. Compare the file's SHA-256 hash with the manifest before running a manual download. Do not uninstall the existing copy or delete its profile to upgrade.
+Download [KonX-Setup-0.16.0.exe](https://github.com/256kMagic/KonX/releases/download/v0.16.0/KonX-Setup-0.16.0.exe), [KonX-0.16.0-portable.exe](https://github.com/256kMagic/KonX/releases/download/v0.16.0/KonX-0.16.0-portable.exe), and [SHA256SUMS.txt](https://github.com/256kMagic/KonX/releases/download/v0.16.0/SHA256SUMS.txt) from the same release. Compare the file's SHA-256 hash with the manifest before running a manual download. Do not uninstall the existing copy or delete its profile to upgrade.
 
 ## One-press update
 
@@ -36,9 +36,11 @@ Version 0.15.2 adds **Remember username and password** to the session editor and
 
 Since 0.15.1, existing SSH sessions without a transport setting use **Automatic — modern preferred, legacy allowed**. To require modern transport, edit the session under **Connection → SSH transport compatibility**. Private-key files stay at their existing paths and are never rewritten during loading or conversion. See the [SSH compatibility guide](SSH_COMPATIBILITY.md) for supported formats and runtime limits.
 
+Version 0.16.0 enables **Cisco network output** highlighting by default. Use the **Cisco colors** switch to change the current tab, **Settings → Appearance → Output highlighting** for the global default, or a saved session's **Terminal & Log** page for an override. See [Cisco highlighting](CISCO_HIGHLIGHTING.md).
+
 ## If an update fails
 
-- **Installed 0.6.0/0.6.1 says unsupported or cannot identify its installation:** run the 0.15.2 installer manually once. These older buttons cannot install their own fix.
+- **Installed 0.6.0/0.6.1 says unsupported or cannot identify its installation:** run the 0.16.0 installer manually once. These older buttons cannot install their own fix.
 - **No newer release:** the installed version is at least as new as the published stable release. Nothing is downloaded or replaced.
 - **Network or GitHub rate limit:** retry later. No token is required.
 - **Missing file or checksum mismatch:** the release cannot be installed through the updater. Retry after the release is corrected; KonX never runs an incomplete or unverified download.

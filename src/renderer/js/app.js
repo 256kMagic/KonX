@@ -608,7 +608,7 @@ class App {
         const n = await promptText('Rename tab', 'Title', t.title, 'Rename');
         if (n) this.setTabTitle(t, n);
       } },
-      t.kind === 'terminal' && { label: 'Clone', icon: 'copy', action: () => this.openTerminal(t.spec, t.meta) },
+      t.kind === 'terminal' && { label: 'Clone', icon: 'copy', action: () => this.openTerminal(t.spec, t.cloneMeta()) },
       (t.kind === 'terminal' || t.kind === 'capture' || (t.kind === 'tool' && !['ai', 'incidents'].includes(t.toolKind))) && { label: 'Add evidence to incident…', icon: 'file', action: () => this.addToIncident(t) },
       t.kind === 'terminal' && t.protocol === 'ssh' && { label: 'Open SFTP tab', icon: 'file-transfer', disabled: t.state !== 'connected', action: () => this.openSftpFromTerminal(t) },
       t.kind === 'terminal' && t.state !== 'connected' && { label: 'Reconnect', icon: 'refresh', action: () => t.reconnect() },
@@ -670,13 +670,13 @@ class App {
   connectSession(s, extra = {}) {
     this.rememberRecent(s.id);
     const override = s._oncePassword ? { password: s._oncePassword } : undefined;
-    return this.openTerminal({ sessionId: s.id, override }, { name: s.name || s.host, protocol: s.protocol || 'ssh', colorScheme: s.colorScheme, fontSize: s.fontSize, ...extra });
+    return this.openTerminal({ sessionId: s.id, override }, { name: s.name || s.host, protocol: s.protocol || 'ssh', colorScheme: s.colorScheme, fontSize: s.fontSize, terminalHighlighting: s.terminalHighlighting, ...extra });
   }
 
   quickConnect(q) {
     const name = q.protocol === 'serial' ? q.serialPort : q.host;
     if (q.protocol === 'sftp') return this.quickSftp(q);
-    return this.openTerminal({ ...q, auth: 'password', name }, { name, protocol: q.protocol });
+    return this.openTerminal({ ...q, auth: 'password', name }, { name, protocol: q.protocol, terminalHighlighting: q.terminalHighlighting });
   }
 
   quickSftp(q) {

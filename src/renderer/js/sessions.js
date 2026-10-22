@@ -395,7 +395,11 @@ export async function editSessionDialog(app, input = {}) {
   const term = buildFields([
     { name: 'colorScheme', label: 'Color scheme', type: 'select', options: [['', '(use default)'], ...Object.entries(SCHEMES).map(([k, v]) => [k, v.label])] },
     { name: 'fontSize', label: 'Font size', type: 'number', placeholder: 'default' },
-  ], s);
+    { name: 'terminalHighlighting', label: 'Output highlighting', type: 'select', options: [['', 'Use default'], ['cisco', 'Cisco network output'], ['off', 'Off']], span: 2,
+      hint: 'Highlights recognized Cisco errors, interface states, and IP addresses. Use default follows Settings → Appearance.' },
+  ], { ...s, terminalHighlighting: s.terminalHighlighting === undefined || s.terminalHighlighting === '' ? '' : s.terminalHighlighting === 'cisco' ? 'cisco' : 'off' });
+  term.inputs.terminalHighlighting.name = 'terminalHighlighting';
+  term.inputs.terminalHighlighting.setAttribute('aria-label', 'Output highlighting');
   const logging = buildFields([
     { name: 'enabled', label: 'Log this session automatically', type: 'checkbox', span: 2 },
     { name: 'path', label: 'Log file', placeholder: `${app.info.logDir}\\%S_%Y-%M-%D_%h%m%s.txt`, span: 2, hint: 'Blank creates a unique .txt file. %S session  %H host  %Y %M %D date  %h %m %s time' },

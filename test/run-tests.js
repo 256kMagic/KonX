@@ -516,6 +516,8 @@ const fakeCrypt = {
   await require('./ssh-settings-ui-tests.cjs').runSshSettingsUiTests(test);
   await require('./terminal-logging-tests.cjs').runTerminalLoggingTests(test);
   await require('./terminal-logging-ui-tests.cjs').runTerminalLoggingUiTests(test);
+  await require('./cisco-highlighting-tests.cjs').runCiscoHighlightingTests(test);
+  await require('./cisco-highlighting-ui-tests.cjs').runCiscoHighlightingUiTests(test);
 
   const failed = results.filter((r) => !r[0]);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

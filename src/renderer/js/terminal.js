@@ -3,6 +3,7 @@ import { Terminal, FitAddon, SearchAddon, WebLinksAddon } from './vendor.js';
 import { h, icon, api, contextMenu, modal, toast, errMsg, debounce } from './ui.js';
 import { scheme, terminalTheme, usesThemeEffects } from './themes.js';
 import { mountThemeOutput } from './theme-effects.js';
+import { CiscoOutputHighlighter } from './cisco-highlighting.mjs';
 
 let seq = 0;
 
@@ -30,6 +31,7 @@ export class TerminalTab {
     this.logRequest = null;
     this.lastLogPath = '';
     this.logError = '';
+    this.highlightOverride = null;
 
     const s = app.settings;
     this.term = new Terminal({
@@ -68,10 +70,16 @@ export class TerminalTab {
       },
     }, icon('folder-open'));
     this.logErrorEl = h('span.term-log-error.hidden', { role: 'alert' });
-    this.logbar = h('div.term-logbar', this.logSwitch, this.logPath, this.logReveal, this.logErrorEl);
+    this.ciscoState = h('span.term-log-state', 'Off');
+    this.ciscoSwitch = h('button.btn.sm.term-cisco-switch', {
+      type: 'button', role: 'switch', 'aria-label': 'Highlight Cisco output',
+      'aria-checked': 'false', onclick: () => this.toggleCiscoHighlighting(),
+    }, h('span.term-log-track', { 'aria-hidden': 'true' }), 'Cisco colors', this.ciscoState);
+    this.logbar = h('div.term-logbar', this.logSwitch, this.ciscoSwitch, this.logPath, this.logReveal, this.logErrorEl);
     this.el = h('div.view', this.logbar, this.wrap);
     this._renderLogging();
     this.term.open(this.wrap);
+    this.ciscoHighlighter = new CiscoOutputHighlighter(this.term, { enabled: this._highlightingMode() === 'cisco' });
     mountThemeOutput(this.wrap);
     this.applyColors(s);
 
@@ -199,6 +207,7 @@ export class TerminalTab {
     requestAnimationFrame(() => {
       if (this.disposed || !this.active || generation !== this.visibilityGeneration) return;
       this.refit();
+      this.ciscoHighlighter?.refresh();
       if (focus) this.focus();
     });
   }
@@ -232,8 +241,37 @@ export class TerminalTab {
 
   applyColors(s) {
     this.term.options.theme = terminalTheme(s, this.meta);
-    this.wrap.style.background = scheme(this.meta.colorScheme || s.colorScheme || 'app', s.uiTheme).background;
+    const background = scheme(this.meta.colorScheme || s.colorScheme || 'app', s.uiTheme).background;
+    this.wrap.style.background = background;
     this.wrap.classList.toggle('theme-output-enabled', usesThemeEffects(s, this.meta));
+    this.ciscoHighlighter?.setBackground(background);
+    this._renderHighlighting(s);
+  }
+
+  _highlightingMode(settings = this.app.settings) {
+    const session = this.meta.terminalHighlighting;
+    // Missing session choices inherit the global default. Explicit unknown
+    // values remain off until the user selects a supported mode.
+    const global = settings.terminalHighlighting === undefined ? 'cisco' : settings.terminalHighlighting;
+    return this.highlightOverride ?? (session === undefined || session === '' ? global : session);
+  }
+
+  _renderHighlighting(settings = this.app.settings) {
+    const enabled = this._highlightingMode(settings) === 'cisco';
+    this.ciscoHighlighter?.setEnabled(enabled);
+    this.ciscoSwitch.setAttribute('aria-checked', String(enabled));
+    this.ciscoState.textContent = enabled ? 'On' : 'Off';
+    this.ciscoSwitch.title = `${enabled ? 'Turn off' : 'Turn on'} Cisco error, interface-state and IP highlighting for this tab. Save a default in Settings or the session's Terminal & Log page.`;
+  }
+
+  toggleCiscoHighlighting() {
+    if (this.disposed) return;
+    this.highlightOverride = this._highlightingMode() === 'cisco' ? 'off' : 'cisco';
+    this._renderHighlighting();
+  }
+
+  cloneMeta() {
+    return this.highlightOverride == null ? { ...this.meta } : { ...this.meta, terminalHighlighting: this.highlightOverride };
   }
 
   zoom(delta) {
@@ -420,17 +458,18 @@ export class TerminalTab {
       { label: 'Paste', icon: 'file', shortcut: 'Ctrl+Shift+V', disabled: !connected, action: () => this.pasteClipboard() },
       { label: 'Select All', action: () => this.term.selectAll() },
       { label: 'Find…', icon: 'search', shortcut: 'Ctrl+Shift+F', action: () => this.openFind() },
-      { label: 'Clear Scrollback', action: () => this.term.clear() },
+      { label: 'Clear Scrollback', action: () => { this.term.clear(); this.ciscoHighlighter.refresh(); } },
       { label: 'Open scrollback in Notepad', icon: 'edit', action: () => this.openScrollback() },
       '-',
       this.protocol === 'ssh' && { label: 'Open SFTP Tab', icon: 'file-transfer', disabled: !connected, action: () => this.app.openSftpFromTerminal(this) },
       { label: this.info && this.info.logging ? 'Stop Logging' : 'Start Logging', icon: 'log', disabled: !connected || !!this.logRequest, action: () => this.toggleLog() },
+      { label: this._highlightingMode() === 'cisco' ? 'Turn Cisco colors off' : 'Turn Cisco colors on', action: () => this.toggleCiscoHighlighting() },
       (this.protocol === 'serial' || this.protocol === 'telnet') && { label: 'Send Break', disabled: !connected, action: () => api.invoke('conn:break', this.id) },
       '-',
       connected
         ? { label: 'Disconnect', icon: 'unplug', action: () => this.disconnect() }
         : { label: 'Reconnect', icon: 'refresh', action: () => this.reconnect() },
-      { label: 'Clone Tab', icon: 'copy', action: () => this.app.openTerminal(this.spec, this.meta) },
+      { label: 'Clone Tab', icon: 'copy', action: () => this.app.openTerminal(this.spec, this.cloneMeta()) },
     ]);
   }
 
@@ -440,6 +479,7 @@ export class TerminalTab {
     this.hide();
     this.ro.disconnect();
     api.invoke('conn:close', this.id);
+    this.ciscoHighlighter?.dispose();
     this.term.dispose();
   }
 }

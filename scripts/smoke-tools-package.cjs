@@ -19,6 +19,8 @@ async function loggingPeer(run) {
   fs.mkdirSync(logDirectory);
   const options = { host: '127.0.0.1', port: null, logPath: path.join(logDirectory, 'synthetic-console.txt'),
     onMarker: 'KONX_LOG_ON_' + nonce, offMarker: 'KONX_LOG_OFF_' + nonce };
+  options.ciscoMarker = 'KONX_CISCO_DONE_' + nonce;
+  options.ciscoSample = 'Gi0/1 192.0.2.16 YES manual up up\r\nGi0/2 unassigned YES unset administratively down down\r\n% Invalid input detected at marker.\r\n' + options.ciscoMarker + '\r\n';
   const observed = { connections: 0, received: '' };
   const server = net.createServer(socket => {
     sockets.add(socket); observed.connections++;
@@ -158,6 +160,7 @@ async function main() {
   const [major, minor, patch] = version.match(/^(\d+)\.(\d+)\.(\d+)/).slice(1).map(Number);
   const supportsLoggingSwitch = major > 0 || minor > 15 || (minor === 15 && patch >= 1);
   const supportsQuickLogin = major > 0 || minor > 15 || (minor === 15 && patch >= 2);
+  const supportsCiscoHighlighting = major > 0 || minor >= 16;
   let logging, quickLogin;
   try {
     result.nativeLoader = await nativeLoader(executable);
@@ -188,6 +191,14 @@ async function main() {
       const logged = fs.readFileSync(logging.options.logPath, 'utf8');
       assert(logged.includes(logging.options.onMarker), 'Enabled console logging omitted the echoed marker');
       assert(!logged.includes(logging.options.offMarker), 'Console logging continued after the switch was turned off');
+      if (supportsCiscoHighlighting) {
+        const cisco = result.phases[0].checks.ciscoHighlighting;
+        assert(cisco?.rendered && cisco?.paintedGlyphs && cisco?.toggled && cisco?.bufferUnchanged && cisco?.copiedTextUnchanged,
+          'Packaged Cisco highlighting did not pass its actual terminal rendering checks');
+        assert(logged.includes(logging.options.ciscoSample.replace(/\r\n/g, '\n')) && !logged.includes('\x1b'),
+          'Cisco highlighting changed the plain-text log transcript');
+        result.ciscoHighlighting = { ...cisco, logUnchanged: true, loopbackOnly: true };
+      }
       result.logging = { ...checks, onMarkerStored: true, offMarkerExcluded: true, loopbackOnly: true };
       await logging.close(); logging = null;
     }
@@ -209,6 +220,10 @@ async function main() {
       result.sessionCiphertextStored = true;
     }
     result.phases.push(await launch(executable, root, run, profile, version, 'forget', null, quickLogin?.options));
+    if (supportsCiscoHighlighting) {
+      assert(result.phases[1].checks.ciscoHighlighting?.persistedAcrossRestart, 'Cisco setting did not survive the packaged restart');
+      result.ciscoHighlighting.persistedAcrossRestart = true;
+    }
     if (quickLogin) {
       const checks = result.phases[1].checks.quickLogin;
       assert(checks?.savedId === result.quickLogin.savedId && checks?.reconnectedWithoutPrompt && checks?.removed,

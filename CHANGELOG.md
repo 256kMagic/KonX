@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.16.0 — 2026-10-22
+
+- Add automatic Cisco output highlighting for errors, warnings, interface up/down states, and validated IPv4/IPv6 addresses.
+- Provide a live **Cisco colors** switch, a global default, and saved per-session overrides independent of terminal palettes.
+- Decorate interpreted terminal cells while retaining remote colors, original clipboard/export text, and text-file logs.
+- Recompute visible highlights after output, wrapping, scrolling, resizing, and screen rewrites; bypass alternate-screen applications and bound retained display resources.
+
+See the [Cisco highlighting guide](docs/CISCO_HIGHLIGHTING.md) and [release notes](docs/releases/0.16.0.md).
+
 ## 0.15.2 — 2026-10-22
 
 - Put **Remember username and password** prominently beside the session editor's login fields, with visible saved-password status and explicit removal.

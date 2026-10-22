@@ -36,6 +36,7 @@ const DEFAULT_SETTINGS = {
   fontFamily: '"Cascadia Mono", Consolas, "Courier New", monospace',
   fontSize: 14,
   colorScheme: 'app',
+  terminalHighlighting: 'cisco',
   cursorStyle: 'block',
   cursorBlink: true,
   scrollback: 10000,

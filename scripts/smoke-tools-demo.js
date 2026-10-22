@@ -23,6 +23,7 @@
     if (sessionManagement) checks.sessionManagement = sessionManagement;
     if (logging) checks.logging = logging;
     if (quickLogin) checks.quickLogin = quickLogin;
+    if (ciscoHighlighting) checks.ciscoHighlighting = ciscoHighlighting;
     // Portable launchers do not necessarily forward their app's stdout. Write
     // test evidence only to the parent-provided private artifact file.
     await api.invoke('np:write', options.resultPath, new TextEncoder().encode(JSON.stringify(checks, null, 2)));
@@ -65,9 +66,11 @@
     (versionParts[1] === 15 && parseInt(info.version.split('.')[2], 10) >= 1);
   const supportsQuickLogin = versionParts[0] > 0 || versionParts[1] > 15 ||
     (versionParts[1] === 15 && parseInt(info.version.split('.')[2], 10) >= 2);
+  const supportsCiscoHighlighting = versionParts[0] > 0 || versionParts[1] >= 16;
   let sessionManagement = null;
   let logging = null;
   let quickLogin = null;
+  let ciscoHighlighting = null;
   const sessionName = 'Package smoke synthetic saved session';
 
   if (options.phase === 'save') {
@@ -154,6 +157,35 @@
         assert(consoleTab.el.querySelector('.term-log-path').textContent === fixture.logPath, 'Confirmed log path is not visible');
         consoleTab.sendText(fixture.onMarker + '\r\n');
         await until(() => terminalContains(consoleTab, fixture.onMarker), 'echoed marker while logging is on');
+        if (supportsCiscoHighlighting) {
+          const ciscoToggle = consoleTab.el.querySelector('button.term-cisco-switch[role="switch"][aria-label="Highlight Cisco output"]');
+          assert(ciscoToggle?.getAttribute('aria-checked') === 'true' && ciscoToggle.getBoundingClientRect().width > 0,
+            'Cisco highlighting must be visible and enabled by default');
+          assert(fixture.ciscoSample && fixture.ciscoMarker, 'Missing parent-owned Cisco output fixture');
+          const rendered = () => [...consoleTab.el.querySelectorAll('.konx-cisco-highlight')].filter(element => element.getBoundingClientRect().width > 0);
+          const hasKinds = () => ['error', 'down', 'up', 'ip'].every(kind => rendered().some(element => element.dataset.kind === kind));
+          const paintedGlyphs = () => {
+            const rows = [...consoleTab.wrap.querySelectorAll('.xterm-rows > div')];
+            return [['192.0.2.16', 'rgb(103, 183, 255)'], ['up up', 'rgb(85, 217, 139)'],
+              ['administratively down', 'rgb(255, 107, 107)'], ['% Invalid input', 'rgb(255, 107, 107)']].every(([text, color]) => {
+              const row = rows.find(row => row.textContent.includes(text)); if (!row) return false;
+              const start = row.textContent.indexOf(text);
+              const colors = [...row.children].flatMap(span => Array(span.textContent.length).fill(getComputedStyle(span).color));
+              return colors.slice(start, start + text.length).every((actual, index) => text[index] === ' ' || actual === color);
+            });
+          };
+          consoleTab.sendText(fixture.ciscoSample);
+          await until(() => terminalContains(consoleTab, fixture.ciscoMarker) && hasKinds() && paintedGlyphs(), 'packaged Cisco colored text glyphs');
+          const text = () => Array.from({ length: consoleTab.term.buffer.active.length }, (_, i) => consoleTab.term.buffer.active.getLine(i)?.translateToString(true) || '').join('\n');
+          const original = text(); consoleTab.term.selectAll(); const selection = consoleTab.term.getSelection(); consoleTab.term.clearSelection();
+          assert(!selection.includes('\x1b') && selection.includes('192.0.2.16') && selection.includes('% Invalid input'),
+            'Cisco colors changed copied console text');
+          ciscoToggle.click(); await until(() => ciscoToggle.getAttribute('aria-checked') === 'false' && rendered().length === 0, 'packaged Cisco toggle off');
+          assert(text() === original, 'Disabling Cisco colors changed the terminal buffer');
+          ciscoToggle.click(); await until(() => ciscoToggle.getAttribute('aria-checked') === 'true' && hasKinds() && paintedGlyphs(), 'packaged Cisco toggle on');
+          assert(text() === original, 'Enabling Cisco colors changed the terminal buffer');
+          ciscoHighlighting = { rendered: true, paintedGlyphs: true, toggled: true, bufferUnchanged: true, copiedTextUnchanged: true };
+        }
         toggle.click();
         await until(() => toggle.getAttribute('aria-checked') === 'false' && toggle.getAttribute('aria-busy') === 'false', 'logging switch off');
         assert(!(await api.invoke('conn:info', consoleTab.id)).logging && !consoleTab.info.logging,
@@ -168,6 +200,7 @@
       }
       assert(!app.byId.has(consoleTab.id), 'Synthetic console tab failed to close');
     }
+    if (supportsCiscoHighlighting) await app.saveSettings({ terminalHighlighting: 'off' });
     if (supportsLayouts) {
       const originalTabs = [...app.tabs], theme = app.settings.uiTheme, palette = app.settings.colorScheme;
       for (const uiLayout of ['workbench', 'incident-desk', 'operations-wall', 'focus', 'classic']) {
@@ -346,6 +379,10 @@
     assert(ai.documentContent.textContent.includes('cached evidence'), 'Packaged local article did not render');
     await complete({ phase: options.phase, version: info.version, tools: supportsComparison ? 11 : supportsRunbooks ? 10 : supportsRemoteCapture ? 9 : supportsIncidents ? 8 : supportsRtp ? 7 : supportsSnapshots ? 6 : supportsDeviceInspector ? 5 : 4, ...(deviceInspector ? { deviceInspector } : {}), ...(deviceSnapshots ? { deviceSnapshots } : {}), ...(rtpMedia ? { rtpMedia } : {}), ...(incidentWorkspace ? { incidentWorkspace } : {}), ...(remoteCapture ? { remoteCapture } : {}), ...(runbooks ? { runbooks } : {}), ...(captureComparison ? { captureComparison } : {}), assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
   } else if (options.phase === 'forget') {
+    if (supportsCiscoHighlighting) {
+      assert(app.settings.terminalHighlighting === 'off', 'Cisco highlighting preference did not survive packaged restart');
+      ciscoHighlighting = { persistedAcrossRestart: true };
+    }
     if (supportsSessionManagement) {
       await app.sessions.load();
       const saved = app.sessions.data.sessions.find(item => item.name === sessionName);

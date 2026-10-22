@@ -37,12 +37,16 @@ export async function settingsDialog(app) {
   const appearance = buildFields([
     { name: 'uiTheme', label: 'Application theme', type: 'select', options: Object.entries(APP_THEMES).map(([k, v]) => [k, v.label]) },
     { name: 'colorScheme', label: 'Terminal color scheme', type: 'select', options: Object.entries(SCHEMES).map(([k, v]) => [k, v.label]), hint: 'Follow application theme adds matching colors and backgrounds. Saved session palettes take priority.' },
+    { name: 'terminalHighlighting', label: 'Output highlighting', type: 'select', options: [['cisco', 'Cisco network output'], ['off', 'Off']], span: 2,
+      hint: 'Highlights recognized Cisco errors, interface states, and IP addresses. Saved session choices take priority.' },
     { name: 'themeAnimations', label: 'Animate theme effects', type: 'checkbox', span: 2, hint: 'Use Pause effects in the header at any time. Windows reduced-motion preferences are respected.' },
     { name: 'fontFamily', label: 'Terminal font', span: 2 },
     { name: 'fontSize', label: 'Font size', type: 'number', min: 7, max: 36 },
     { name: 'cursorStyle', label: 'Cursor', type: 'select', options: [['block', 'Block'], ['underline', 'Underline'], ['bar', 'Bar']] },
     { name: 'cursorBlink', label: 'Blinking cursor', type: 'checkbox' },
-  ], s);
+  ], { ...s, terminalHighlighting: s.terminalHighlighting === undefined ? 'cisco' : s.terminalHighlighting === 'cisco' ? 'cisco' : 'off' });
+  appearance.inputs.terminalHighlighting.name = 'terminalHighlighting';
+  appearance.inputs.terminalHighlighting.setAttribute('aria-label', 'Output highlighting');
   const terminal = buildFields([
     { name: 'scrollback', label: 'Scrollback lines', type: 'number', min: 100, max: 500000 },
     { name: 'rightClick', label: 'Right-click in terminal', type: 'select', options: [['menu', 'Show menu'], ['paste', 'Paste (PuTTY style)']] },

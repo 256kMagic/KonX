@@ -174,10 +174,15 @@ async function runThemeTests(test) {
   await test('themes: changing an open terminal updates its palette without losing session font overrides', () => {
     const tab = Object.create(terminalPrototype(themes));
     const classes = new Set();
-    let refits = 0;
+    let refits = 0, highlightBackground, highlighting;
     Object.assign(tab, {
       meta: { colorScheme: 'classic', fontSize: 22 },
       term: { options: {} },
+      ciscoSwitch: { setAttribute() {} }, ciscoState: {},
+      ciscoHighlighter: {
+        setBackground(value) { highlightBackground = value; },
+        setEnabled(value) { highlighting = value; },
+      },
       wrap: { style: {}, classList: { toggle(name, enabled) { enabled ? classes.add(name) : classes.delete(name); } } },
       refit() { refits++; },
     });
@@ -186,6 +191,8 @@ async function runThemeTests(test) {
     tab.applySettings(settings);
     assert.deepEqual(tab.term.options.theme, scheme('classic'));
     assert.equal(tab.wrap.style.background, scheme('classic').background);
+    assert.equal(highlightBackground, scheme('classic').background);
+    assert.equal(highlighting, true);
     assert.equal(classes.has('theme-output-enabled'), false);
     assert.equal(tab.term.options.fontSize, 22);
     assert.equal(tab.term.options.fontFamily, 'Consolas');
@@ -196,11 +203,13 @@ async function runThemeTests(test) {
     tab.applySettings(settings);
     assert.equal(tab.term.options.theme.background, '#00000000');
     assert.equal(tab.wrap.style.background, applicationTheme('chroma-rgb').background);
+    assert.equal(highlightBackground, applicationTheme('chroma-rgb').background, 'highlight contrast uses the real background, not the transparent xterm layer');
     assert.equal(classes.has('theme-output-enabled'), true);
     assert.equal(tab.term.options.fontSize, 14);
     tab.applySettings({ ...settings, uiTheme: 'light' });
     assert.deepEqual(tab.term.options.theme, scheme('light'));
     assert.equal(tab.wrap.style.background, scheme('light').background);
+    assert.equal(highlightBackground, scheme('light').background);
     assert.equal(classes.has('theme-output-enabled'), false, 'Classic themes must remove the animated output layer');
     assert.equal(refits, 3);
   });
