@@ -16,6 +16,8 @@ Each phase ships separately with its own version, source commit, tests, Windows 
 
 Version 0.14.0 adds Docked Workbench, Incident Desk, Operations Wall, and Focus Workspace alongside Classic. Layout choices reuse open sessions and tools and remain independent of the selected application theme. See the [workspace layout guide](WORKSPACE_LAYOUTS.md) and [release validation](releases/0.14.0.md).
 
+Version 0.15.0 adds clearable recent session history and places username and encrypted password saving together on General in the session editor. See the [session management guide](SESSION_MANAGEMENT.md) and [release validation](releases/0.15.0.md).
+
 ## Scope
 
 Device collection starts with connected Cisco IOS/IOS-XE SSH sessions and fixed read-only commands in a separate channel. Trace results show candidates and unresolved links when evidence is incomplete. Imported reports and a synthetic demo support offline use.

@@ -65,6 +65,7 @@ export class SessionTree {
   async load() {
     this.data = await api.invoke('sessions:list');
     this.render();
+    this.app.refreshRecentSessions?.();
   }
 
   visibleSessions() {
@@ -294,6 +295,7 @@ const BAUDS = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 4608
 export async function editSessionDialog(app, input = {}) {
   const s = { protocol: 'ssh', port: 22, auth: 'password', keepalive: 30, termType: 'xterm-256color', baudRate: 9600, dataBits: 8, parity: 'none', stopBits: 1, flowControl: 'none', ...input };
   const isNew = !s.id;
+  const canSaveSecrets = app.info.encryption === true;
   const sessions = app.sessions.data.sessions;
   const folders = app.sessions.data.folders;
 
@@ -305,6 +307,8 @@ export async function editSessionDialog(app, input = {}) {
     { name: 'port', label: 'Port', type: 'number' },
     { name: 'username', label: 'Username' },
   ], s);
+  for (const [name, field] of Object.entries(general.inputs)) field.name = name;
+  general.inputs.username.setAttribute('aria-label', 'Username');
   const folderInput = general.inputs.folder;
   folderInput.setAttribute('list', 'folder-list');
   const folderList = h('datalist#folder-list', folders.map((f) => h('option', { value: f })));
@@ -331,21 +335,29 @@ export async function editSessionDialog(app, input = {}) {
   );
 
   // ---- authentication
-  const pw = h('input', { type: 'password', placeholder: s.hasPassword ? '•••••••• (saved — leave blank to keep)' : '', autocomplete: 'off' });
-  const savePw = h('input', { type: 'checkbox', checked: s.hasPassword || isNew });
+  const pw = h('input', { type: 'password', name: 'password', 'aria-label': 'Password', placeholder: s.hasPassword ? 'Saved password — leave blank to keep' : 'Enter a password or leave blank to be asked', autocomplete: 'off' });
+  const savePw = h('input', { type: 'checkbox', name: 'savePassword', 'aria-label': 'Save password on this computer', checked: canSaveSecrets && (s.hasPassword || isNew), disabled: !canSaveSecrets });
+  const removePw = h('input', { type: 'checkbox', name: 'removePassword', 'aria-label': 'Remove saved password' });
+  const credentialHint = h('div.hint');
+  const usernameField = general.inputs.username.closest('.field');
+  const credentials = h('section.session-credentials', { 'aria-label': 'Login credentials' },
+    h('h3', 'Login credentials'),
+    h('div.grid2', usernameField, h('label.field', h('span', 'Password'), pw)),
+    h('label.check', savePw, 'Save password on this computer'),
+    s.hasPassword ? h('label.check', removePw, 'Remove saved password') : null,
+    credentialHint);
   const auth = buildFields([
     { name: 'auth', label: 'Method', type: 'select', options: [['password', 'Password / keyboard-interactive'], ['key', 'Public key file'], ['agent', 'SSH agent (Pageant / OpenSSH)']] },
     { name: 'keyPath', label: 'Private key file', browse: 'file', placeholder: 'C:\\Users\\you\\.ssh\\id_ed25519' },
   ], s);
-  const passphrase = h('input', { type: 'password', placeholder: s.hasPassphrase ? '•••••••• (saved)' : 'Leave blank to be asked', autocomplete: 'off' });
+  const passphrase = h('input', { type: 'password', name: 'passphrase', 'aria-label': 'Key passphrase', placeholder: s.hasPassphrase ? 'Saved passphrase — leave blank to keep' : 'Leave blank to be asked', autocomplete: 'off', disabled: !canSaveSecrets });
   const authBox = h(
     'div.mpane',
     auth.els[0],
-    h('label.field', h('span', 'Password'), pw),
-    h('label.check', savePw, app.info.encryption ? 'Save password (encrypted with Windows DPAPI)' : 'Save password (encryption unavailable — not recommended)'),
+    h('div.hint', 'Username, password and password saving are on General. Choose a key file or SSH agent here for advanced authentication.'),
     auth.els[1],
     h('label.field', h('span', 'Key passphrase'), passphrase),
-    h('div.hint', 'Telnet sessions use the username and password above to answer login prompts automatically.')
+    !canSaveSecrets ? h('div.hint', 'Saving a key passphrase is unavailable because secure encryption is unavailable. Existing saved passphrases are unchanged.') : null
   );
 
   // ---- connection
@@ -383,7 +395,7 @@ export async function editSessionDialog(app, input = {}) {
   const notes = buildFields([{ name: 'notes', label: 'Notes', type: 'textarea', rows: 6, span: 2 }], s);
 
   const panes = {
-    General: h('div.mpane.active', h('div.grid3', general.els, folderList), serialBox),
+    General: h('div.mpane.active', h('div.grid3', general.els.filter(field => field !== usernameField), folderList), credentials, serialBox),
     Authentication: authBox,
     Connection: h('div.mpane', h('div.grid2', conn.els), h('div.hint', 'A jump host is another saved SSH session; this session is reached through it.')),
     'Logon Actions': h('div.mpane', h('div.hint', 'Runs after connecting: wait for each prompt, then send the reply followed by Enter.'), actions.el),
@@ -401,20 +413,37 @@ export async function editSessionDialog(app, input = {}) {
   );
 
   const proto = general.inputs.protocol;
+  const syncCredentials = () => {
+    savePw.disabled = !canSaveSecrets || removePw.checked;
+    const messages = [];
+    if (removePw.checked) messages.push('The saved password will be removed when you save. A typed password is used only by Save & Connect.');
+    else if (!canSaveSecrets) messages.push('Password saving is unavailable because secure encryption is unavailable. A typed password is used only by Save & Connect. Username is saved with the session.');
+    else if (savePw.checked) messages.push('Passwords are saved encrypted with Windows DPAPI. Username is saved with the session.');
+    else messages.push('A typed password is used only by Save & Connect and is not saved. Username is saved with the session.');
+    if (s.hasPassword && !removePw.checked) messages.push('Leave Password blank to keep the saved password. Select Remove saved password to delete it.');
+    if (proto.value === 'telnet') messages.push('Telnet uses these credentials to answer login prompts automatically.');
+    else if (proto.value === 'ssh') messages.push(`SSH method: ${auth.inputs.auth.selectedOptions[0].textContent}. Change it on Authentication.`);
+    credentialHint.textContent = messages.join(' ');
+  };
+  savePw.addEventListener('change', syncCredentials);
+  removePw.addEventListener('change', () => { if (removePw.checked) savePw.checked = false; syncCredentials(); });
+  auth.inputs.auth.addEventListener('change', syncCredentials);
   const syncProto = () => {
     const p = proto.value;
     const serial = p === 'serial';
     serialBox.classList.toggle('hidden', !serial);
+    credentials.classList.toggle('hidden', serial);
     general.inputs.host.closest('.field').classList.toggle('hidden', serial);
     general.inputs.port.closest('.field').classList.toggle('hidden', serial);
     tabBtns[2].classList.toggle('hidden', p !== 'ssh');
     tabBtns[4].classList.toggle('hidden', p !== 'ssh');
-    tabBtns[1].classList.toggle('hidden', serial);
+    tabBtns[1].classList.toggle('hidden', p !== 'ssh');
     auth.inputs.auth.closest('.field').classList.toggle('hidden', p !== 'ssh');
     if (serial && !app.serialPortsLoaded) {
       app.serialPortsLoaded = true;
       refreshPorts();
     }
+    syncCredentials();
   };
   proto.addEventListener('change', () => {
     const port = general.inputs.port;
@@ -442,41 +471,77 @@ export async function editSessionDialog(app, input = {}) {
       logonActions: actions.read().filter((a) => a.expect || a.send),
       forwards: forwards.read().filter((f) => f.listenPort),
     };
-    if (!savePw.checked) out.password = null;
-    else if (pw.value) out.password = pw.value;
-    if (passphrase.value) out.passphrase = passphrase.value;
+    if (removePw.checked) out.password = null;
+    else if (canSaveSecrets && savePw.checked && pw.value) out.password = pw.value;
+    if (canSaveSecrets && passphrase.value) out.passphrase = passphrase.value;
     return out;
   };
 
+  const saveError = h('div.errbox.hidden', { role: 'alert' });
+  const saveStatus = h('div.hint.hidden', { role: 'status' }, 'Saving session… Closing this dialog does not cancel a save already in progress.');
+  let closeDialog, saving = false, dialogOpen = true, savedSession;
+  const submitSave = (action) => {
+    if (saving) return false;
+    const value = collect();
+    if (value.protocol !== 'serial' && !value.host) {
+      saveError.textContent = 'Enter a hostname.';
+      saveError.classList.remove('hidden');
+      general.inputs.host.focus();
+      return false;
+    }
+    const oncePassword = action === 'connect' && pw.value && typeof value.password !== 'string' ? pw.value : null;
+    const box = credentials.closest('.modal');
+    const controls = [...box.querySelectorAll('.body input, .body select, .body textarea, .body button, footer button')]
+      .filter(control => control.textContent !== 'Cancel');
+    const disabled = controls.map(control => [control, control.disabled]);
+    saving = true;
+    saveError.classList.add('hidden');
+    saveStatus.classList.remove('hidden');
+    for (const control of controls) control.disabled = true;
+    void api.invoke('sessions:save', value).then(async saved => {
+      if (!dialogOpen) {
+        try {
+          await app.sessions.load();
+          toast('Session saved after the dialog closed.', 'ok');
+        } catch {
+          toast('Session saved after the dialog closed, but the session list could not refresh.', 'err');
+        }
+        return;
+      }
+      savedSession = saved;
+      if (oncePassword) savedSession._oncePassword = oncePassword;
+      closeDialog(action);
+    }).catch(error => {
+      if (!dialogOpen) {
+        toast('Session was not saved: ' + errMsg(error), 'err');
+        return;
+      }
+      saveError.textContent = errMsg(error);
+      saveError.classList.remove('hidden');
+      saveError.scrollIntoView({ block: 'nearest' });
+    }).finally(() => {
+      saving = false;
+      saveStatus.classList.add('hidden');
+      for (const [control, wasDisabled] of disabled) control.disabled = wasDisabled;
+    });
+    // modal's submit hook is synchronous; close only after the save succeeds.
+    return false;
+  };
   const result = await modal({
     title: isNew ? 'New session' : `Edit session — ${s.name || s.host}`,
     icon: 'server',
     width: 720,
-    body: [h('div.mtabs', tabBtns), ...Object.values(panes)],
+    body: [h('div.mtabs', tabBtns), saveError, saveStatus, ...Object.values(panes)],
     buttons: [
       { label: 'Cancel', value: null },
       { label: 'Save', value: 'save' },
       { label: 'Save & Connect', value: 'connect', primary: true },
     ],
-    onSubmit: () => {
-      const v = collect();
-      if (v.protocol !== 'serial' && !v.host) {
-        toast('Enter a hostname', 'err');
-        return false;
-      }
-      return true;
-    },
-  });
+    onReady: ({ close }) => { closeDialog = close; },
+    onSubmit: submitSave,
+  }).finally(() => { dialogOpen = false; });
   if (!result) return null;
-  try {
-    const saved = await api.invoke('sessions:save', collect());
-    // A one-time password typed without "save" is still used for this connection.
-    if (!savePw.checked && pw.value) saved._oncePassword = pw.value;
-    return { session: saved, connect: result === 'connect' };
-  } catch (e) {
-    toast(errMsg(e), 'err');
-    return null;
-  }
+  return { session: savedSession, connect: result === 'connect' };
 }
 
 /** Editable list of rows. fields: [{name, placeholder, type, options}] */

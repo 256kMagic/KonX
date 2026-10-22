@@ -299,6 +299,11 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
 .input-with-btn { display: flex; gap: 6px; }
 .input-with-btn input { flex: 1; }
 
+.session-credentials { display: flex; flex-direction: column; gap: 9px; padding: 12px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--panel-2); }
+.session-credentials h3 { margin: 0; font-size: 13px; color: var(--text-strong); }
+.session-credentials .check { white-space: normal; align-items: flex-start; line-height: 1.4; }
+.session-credentials .check input { flex: none; margin-top: 2px; }
+
 /* ---------------------------------------------------------------- modal */
 .modal-back {
   --modal-top: min(6vh, 48px);
@@ -440,6 +445,10 @@ canvas.spark { width: 160px; height: 20px; display: block; }
 .welcome h1 { display: flex; align-items: center; gap: 12px; margin: 0 0 4px; font-size: 26px; font-weight: 600; color: var(--text-strong); letter-spacing: -0.3px; }
 .welcome .lead { color: var(--muted); margin: 0 0 28px; font-size: 14px; }
 .welcome h3 { margin: 28px 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); }
+.welcome-recent-head { display:flex; align-items:center; flex-wrap:wrap; gap:10px; max-width:1100px; margin:28px 0 10px; }
+.welcome-recent-head h3 { margin:0; }
+.welcome-recent-head button { margin-left:auto; }
+.welcome-recent .card { text-align:left; }
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; max-width: 1100px; }
 .card { display: flex; gap: 12px; align-items: flex-start; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); cursor: pointer; }
 .card:hover { border-color: var(--accent); background: var(--panel-2); }
@@ -447,7 +456,7 @@ canvas.spark { width: 160px; height: 20px; display: block; }
 .card .ic svg.i { width: 18px; height: 18px; }
 .card .t { font-weight: 600; color: var(--text-strong); }
 .card .d { color: var(--muted); font-size: 12px; margin-top: 2px; line-height: 1.4; }
-.qc-form { display: grid; grid-template-columns: 120px 1fr 90px 180px auto; gap: 10px; align-items: end; max-width: 1100px; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+.qc-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); gap: 10px; align-items: end; max-width: 1100px; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
 
 /* ---------------------------------------------------------------- packet capture */
 .cap { display: flex; flex-direction: column; flex: 1; min-height: 0; }

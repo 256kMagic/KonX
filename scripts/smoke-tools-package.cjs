@@ -97,6 +97,13 @@ async function main() {
     assert(!aiText.includes(TOKEN) && !aiText.includes(Buffer.from(TOKEN).toString('base64')), 'Synthetic AI credential was written without encryption');
     result.ciphertextStored = true;
     result.aiCiphertextStored = true;
+    if (Number(version.split('.')[0]) > 0 || Number(version.split('.')[1]) >= 15) {
+      const sessionsText = fs.readFileSync(path.join(profile, 'sessions.json'), 'utf8');
+      const session = JSON.parse(sessionsText).sessions.find(item => item.name === 'Package smoke synthetic saved session');
+      assert(session?.username === 'fixture-user' && typeof session.passwordEnc === 'string' && session.passwordEnc.length > 32, 'Expected an encrypted session password on disk');
+      assert(!Object.hasOwn(session, 'password') && !sessionsText.includes(TOKEN + '-session') && !sessionsText.includes(Buffer.from(TOKEN + '-session').toString('base64')), 'Synthetic session password was written without encryption');
+      result.sessionCiphertextStored = true;
+    }
     result.phases.push(await launch(executable, root, run, profile, version, 'forget'));
     const forgotten = JSON.parse(fs.readFileSync(path.join(profile, 'mist.json'), 'utf8'));
     assert(forgotten.version === 1 && !Object.hasOwn(forgotten, 'tokenEnc'), 'Encrypted token remained on disk after Forget token');

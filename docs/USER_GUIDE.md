@@ -1,6 +1,6 @@
 # KonX User Guide
 
-This guide covers KonX 0.14.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one window. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
+This guide covers KonX 0.15.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one window. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
 
 Version 0.4.0 adds [AI & Knowledge](AI_KNOWLEDGE_GUIDE.md): provider API keys, explanations of selected tool output, and an offline reference library backed by a background SQLite vector index. Older 0.3.0 builds do not include this feature.
 
@@ -19,6 +19,8 @@ Version 0.12.0 adds [Troubleshooting runbooks](RUNBOOKS.md): reviewed diagnostic
 Version 0.13.0 adds [Capture comparison](CAPTURE_COMPARISON.md): working/failing capture comparisons with DNS, TCP, and HTTP observations linked to retained source packets. See the [release notes](releases/0.13.0.md).
 
 Version 0.14.0 adds [Workspace layouts](WORKSPACE_LAYOUTS.md). Four new layouts alongside Classic keep color themes independent while arranging existing sessions and tools for different ways of working. See the [release notes](releases/0.14.0.md).
+
+Version 0.15.0 improves [Session management](SESSION_MANAGEMENT.md): clear recent history on Home and save a username and encrypted password together on General when creating a session. See the [release notes](releases/0.15.0.md).
 
 For downloads, build instructions, and project information, see the [README](../README.md) and [GitHub releases](https://github.com/256kMagic/KonX/releases).
 
@@ -43,6 +45,7 @@ For downloads, build instructions, and project information, see the [README](../
 - [Troubleshooting runbooks](RUNBOOKS.md)
 - [Capture comparison](CAPTURE_COMPARISON.md)
 - [Workspace layouts](WORKSPACE_LAYOUTS.md)
+- [Session management](SESSION_MANAGEMENT.md)
 - [Network tools](#network-tools)
 - [Security Suite](SECURITY_SUITE.md)
 - [Wi-Fi and Mist/Marvis](WIRELESS_MIST_GUIDE.md)
@@ -57,7 +60,7 @@ Examples use reserved documentation addresses such as `192.0.2.10`, `198.51.100.
 
 ## Install, run, and update
 
-Download a Windows x64 executable from the [0.14.0 release](https://github.com/256kMagic/KonX/releases/tag/v0.14.0).
+Download a Windows x64 executable from the [0.15.0 release](https://github.com/256kMagic/KonX/releases/tag/v0.15.0).
 
 | Download | Use it when | How to start |
 | --- | --- | --- |
@@ -66,7 +69,7 @@ Download a Windows x64 executable from the [0.14.0 release](https://github.com/2
 
 The portable executable still uses a Windows user profile for settings, saved sessions, and editor recovery. It does **not** automatically place all data beside the executable or make encrypted credentials transferable between computers. See [Application data and backups](#application-data-and-backups).
 
-**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.14.0.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
+**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.15.0.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
 
 For updates from **installed 0.6.2 or later**, or **portable 0.6.0 or later**:
 
@@ -77,7 +80,7 @@ For updates from **installed 0.6.2 or later**, or **portable 0.6.0 or later**:
 
 Installed copies retain their installation folder and mode. Portable copies retain their filename and location; the containing folder must be writable. Both continue to use the existing Windows profile. No update is applied just because you close KonX, and no release checks run in the background. See [Updating KonX](UPDATING.md) for cancellation, failures, and release preparation.
 
-Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.14.0 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
+Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.15.0 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
 
 Npcap is optional for packet capture; SSH, SFTP, Notepad, and the other tools do not require it. Updating KonX does not install or update Npcap.
 
@@ -112,14 +115,16 @@ Saved keys are managed under **Settings → Known Hosts**. Removing a key makes 
 ### Save a session
 
 1. Click **+** beside **Sessions**, or choose **New session** on Home.
-2. In **General**, set **Name**, **Protocol**, **Hostname or IP**, **Port**, and **Username**.
-3. In **Authentication**, choose the appropriate method:
+2. In **General**, set **Name**, **Protocol**, **Hostname or IP**, and **Port**. Under **Login credentials**, enter **Username** and **Password**. Leave **Save password on this computer** checked to save the password encrypted; username is saved with the session.
+3. For SSH, use **Authentication** to choose the appropriate method:
    - **Password / keyboard-interactive** for passwords and server challenge prompts.
    - **Public key file** for a private-key file and optional passphrase.
    - **SSH agent (Pageant / OpenSSH)** for an available SSH agent. The default Windows connection is the OpenSSH agent pipe; an existing `SSH_AUTH_SOCK` takes precedence.
 4. Use **Save** to keep the session, or **Save & Connect** to start it.
 
-Saved passwords and passphrases use Electron's Windows-backed encryption when available. If the dialog says encryption is unavailable, KonX does not persist a newly supplied secret. Leaving an existing saved password field blank keeps its current value; clear **Save password** to remove it.
+Saved passwords and passphrases use Electron's Windows-backed encryption. If secure encryption is unavailable, password saving is disabled; a typed password can still be used once with **Save & Connect**. Unchecking **Save password on this computer** also uses a typed password once without replacing any previously saved password.
+
+When editing, leaving **Password** blank keeps the saved password. Select **Remove saved password** to delete it explicitly. If encryption or saving fails, the populated editor stays open for retry and the previous session remains intact. See [Session management](SESSION_MANAGEMENT.md) for details.
 
 The session dialog stays anchored near the top of the window when you switch panels. Its header and navigation stay in place, while long form content scrolls and the footer actions remain reachable.
 
@@ -149,6 +154,10 @@ Closing an SFTP tab cancels its remaining transfers; KonX asks before closing wh
 Closing the **Notepad application tab** retains its editor session and recovery copies for reopening. Closing an individual **document tab** asks how to handle unsaved changes. These are different actions.
 
 ## Saved sessions, folders, and imports
+
+### Clear recent sessions
+
+On **Home**, press **Clear recent sessions** beside **Recent sessions**. This clears the history immediately and stays cleared after restarting KonX. Saved sessions, their credentials, open connections, your layout, and Quick connect entries remain intact. Connecting a saved session again adds it back to recent history.
 
 ### Organize sessions
 

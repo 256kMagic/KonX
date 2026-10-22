@@ -76,7 +76,11 @@ class WelcomeTab {
       else app.quickConnect({ ...parseQuick(host.value, proto.value), ...(port.value ? { port: Number(port.value) } : {}), ...(user.value.trim() ? { username: user.value.trim() } : {}) });
     };
     for (const i of [host, port, user]) i.addEventListener('keydown', (e) => e.key === 'Enter' && go());
-    const recent = app.recentSessions();
+    this.recentContent = h('div.welcome-recent-content');
+    this.recentHost = h('section.welcome-recent', { 'aria-label': 'Recent sessions' },
+      h('div.welcome-recent-head', h('h3', 'Recent sessions'),
+        h('button.btn.sm', { type: 'button', 'data-action': 'clear-recent-sessions', title: 'Clear connection history; keep saved sessions and open connections.', onclick: () => app.clearRecentSessions() }, icon('trash'), 'Clear recent sessions')),
+      this.recentContent);
     this.el.replaceChildren(
       h(
         'div.welcome',
@@ -92,12 +96,7 @@ class WelcomeTab {
           h('label.field', h('span', 'Username'), user),
           h('button.btn.primary', { onclick: go }, icon('zap'), 'Connect')
         ),
-        recent.length ? h('h3', 'Recent sessions') : null,
-        recent.length
-          ? h('div.cards', recent.map((s) => h('div.card', { onclick: () => app.connectSession(s) },
-              h('div.ic', icon(s.protocol === 'serial' ? 'usb' : 'server')),
-              h('div', h('div.t', s.name || s.host), h('div.d', s.protocol === 'serial' ? `${s.serialPort} · ${s.baudRate}` : `${s.username ? s.username + '@' : ''}${s.host}:${s.port || 22}`)))))
-          : null,
+        this.recentHost,
         h('h3', 'Sessions'),
         h('div.cards',
           h('div.card', { onclick: () => app.editSession() }, h('div.ic', icon('plus')), h('div', h('div.t', 'New session'), h('div.d', 'Save a host with credentials, jump host, forwards and logon actions'))),
@@ -112,11 +111,23 @@ class WelcomeTab {
           'Alt+Q quick connect · Alt+1…9 switch tab · Ctrl+Tab next tab · Ctrl+Shift+W close tab · Ctrl+Shift+C / V copy & paste · Ctrl+Shift+F find · Ctrl+= / Ctrl+- zoom · F12 developer tools')
       )
     );
+    this.renderRecent();
+  }
+
+  renderRecent() {
+    const app = this.app, recent = app.recentSessions();
+    this.recentContent.replaceChildren(
+      recent.length
+        ? h('div.cards', recent.map((s) => h('button.card', { type: 'button', onclick: () => app.connectSession(s) },
+            h('div.ic', icon(s.protocol === 'serial' ? 'usb' : 'server')),
+            h('div', h('div.t', s.name || s.host), h('div.d', s.protocol === 'serial' ? `${s.serialPort} · ${s.baudRate}` : `${s.username ? s.username + '@' : ''}${s.host}:${s.port || 22}`)))))
+        : h('p.hint', 'No recent sessions.')
+    );
   }
 
   show() {
     this.active = true;
-    this.render();
+    this.renderRecent();
   }
   hide() {
     this.active = false;
@@ -674,19 +685,43 @@ class App {
   }
 
   rememberRecent(id) {
+    if (typeof id !== 'string' || !id) return;
     try {
-      const list = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]').filter((x) => x !== id);
+      const list = this.recentSessionIds().filter((x) => x !== id);
       list.unshift(id);
       localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, 8)));
     } catch {}
+    this.refreshRecentSessions();
+  }
+
+  recentSessionIds() {
+    try {
+      const value = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
+      if (!Array.isArray(value)) return [];
+      const ids = [];
+      for (const id of value) {
+        if (typeof id === 'string' && id && !ids.includes(id)) ids.push(id);
+        if (ids.length === 8) break;
+      }
+      return ids;
+    } catch {}
+    return [];
   }
 
   recentSessions() {
-    let ids = [];
-    try {
-      ids = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
-    } catch {}
-    return ids.map((id) => this.sessions.data.sessions.find((s) => s.id === id)).filter(Boolean);
+    return this.recentSessionIds().map((id) => this.sessions.data.sessions.find((s) => s.id === id)).filter(Boolean);
+  }
+
+  refreshRecentSessions() {
+    for (const tab of this.tabs) if (tab.kind === 'welcome') tab.renderRecent();
+  }
+
+  clearRecentSessions() {
+    try { localStorage.removeItem(RECENT_KEY); }
+    catch (error) { toast('Could not clear recent sessions: ' + errMsg(error), 'err'); return false; }
+    this.refreshRecentSessions();
+    toast('Recent sessions cleared.');
+    return true;
   }
 
   async saveSettings(patch) {

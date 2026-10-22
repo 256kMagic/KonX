@@ -20,11 +20,12 @@ class JsonFile {
     }
   }
 
-  save() {
+  save(data = this.data) {
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
     const tmp = this.file + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2));
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
     fs.renameSync(tmp, this.file);
+    this.data = data;
   }
 }
 
@@ -98,6 +99,7 @@ class Store {
     const out = { ...s };
     for (const f of SECRET_FIELDS) {
       out['has' + f[0].toUpperCase() + f.slice(1)] = !!s[f + 'Enc'];
+      delete out[f];
       delete out[f + 'Enc'];
     }
     return out;
@@ -122,8 +124,9 @@ class Store {
   }
 
   /**
-   * Insert or update a session. Secret fields: a string sets a new value, null clears it,
-   * undefined keeps whatever was stored.
+   * Insert or update a session. A nonempty secret string replaces its encrypted value;
+   * null clears it, while undefined or an empty string keeps whatever was stored.
+   * Publish the new session and folders only after encryption and persistence succeed.
    */
   saveSession(input) {
     const list = this.sessions.data.sessions;
@@ -131,19 +134,37 @@ class Store {
     const prev = list.find((x) => x.id === id) || {};
     const next = { ...prev, ...input, id };
     for (const f of SECRET_FIELDS) {
+      if (input[f] != null && typeof input[f] !== 'string') throw new Error(`The session ${f} must be text, blank to keep, or null to remove.`);
+    }
+    if (SECRET_FIELDS.some((f) => typeof input[f] === 'string' && input[f] !== '')) {
+      let available = false;
+      try { available = this.crypt.available(); } catch { /* Report a credential-safe error below. */ }
+      if (!available) throw new Error('Secure credential encryption is unavailable. The session was not saved.');
+    }
+    for (const f of SECRET_FIELDS) {
       delete next['has' + f[0].toUpperCase() + f.slice(1)];
+      // Ciphertext and presence flags belong to this store, never to caller input.
+      delete next[f + 'Enc'];
+      if (Object.hasOwn(prev, f + 'Enc')) next[f + 'Enc'] = prev[f + 'Enc'];
       if (typeof input[f] === 'string' && input[f] !== '') {
-        if (this.crypt.available()) next[f + 'Enc'] = this.crypt.encrypt(input[f]);
+        try {
+          const encrypted = this.crypt.encrypt(input[f]);
+          if (typeof encrypted !== 'string' || encrypted === '') throw new Error('Invalid encrypted credential.');
+          next[f + 'Enc'] = encrypted;
+        } catch {
+          throw new Error(`Could not encrypt the session ${f}. The session was not saved.`);
+        }
       } else if (input[f] === null) {
         delete next[f + 'Enc'];
       }
       delete next[f];
     }
-    if (next.folder) this._ensureFolder(next.folder);
+    const data = { ...this.sessions.data, folders: [...this.sessions.data.folders], sessions: [...list] };
+    if (next.folder) this._ensureFolder(next.folder, data);
     const idx = list.findIndex((x) => x.id === id);
-    if (idx >= 0) list[idx] = next;
-    else list.push(next);
-    this.sessions.save();
+    if (idx >= 0) data.sessions[idx] = next;
+    else data.sessions.push(next);
+    this.sessions.save(data);
     return this._public(next);
   }
 
@@ -153,11 +174,11 @@ class Store {
     this.sessions.save();
   }
 
-  _ensureFolder(folder) {
+  _ensureFolder(folder, data = this.sessions.data) {
     const parts = folder.split('/').filter(Boolean);
     for (let i = 1; i <= parts.length; i++) {
       const p = parts.slice(0, i).join('/');
-      if (!this.sessions.data.folders.includes(p)) this.sessions.data.folders.push(p);
+      if (!data.folders.includes(p)) data.folders.push(p);
     }
   }
 

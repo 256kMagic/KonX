@@ -1,7 +1,7 @@
 {
   "name": "konx",
   "productName": "KonX",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "Windows terminal, SFTP, packet analysis, security, wireless and AI troubleshooting workspace",
   "main": "src/main/boot.js",
   "author": "KonX",

@@ -507,6 +507,8 @@ const fakeCrypt = {
   await require('./workspace-layout-ui-tests.cjs').runWorkspaceLayoutUiTests(test);
   await require('./workspace-layout-model-tests.cjs').runWorkspaceLayoutModelTests(test);
   await require('./ssh-host-key-tests.cjs').runSshHostKeyTests(test);
+  await require('./credential-store-tests.cjs').runCredentialStoreTests(test);
+  await require('./session-management-ui-tests.cjs').runSessionManagementUiTests(test);
   await require('./layout-focus-tests.cjs').runLayoutFocusTests(test);
 
   const failed = results.filter((r) => !r[0]);

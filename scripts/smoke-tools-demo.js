@@ -15,6 +15,7 @@
   const { exportReport, validateReport } = await import('./js/security-report.mjs');
   const { TOOLS } = await import('./js/tools.js');
   const complete = async (checks) => {
+    if (sessionManagement) checks.sessionManagement = sessionManagement;
     // Portable launchers do not necessarily forward their app's stdout. Write
     // test evidence only to the parent-provided private artifact file.
     await api.invoke('np:write', options.resultPath, new TextEncoder().encode(JSON.stringify(checks, null, 2)));
@@ -52,8 +53,21 @@
   const supportsRunbooks = versionParts[0] > 0 || versionParts[1] >= 12;
   const supportsComparison = versionParts[0] > 0 || versionParts[1] >= 13;
   const supportsLayouts = versionParts[0] > 0 || versionParts[1] >= 14;
+  const supportsSessionManagement = versionParts[0] > 0 || versionParts[1] >= 15;
+  let sessionManagement = null;
+  const sessionName = 'Package smoke synthetic saved session';
 
   if (options.phase === 'save') {
+    if (supportsSessionManagement) {
+      const saved = await api.invoke('sessions:save', { name: sessionName, protocol: 'ssh', host: '192.0.2.15', port: 22, username: 'fixture-user', auth: 'password', password: options.token + '-session' });
+      assert(saved.hasPassword && saved.username === 'fixture-user' && !Object.hasOwn(saved, 'password') && !Object.hasOwn(saved, 'passwordEnc'), 'Saved session exposed credentials or omitted its username');
+      await app.sessions.load(); app.rememberRecent(saved.id);
+      assert(app.recentSessions().some(item => item.id === saved.id), 'Saved session did not enter recent history');
+      localStorage.setItem('konx.session-smoke-marker', 'retained');
+      assert(app.clearRecentSessions() && app.recentSessions().length === 0, 'Recent history did not clear');
+      assert((await api.invoke('sessions:list')).sessions.some(item => item.id === saved.id && item.hasPassword), 'Clearing history removed a saved credential');
+      sessionManagement = { usernameSaved: true, passwordPresencePrivate: true, historyCleared: true, savedSessionRetained: true };
+    }
     if (supportsLayouts) {
       const originalTabs = [...app.tabs], theme = app.settings.uiTheme, palette = app.settings.colorScheme;
       for (const uiLayout of ['workbench', 'incident-desk', 'operations-wall', 'focus', 'classic']) {
@@ -232,6 +246,17 @@
     assert(ai.documentContent.textContent.includes('cached evidence'), 'Packaged local article did not render');
     await complete({ phase: options.phase, version: info.version, tools: supportsComparison ? 11 : supportsRunbooks ? 10 : supportsRemoteCapture ? 9 : supportsIncidents ? 8 : supportsRtp ? 7 : supportsSnapshots ? 6 : supportsDeviceInspector ? 5 : 4, ...(deviceInspector ? { deviceInspector } : {}), ...(deviceSnapshots ? { deviceSnapshots } : {}), ...(rtpMedia ? { rtpMedia } : {}), ...(incidentWorkspace ? { incidentWorkspace } : {}), ...(remoteCapture ? { remoteCapture } : {}), ...(runbooks ? { runbooks } : {}), ...(captureComparison ? { captureComparison } : {}), assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
   } else if (options.phase === 'forget') {
+    if (supportsSessionManagement) {
+      await app.sessions.load();
+      const saved = app.sessions.data.sessions.find(item => item.name === sessionName);
+      assert(saved?.username === 'fixture-user' && saved.hasPassword, 'Saved username/password presence did not survive restart');
+      assert(app.recentSessions().length === 0 && localStorage.getItem('konx.recent') === null, 'Cleared recent history returned after restart');
+      assert(localStorage.getItem('konx.session-smoke-marker') === 'retained', 'History clearing removed unrelated local preferences');
+      const cleared = await api.invoke('sessions:save', { id: saved.id, password: null });
+      assert(!cleared.hasPassword && cleared.username === 'fixture-user', 'Explicit password removal changed the saved username');
+      await api.invoke('sessions:delete', saved.id); localStorage.removeItem('konx.session-smoke-marker');
+      sessionManagement = { persistedAcrossRestart: true, historyStayedCleared: true, unrelatedPreferencesRetained: true, passwordRemoved: true };
+    }
     if (supportsLayouts) assert(app.settings.uiLayout === 'focus' && app.workspaceLayout.get().layout === 'focus', 'Workspace layout did not survive packaged restart');
     assert(mist.config.hasToken && !mist.testButton.disabled, 'Encrypted Mist token did not survive app restart');
     assert(mist.token.value === '', 'Saved credential must not be returned to the input');

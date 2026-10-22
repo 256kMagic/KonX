@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.15.0 — 2026-10-22
+
+- Clear recent session history from Home without deleting saved sessions, credentials, open connections, or unrelated preferences.
+- Preserve Home Quick connect input when clearing history or returning to Home, and tolerate malformed recent-history storage.
+- Wrap Home Quick connect fields in narrow workspace panes so Host and Port remain readable and usable.
+- Group username, password, and encrypted password saving on the session editor's General page.
+- Keep blank edits from removing saved credentials, provide explicit password removal, and support one-time passwords with Save & Connect.
+- Reject failed encryption or persistence without partially changing saved sessions or folders; keep the editor open for retry.
+- Reconcile completed saves after dialog closure without opening a late connection.
+
+See the [session management guide](docs/SESSION_MANAGEMENT.md) and [release notes](docs/releases/0.15.0.md).
+
 ## 0.14.0 — 2026-10-21
 
 - Add four physical workspace arrangements to Appearance: Workbench, Incident Desk, Operations Wall, and Focus Workspace, with structural previews and Classic as the existing-profile default.

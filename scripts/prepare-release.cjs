@@ -21,6 +21,7 @@ async function main() {
     ['docs/RUNBOOKS.md', 'RUNBOOKS.md'],
     ['docs/CAPTURE_COMPARISON.md', 'CAPTURE_COMPARISON.md'],
     ['docs/WORKSPACE_LAYOUTS.md', 'WORKSPACE_LAYOUTS.md'],
+    ['docs/SESSION_MANAGEMENT.md', 'SESSION_MANAGEMENT.md'],
     ['CHANGELOG.md', 'CHANGELOG.md'], [`docs/releases/${version}.md`, 'RELEASE_NOTES.md'],
   ];
   for (const file of [...binaries.map((name) => `dist/${name}`), ...documents.map(([source]) => source)]) {
