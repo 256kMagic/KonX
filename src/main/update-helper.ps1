@@ -159,10 +159,16 @@ function Replace-WithRetry([string]$Source, [string]$Destination, [string]$Backu
 try {
     $plan = [IO.File]::ReadAllText($PlanPath) | ConvertFrom-Json
     if ($plan.schemaVersion -ne 1 -or $plan.token -notmatch '^[a-f0-9]{48}$' -or $plan.mode -notin @('installed', 'portable') -or $plan.sha256 -notmatch '^[a-f0-9]{64}$' -or $plan.size -le 0 -or $plan.size -gt 2147483648 -or $plan.parentPid -le 0) { throw 'The update plan is invalid.' }
+    if ($plan.version -isnot [string] -or $plan.version.Length -gt 100 -or $plan.version -notmatch '\A(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\z') { throw 'The update version is invalid.' }
+    foreach ($component in $plan.version.Split('.')) {
+        [long]$number = 0
+        if (![long]::TryParse($component, [ref]$number) -or $number -gt 9007199254740991) { throw 'The update version is invalid.' }
+    }
     foreach ($name in @('exitTimeoutMs', 'replaceTimeoutMs', 'commitTimeoutMs')) {
         if ($plan.$name -lt 500 -or $plan.$name -gt 300000) { throw 'The update timeout is invalid.' }
     }
-    if ([IO.Path]::GetFullPath($plan.file) -ine [IO.Path]::Combine($directory, 'payload.exe')) { throw 'The update payload is outside its handoff directory.' }
+    $payloadName = if ($plan.mode -eq 'installed') { 'KonX-Setup-' + $plan.version + '.exe' } else { 'KonX-' + $plan.version + '-portable.exe' }
+    if ([IO.Path]::GetFullPath($plan.file) -ine [IO.Path]::Combine($directory, $payloadName)) { throw 'The update payload does not match its version and mode in the handoff directory.' }
     $ownsPayload = $true
     Write-Status 'preparing' 'Verifying the update and the existing application.'
     Check-Cancelled

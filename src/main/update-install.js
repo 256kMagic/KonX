@@ -14,6 +14,12 @@ const regular = (file) => { try { return physicalFs.lstatSync(file).isFile(); } 
 const safePath = (file) => typeof file === 'string' && path.isAbsolute(file) && !/[\0\r\n"]/.test(file);
 const cleanEnvironment = (env) => Object.fromEntries(Object.entries(env).filter(([key]) =>
   !/^PORTABLE_EXECUTABLE_/i.test(key) && !/^(?:ELECTRON_RUN_AS_NODE|KONX_CAPTURE|KONX_DEMO)(?:_|$)/i.test(key)));
+function stableVersion(value) {
+  if (typeof value !== 'string' || value.length > 100 || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(value)) return false;
+  const parts = value.split('.').map(Number);
+  // The round trip also rejects a trailing newline accepted by RegExp's $.
+  return parts.every(Number.isSafeInteger) && parts.join('.') === value;
+}
 
 /** Identify only a packaged Windows x64 installation, never a development checkout. */
 function getInstallTarget({ isPackaged, platform = process.platform, arch = process.arch, execPath = process.execPath, portablePath = process.env.PORTABLE_EXECUTABLE_FILE } = {}) {
@@ -43,9 +49,11 @@ async function launchUpdate({ update, target, cacheDir, parentPid = process.pid,
   readyTimeoutMs = 30000, exitTimeoutMs = 120000, replaceTimeoutMs = 30000, showFailure = true } = {}) {
   if (process.platform !== 'win32') throw new Error('Integrated update installation requires Windows.');
   if (!target || !['installed', 'portable'].includes(target.mode) || !safePath(target.targetPath) || !regular(target.targetPath)) throw new Error('The update installation target is unavailable.');
-  if (!update || update.mode !== target.mode || !safePath(update.file) || !regular(update.file) || !/^[a-f0-9]{64}$/i.test(update.sha256) || !Number.isSafeInteger(update.size) || update.size <= 0 || update.size > 2 * 1024 ** 3 || typeof update.version !== 'string' || update.version.length > 100) throw new Error('The verified update download is invalid.');
+  if (!update || update.mode !== target.mode || !safePath(update.file) || !regular(update.file) || !/^[a-f0-9]{64}$/i.test(update.sha256) || !Number.isSafeInteger(update.size) || update.size <= 0 || update.size > 2 * 1024 ** 3 || !stableVersion(update.version)) throw new Error('The verified update download is invalid.');
   if (!safePath(cacheDir) || !Number.isSafeInteger(parentPid) || parentPid <= 0) throw new Error('The update handoff configuration is invalid.');
   if (path.resolve(update.file).toLowerCase() === path.resolve(target.targetPath).toLowerCase()) throw new Error('The update download must be separate from the current application.');
+  const mode = target.mode, version = update.version;
+  const payloadName = mode === 'installed' ? `KonX-Setup-${version}.exe` : `KonX-${version}-portable.exe`;
   await fsp.mkdir(cacheDir, { recursive: true });
   const directory = await fsp.mkdtemp(path.join(cacheDir, 'handoff-'));
   const scriptPath = path.join(directory, 'update-helper.ps1');
@@ -54,11 +62,11 @@ async function launchUpdate({ update, target, cacheDir, parentPid = process.pid,
   const logPath = path.join(directory, 'helper.log');
   const readyPath = path.join(directory, 'ready.json');
   const startedPath = path.join(directory, 'started.json');
-  const payload = path.join(directory, 'payload.exe');
+  const payload = path.join(directory, payloadName);
   const token = crypto.randomBytes(24).toString('hex');
   const boundedTime = (value, fallback, maximum) => Number.isFinite(value) ? Math.min(maximum, Math.max(500, Math.floor(value))) : fallback;
-  const plan = { schemaVersion: 1, token, parentPid, mode: target.mode, targetPath: path.resolve(target.targetPath),
-    file: payload, sha256: update.sha256.toLowerCase(), size: update.size, version: update.version,
+  const plan = { schemaVersion: 1, token, parentPid, mode, targetPath: path.resolve(target.targetPath),
+    file: payload, sha256: update.sha256.toLowerCase(), size: update.size, version,
     exitTimeoutMs: boundedTime(exitTimeoutMs, 120000, 300000), replaceTimeoutMs: boundedTime(replaceTimeoutMs, 30000, 120000),
     commitTimeoutMs: 120000, showFailure: showFailure !== false };
   let helper;

@@ -24,6 +24,8 @@ Version 0.15.2 makes the session credential-retention checkbox prominent and add
 
 Version 0.16.0 adds Cisco terminal highlighting with a live switch and saved global/session preferences. See the [highlighting guide](CISCO_HIGHLIGHTING.md) and [release validation](releases/0.16.0.md).
 
+Version 0.16.1 gives staged update executables a KonX name and target version. See the [update guide](UPDATING.md) and [release validation](releases/0.16.1.md).
+
 ## Scope
 
 Device collection starts with connected Cisco IOS/IOS-XE SSH sessions and fixed read-only commands in a separate channel. Trace results show candidates and unresolved links when evidence is incomplete. Imported reports and a synthetic demo support offline use.

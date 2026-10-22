@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.16.1 — 2026-10-22
+
+- Replace the updater's temporary `payload.exe` name with `KonX-Setup-<version>.exe` for installed updates and `KonX-<version>-portable.exe` for portable updates.
+- Validate the target version and exact handoff filename while retaining checksum verification, cancellation, cleanup, and recovery.
+- Explain that older clients may show the old name once when installing this fix; updates started from 0.16.1 use the branded filename.
+
+See the [update guide](docs/UPDATING.md) and [release notes](docs/releases/0.16.1.md).
+
 ## 0.16.0 — 2026-10-22
 
 - Add automatic Cisco output highlighting for errors, warnings, interface up/down states, and validated IPv4/IPv6 addresses.

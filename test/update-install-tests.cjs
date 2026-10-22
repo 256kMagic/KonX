@@ -26,6 +26,8 @@ async function eventually(read, predicate, timeout = 15000) {
 }
 const readStatus = (file) => fs.readFile(file, 'utf8').then(JSON.parse);
 const terminal = (file) => eventually(() => readStatus(file), (s) => ['complete', 'failed', 'cancelled'].includes(s.phase));
+const stagedPayload = (options, statusPath) => path.join(path.dirname(statusPath), options.target.mode === 'installed'
+  ? `KonX-Setup-${options.update.version}.exe` : `KonX-${options.update.version}-portable.exe`);
 
 async function compileFixture(directory, name) {
   const source = path.join(directory, name + '.cs');
@@ -265,17 +267,72 @@ ConvertTo-Json -InputObject @($results) -Compress`);
       }
       return options;
     };
+    await test('updater rejects invalid release versions and mismatched modes before staging or spawning', async () => {
+      const options = await fixture();
+      let spawned = false;
+      const spawnImpl = () => { spawned = true; throw new Error('Invalid metadata must not spawn a helper'); };
+      for (const version of [undefined, null, 123, ['9.9.9'], '', 'v9.9.9', '09.9.9', '9.09.9', '9.9.09', '9.9', '9.9.9-beta', '9.9.9+build', '9.9.9\n', '9.9.9\r\n', ' 9.9.9', '../9.9.9', '9.9.9/other', '9.9.9\\other', '9.9.9\0', '9007199254740992.0.0', '1'.repeat(101) + '.0.0']) {
+        await assert.rejects(launchUpdate({ ...options, update: { ...options.update, version }, spawnImpl }), /verified update download is invalid/, JSON.stringify(version));
+      }
+      await assert.rejects(launchUpdate({ ...options, update: { ...options.update, mode: 'installed' }, spawnImpl }), /verified update download is invalid/);
+      assert.equal(spawned, false);
+      await assert.rejects(fs.stat(options.cacheDir), { code: 'ENOENT' });
+      assert.deepEqual(await fs.readFile(options.target.targetPath), originalBytes);
+      assert.deepEqual(await fs.readFile(options.update.file), replacementBytes);
+    });
+    await test('updater real helper rejects tampered version, mode and payload paths without claiming foreign files', async () => {
+      const cases = [
+        { name: 'newline version', change: (plan) => { plan.version += '\n'; }, error: /update version is invalid/ },
+        { name: 'non-string version', change: (plan) => { plan.version = 999; }, error: /update version is invalid/ },
+        { name: 'unsafe version component', change: (plan) => { plan.version = '9007199254740992.0.0'; }, error: /update version is invalid/ },
+        { name: 'different valid version', change: (plan) => { plan.version = '9.9.10'; }, error: /payload does not match its version and mode/ },
+        { name: 'opposite mode basename', change: (plan) => { plan.mode = 'installed'; }, error: /payload does not match its version and mode/ },
+        { name: 'old generic basename', change: (plan) => { plan.file = path.join(path.dirname(plan.file), 'payload.exe'); }, copy: true, error: /payload does not match its version and mode/ },
+        { name: 'branded file outside handoff', change: (plan, options) => { plan.file = path.join(options.directory, path.basename(plan.file)); }, copy: true, error: /payload does not match its version and mode/ },
+      ];
+      for (const entry of cases) {
+        const options = await fixture();
+        const p = parent();
+        let originalPayload, proposedPayload, failure;
+        const spawnImpl = (command, args, spawnOptions) => {
+          const planPath = args[args.indexOf('-PlanPath') + 1];
+          const plan = JSON.parse(fsSync.readFileSync(planPath, 'utf8'));
+          originalPayload = plan.file;
+          entry.change(plan, options);
+          proposedPayload = plan.file;
+          if (entry.copy) fsSync.copyFileSync(originalPayload, proposedPayload, fsSync.constants.COPYFILE_EXCL);
+          fsSync.writeFileSync(planPath, JSON.stringify(plan));
+          return spawn(command, args, spawnOptions);
+        };
+        try {
+          await assert.rejects(launchUpdate({ ...options, parentPid: p.pid, spawnImpl }), (error) => { failure = error; return entry.error.test(error.message); }, entry.name);
+          assert.equal((await terminal(failure.statusPath)).phase, 'failed', entry.name);
+          assert.equal(p.exitCode, null, entry.name);
+          assert.deepEqual(await fs.readFile(options.target.targetPath), originalBytes, entry.name);
+          assert.deepEqual(await fs.readFile(proposedPayload), replacementBytes, entry.name + ': rejected plan does not establish payload ownership');
+          assert.deepEqual(await fs.readFile(originalPayload), replacementBytes, entry.name + ': unrelated staged path remains untouched');
+          await assert.rejects(fs.stat(proposedPayload + '.invocation'), { code: 'ENOENT' });
+          await assert.rejects(fs.stat(options.target.targetPath + '.invocation'), { code: 'ENOENT' });
+          assert.equal((await fs.readdir(options.directory)).some((file) => file.endsWith('.new.exe')), false, entry.name);
+        } finally { await end(p); }
+      }
+    });
     await test('updater real helper verifies readiness and cancellation without replacing or quitting', async () => {
       const options = await fixture();
+      options.update.version = '12.34.56';
       const p = parent();
       const helper = await launchUpdate({ ...options, parentPid: p.pid });
       assert.equal((await readStatus(helper.statusPath)).phase, 'ready');
+      const payload = stagedPayload(options, helper.statusPath);
+      assert.equal(path.basename(payload), 'KonX-12.34.56-portable.exe');
+      assert.equal((await readStatus(path.join(path.dirname(helper.statusPath), 'plan.json'))).file, payload);
+      assert.deepEqual(await fs.readFile(payload), replacementBytes);
       const ready = await readStatus(path.join(path.dirname(helper.statusPath), 'ready.json'));
       assert.match(ready.parentStartTicks, /^\d+$/);
       assert.equal(ready.parentPid, p.pid);
       await helper.cancel();
       assert.equal((await terminal(helper.statusPath)).phase, 'cancelled');
-      await assert.rejects(fs.stat(path.join(path.dirname(helper.statusPath), 'payload.exe')), { code: 'ENOENT' });
+      await assert.rejects(fs.stat(payload), { code: 'ENOENT' });
       assert.equal((await fs.readdir(options.directory)).some((file) => file.endsWith('.new.exe')), false);
       assert.equal(p.exitCode, null);
       assert.deepEqual(await fs.readFile(options.target.targetPath), originalBytes);
@@ -288,7 +345,7 @@ ConvertTo-Json -InputObject @($results) -Compress`);
       let failure;
       await assert.rejects(launchUpdate({ ...options, parentPid: p.pid }), (error) => { failure = error; return /SHA-256/.test(error.message); });
       assert.equal((await readStatus(failure.statusPath)).phase, 'failed');
-      await assert.rejects(fs.stat(path.join(path.dirname(failure.statusPath), 'payload.exe')), { code: 'ENOENT' });
+      await assert.rejects(fs.stat(stagedPayload(options, failure.statusPath)), { code: 'ENOENT' });
       assert.equal(p.exitCode, null);
       assert.deepEqual(await fs.readFile(options.target.targetPath), originalBytes);
       await end(p);
@@ -362,6 +419,7 @@ ConvertTo-Json -InputObject @($results) -Compress`);
       assert.equal(status.phase, 'complete', status.message);
       assert.deepEqual(await fs.readFile(options.target.targetPath), replacementBytes);
       assert.deepEqual(await fs.readFile(status.backupPath), originalBytes);
+      await assert.rejects(fs.stat(stagedPayload(options, helper.statusPath)), { code: 'ENOENT' });
       const values = (await fs.readFile(options.target.targetPath + '.invocation', 'utf8')).trim().split(/\r?\n/).map((s) => Buffer.from(s, 'base64').toString());
       assert.equal(values[0], 'replacement');
       assert.equal(values[1], options.target.targetPath);
@@ -396,7 +454,7 @@ const { launchUpdate } = require(${JSON.stringify(require.resolve('../src/main/u
       const status = await terminal(stdout.trim());
       assert.equal(status.phase, 'complete', status.message);
       assert.deepEqual(await fs.readFile(options.target.targetPath), replacementBytes);
-      await assert.rejects(fs.stat(path.join(path.dirname(stdout.trim()), 'payload.exe')), { code: 'ENOENT' });
+      await assert.rejects(fs.stat(stagedPayload(options, stdout.trim())), { code: 'ENOENT' });
     });
     await test('updater real helper cancels a committed handoff before parent exit', async () => {
       const options = await fixture();
@@ -461,17 +519,25 @@ const { launchUpdate } = require(${JSON.stringify(require.resolve('../src/main/u
     });
     await test('updater real installed helper preserves explicit mode and final unquoted NSIS directory with spaces', async () => {
       const options = await fixture('installed');
+      options.update.version = '23.45.67';
       const key = await registrations(options.directory, 'add', options.registrationId);
       const p = parent();
       try {
         const helper = await launchUpdate({ ...options, parentPid: p.pid });
+        const payload = stagedPayload(options, helper.statusPath);
+        assert.equal(path.basename(payload), 'KonX-Setup-23.45.67.exe');
+        assert.equal((await readStatus(path.join(path.dirname(helper.statusPath), 'plan.json'))).file, payload);
+        assert.deepEqual(await fs.readFile(payload), replacementBytes);
         await helper.commit();
         await end(p);
         const status = await terminal(helper.statusPath);
         assert.equal(status.phase, 'complete', status.message);
-        const record = await fs.readFile(path.join(path.dirname(helper.statusPath), 'payload.exe.invocation'), 'utf8');
-        const command = Buffer.from(record.split(/\r?\n/)[2], 'base64').toString();
+        const record = (await fs.readFile(payload + '.invocation', 'utf8')).trim().split(/\r?\n/).map((value) => Buffer.from(value, 'base64').toString());
+        assert.equal(record[0], 'replacement');
+        assert.equal(record[1], payload, 'the actual installer process must run from the branded versioned filename');
+        const command = record[2];
         assert.ok(command.endsWith('--updated /S --force-run /currentuser /D=' + options.directory), command);
+        await assert.rejects(fs.stat(payload), { code: 'ENOENT' });
         assert.deepEqual(await fs.readFile(options.target.targetPath), originalBytes, 'the fake installer never modifies an application');
       } finally { await registrations(options.directory, 'remove', key); await end(p); }
     });
