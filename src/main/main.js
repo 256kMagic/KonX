@@ -56,9 +56,17 @@ let updates;
 const toolJobs = new Map();
 let remoteReservations = 0;
 let toolsShuttingDown = false;
+let serialQuitApproved = false;
 
 function ownedToolJobs() { return [...toolJobs.values()].filter(signal => ['remote-capture', 'runbook'].includes(signal.kind)); }
 function hasToolOwnership() { return remoteReservations > 0 || ownedToolJobs().length > 0 || !!remoteResults?.hasOpenHandles || !!remoteCapture.hasPendingCleanup || !!runbookStore?.hasOwnership; }
+function hasSerialOwnership() { return !!connections?.hasSerialOwnership; }
+function confirmConnectionQuit() {
+  return dialog.showMessageBoxSync(win, {
+    type: 'question', buttons: ['Disconnect and quit', 'Cancel'], defaultId: 0, cancelId: 1,
+    message: `You have ${connections.conns.size} active connection(s).`, detail: 'Close them and exit?',
+  }) === 0;
+}
 
 function send(channel, ...args) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, ...args);
@@ -123,22 +131,13 @@ function createWindow() {
     // Native close must retain the window and SSH transport until capture jobs
     // and their registered file handles have finished cleanup. A failed close
     // can then be shown to the user instead of silently exiting headlessly.
-    if (hasToolOwnership()) {
+    if (hasToolOwnership() || hasSerialOwnership()) {
       e.preventDefault();
       app.quit();
       return;
     }
-    if (connections.conns.size && !CAPTURE) {
-      const choice = dialog.showMessageBoxSync(win, {
-        type: 'question',
-        buttons: ['Disconnect and quit', 'Cancel'],
-        defaultId: 0,
-        cancelId: 1,
-        message: `You have ${connections.conns.size} active connection(s).`,
-        detail: 'Close them and exit?',
-      });
-      if (choice === 1) e.preventDefault();
-    }
+    if (connections.conns.size && !CAPTURE && !serialQuitApproved && !confirmConnectionQuit()) e.preventDefault();
+    serialQuitApproved = false;
   });
   win.on('closed', () => (win = null));
 }
@@ -295,7 +294,10 @@ function registerIpc() {
   handle('hostkeys:delete', (k) => store.deleteHostKey(k));
 
   // terminal connections
-  handle('conn:open', (id, spec, size) => connections.open(id, spec, size));
+  handle('conn:open', (id, spec, size) => {
+    if (toolsShuttingDown || updateShutdownPending) throw new Error('KonX is closing. Wait before opening another connection.');
+    return connections.open(id, spec, size);
+  });
   ipcMain.on('conn:write', (_e, id, data, binary) => connections.write(id, data, binary));
   ipcMain.on('conn:resize', (_e, id, cols, rows) => connections.resize(id, cols, rows));
   handle('conn:close', (id) => connections.close(id));
@@ -657,6 +659,7 @@ app.whenReady().then(() => {
     busyReasons: () => {
       const reasons = [];
       if (connections.conns.size) reasons.push('Disconnect active terminal connections before updating.');
+      if (hasSerialOwnership()) reasons.push('Serial ports are still in use. Close serial connections or quit KonX to retry pending cleanup before updating.');
       if (sftp.sessions.size || sftp.pending.size) reasons.push('Close SFTP sessions before updating.');
       if (sftp.queue.active.size || sftp.queue.jobs.some((job) => ['queued', 'running'].includes(job.status))) reasons.push('Finish or cancel file transfers before updating.');
       if (capture.sessions.size || capture.startRequests.size || capture.builtin.sessions.size || capture.builtin.startRequests.size) reasons.push('Stop packet capture before updating.');
@@ -681,7 +684,7 @@ app.whenReady().then(() => {
 let updateShutdownPending = false;
 let updateShutdownComplete = false;
 app.on('before-quit', (event) => {
-  if (!updates && !hasToolOwnership()) return;
+  if (!updates && !hasToolOwnership() && !hasSerialOwnership()) return;
   if (updateShutdownComplete) {
     // Consume this single retry. If a close prompt cancels it, a future quit
     // still has to cancel any downloads started in the meantime.
@@ -689,9 +692,15 @@ app.on('before-quit', (event) => {
     toolsShuttingDown = false;
     return;
   }
-  if (updates?.committed && !hasToolOwnership()) return;
+  if (updates?.committed && !hasToolOwnership() && !hasSerialOwnership()) return;
   event.preventDefault();
   if ((updates?.installing && !updates.committed) || updateShutdownPending) return;
+  // Serial shutdown must release its handles before the window can close, so
+  // obtain the existing disconnect consent before starting that cleanup.
+  if (hasSerialOwnership() && connections.conns.size && !CAPTURE && !serialQuitApproved) {
+    if (!confirmConnectionQuit()) return;
+    serialQuitApproved = true;
+  }
   updateShutdownPending = true;
   toolsShuttingDown = true;
   const finishOwners = async () => {
@@ -707,10 +716,12 @@ app.on('before-quit', (event) => {
     catch { updateCleanup = Promise.resolve(); }
     await Promise.allSettled(jobs.map(signal => signal.task));
     const cleanupErrors = [];
-    for (const cleanup of [() => remoteCapture.closePending(), () => remoteResults?.close(), () => runbookStore?.close()]) {
+    for (const cleanup of [() => remoteCapture.closePending(), () => remoteResults?.close(), () => runbookStore?.close(),
+      () => hasSerialOwnership() ? connections.waitForSerialCleanup() : undefined]) {
       try { await cleanup(); } catch (error) { cleanupErrors.push(error.message); }
     }
     if (remoteResults?.hasOpenHandles || remoteCapture.hasPendingCleanup || runbookStore?.hasOwnership) cleanupErrors.push('Capture or runbook resources still require cleanup.');
+    if (hasSerialOwnership()) cleanupErrors.push('Serial port resources still require cleanup.');
     await updateCleanup;
     if (cleanupErrors.length) throw new Error(cleanupErrors.join('\n'));
   };
@@ -721,9 +732,10 @@ app.on('before-quit', (event) => {
   }, error => {
     updateShutdownPending = false;
     toolsShuttingDown = false;
+    serialQuitApproved = false;
     dialog.showMessageBoxSync(win && !win.isDestroyed() ? win : undefined, {
       type: 'error', buttons: ['OK'], title: 'KonX could not finish closing',
-      message: 'Tool cleanup did not finish. KonX has stayed open.',
+      message: 'Connection or tool cleanup did not finish. KonX has stayed open.',
       detail: `${error.message}\nTry quitting again to retry cleanup.`,
     });
   });

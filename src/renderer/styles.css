@@ -278,6 +278,9 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
   padding: 8px 10px 8px 14px; display: flex; align-items: center; gap: 12px; z-index: 9;
 }
 .term-overlay .msg { color: var(--muted); }
+.term-connecting { width: max-content; max-width: calc(100% - 24px); }
+.term-connecting .msg { overflow-wrap: anywhere; }
+.term-connecting button { flex-shrink: 0; }
 
 /* ---------------------------------------------------------------- forms + buttons */
 .btn {

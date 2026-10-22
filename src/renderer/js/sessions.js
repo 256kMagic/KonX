@@ -313,23 +313,38 @@ export async function editSessionDialog(app, input = {}) {
   folderInput.setAttribute('list', 'folder-list');
   const folderList = h('datalist#folder-list', folders.map((f) => h('option', { value: f })));
 
-  const serialPort = h('input', { list: 'serial-list', value: s.serialPort || 'COM1', spellcheck: false });
+  const serialPort = h('input', { name: 'serialPort', 'aria-label': 'Serial port', list: 'serial-list', value: s.serialPort || 'COM1', spellcheck: false });
   const serialList = h('datalist#serial-list');
   const refreshPorts = async () => {
     const ports = await api.invoke('serial:list').catch(() => []);
     serialList.replaceChildren(...ports.map((p) => h('option', { value: p.path }, p.label)));
   };
+  const savedBaud = Number(s.baudRate);
+  const manualBauds = Number.isSafeInteger(savedBaud) && savedBaud > 0 && !BAUDS.includes(savedBaud) ? [...BAUDS, savedBaud] : BAUDS;
   const serialFields = buildFields([
-    { name: 'baudRate', label: 'Baud rate', type: 'select', options: BAUDS.map((b) => [b, String(b)]) },
+    { name: 'baudRate', label: 'Baud rate', type: 'select', options: [...manualBauds.map((b) => [b, String(b)]), ['auto', 'Auto detect']] },
     { name: 'dataBits', label: 'Data bits', type: 'select', options: [[8, '8'], [7, '7'], [6, '6'], [5, '5']] },
     { name: 'parity', label: 'Parity', type: 'select', options: [['none', 'None'], ['even', 'Even'], ['odd', 'Odd'], ['mark', 'Mark'], ['space', 'Space']] },
     { name: 'stopBits', label: 'Stop bits', type: 'select', options: [[1, '1'], [2, '2']] },
     { name: 'flowControl', label: 'Flow control', type: 'select', options: [['none', 'None'], ['rtscts', 'RTS/CTS'], ['xonxoff', 'XON/XOFF']] },
   ], s);
+  for (const [name, field] of Object.entries(serialFields.inputs)) field.name = name;
+  serialFields.inputs.baudRate.setAttribute('aria-label', 'Baud rate');
+  const serialProbe = h('input', { type: 'checkbox', name: 'serialAutoBaudProbe', 'aria-label': 'Send Enter while detecting', checked: s.serialAutoBaudProbe === true });
+  const serialAuto = h('div.span3', h('label.check', serialProbe, 'Send Enter while detecting'),
+    h('div.hint', 'Auto detect listens for readable device output. If the console is quiet, make the device produce output or allow Enter probes. Only baud is detected; data bits, parity, stop bits and flow control stay as selected.'));
+  const syncSerial = () => {
+    const automatic = serialFields.inputs.baudRate.value === 'auto';
+    serialProbe.disabled = !automatic;
+    serialAuto.classList.toggle('hidden', !automatic);
+  };
+  serialFields.inputs.baudRate.addEventListener('change', syncSerial);
+  syncSerial();
   const serialBox = h(
     'div.grid3',
     h('label.field', h('span', 'Port'), h('div.input-with-btn', serialPort, h('button.btn.sm', { type: 'button', onclick: refreshPorts }, icon('refresh')))),
     serialFields.els,
+    serialAuto,
     serialList,
     app.info.serial ? null : h('div.hint.span3', 'Serial support is not available in this build.')
   );
@@ -476,6 +491,8 @@ export async function editSessionDialog(app, input = {}) {
       port: g.port || undefined,
       serialPort: serialPort.value.trim(),
       ...serialFields.read(),
+      baudRate: serialFields.inputs.baudRate.value === 'auto' ? 'auto' : Number(serialFields.inputs.baudRate.value),
+      serialAutoBaudProbe: serialFields.inputs.baudRate.value === 'auto' && serialProbe.checked,
       ...auth.read(),
       ...conn.read(),
       ...term.read(),

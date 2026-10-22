@@ -20,7 +20,13 @@ function unescapeSend(s) {
   );
 }
 
-/** "user@host:port", "ssh://user@host:2222", "telnet://10.0.0.1", "COM3" */
+const quickBaud = (value, fallback = 9600) => {
+  const text = String(value ?? '').trim();
+  return text === '' ? fallback : text.toLowerCase() === 'auto' ? 'auto' : Number(text);
+};
+const validQuickBaud = value => value === 'auto' || (Number.isSafeInteger(value) && value > 0);
+
+/** "user@host:port", "ssh://user@host:2222", "telnet://10.0.0.1", "COM3@auto" */
 export function parseQuick(text, defaultProto = 'ssh') {
   let t = text.trim();
   let protocol = defaultProto;
@@ -29,9 +35,10 @@ export function parseQuick(text, defaultProto = 'ssh') {
     protocol = scheme[1].toLowerCase();
     t = t.slice(scheme[0].length);
   }
-  if (/^(COM\d+|\/dev\/\S+)$/i.test(t)) {
-    const [port, baud] = t.split(/[@:,]/);
-    return { protocol: 'serial', serialPort: port.toUpperCase().startsWith('COM') ? port.toUpperCase() : port, baudRate: Number(baud) || 9600 };
+  const serial = t.match(/^(COM\d+|\/dev\/[^@:,\s]+)(?:[@:,](.*))?$/i);
+  if (serial || protocol === 'serial') {
+    const [port, baud] = serial ? serial.slice(1) : t.split(/[@:,]/);
+    return { protocol: 'serial', serialPort: port.toUpperCase().startsWith('COM') ? port.toUpperCase() : port, baudRate: quickBaud(baud) };
   }
   let username = '';
   const at = t.lastIndexOf('@');
@@ -68,7 +75,10 @@ class WelcomeTab {
     const app = this.app;
     const proto = h('select.input', [['ssh', 'SSH2'], ['sftp', 'SFTP'], ['telnet', 'Telnet'], ['raw', 'Raw TCP'], ['serial', 'Serial']].map(([v, l]) => h('option', { value: v }, l)));
     const host = h('input.input', { placeholder: 'Hostname, IP or COM port', spellcheck: false });
-    const port = h('input.input', { placeholder: '22', type: 'number' });
+    const port = h('input.input', { name: 'quickPort', 'aria-label': 'Quick connect port', placeholder: '22', type: 'number' });
+    const portLabel = h('span', 'Port');
+    const serialProbe = h('input', { type: 'checkbox', name: 'quickSerialAutoBaudProbe', 'aria-label': 'Send Enter while detecting' });
+    const serialProbeField = h('label.check.hidden', serialProbe, 'Send Enter while detecting');
     const user = h('input.input', { name: 'quickUsername', 'aria-label': 'Quick connect username', placeholder: 'Username (optional)', spellcheck: false, autocomplete: 'off' });
     const password = h('input.input', { name: 'quickPassword', 'aria-label': 'Quick connect password', type: 'password', placeholder: 'Password (optional)', autocomplete: 'off' });
     const remember = h('input', { name: 'saveQuickSession', 'aria-label': 'Save session and remember login', type: 'checkbox' });
@@ -81,13 +91,22 @@ class WelcomeTab {
     this.clearQuickPassword = () => { password.value = ''; };
     const target = () => {
       const parsed = parseQuick(host.value, proto.value);
-      if (parsed.protocol === 'serial') return { protocol: 'serial', serialPort: parsed.serialPort || parsed.host || host.value.trim(), baudRate: Number(port.value) || 9600 };
+      if (parsed.protocol === 'serial') {
+        const baudRate = quickBaud(port.value, parsed.baudRate);
+        return { ...parsed, baudRate, serialAutoBaudProbe: baudRate === 'auto' && serialProbe.checked };
+      }
       return { ...parsed, ...(port.value ? { port: Number(port.value) } : {}) };
     };
     const sync = () => {
-      const protocol = target().protocol;
+      const parsed = target(), protocol = parsed.protocol;
       const login = ['ssh', 'telnet', 'sftp'].includes(protocol);
-      port.placeholder = protocol === 'serial' ? 'baud' : protocol === 'telnet' || protocol === 'raw' ? '23' : '22';
+      port.type = protocol === 'serial' ? 'text' : 'number';
+      port.placeholder = protocol === 'serial' ? '9600 or auto' : protocol === 'telnet' || protocol === 'raw' ? '23' : '22';
+      portLabel.textContent = protocol === 'serial' ? 'Baud rate' : 'Port';
+      port.setAttribute('aria-label', protocol === 'serial' ? 'Quick connect baud rate' : 'Quick connect port');
+      const automatic = protocol === 'serial' && parsed.baudRate === 'auto';
+      serialProbeField.classList.toggle('hidden', !automatic);
+      serialProbe.disabled = busy || !automatic;
       if (!login) { user.value = ''; password.value = ''; remember.checked = false; }
       if (app.info.encryption !== true) remember.checked = false;
       userField.classList.toggle('hidden', !login);
@@ -97,7 +116,9 @@ class WelcomeTab {
       remember.disabled = busy || !login || app.info.encryption !== true;
       for (const control of [proto, host, port, connect]) control.disabled = busy;
       connect.textContent = busy ? 'Saving session…' : remember.checked ? 'Save & connect' : 'Connect';
-      hint.textContent = !login ? 'This protocol does not use a username or password.'
+      hint.textContent = automatic ? 'Auto detect needs device output. Enter probes are optional. Only baud is detected; other serial settings stay at their defaults. You can cancel while detecting.'
+        : protocol === 'serial' ? 'Use a baud rate or auto. Auto detect listens for readable output; saved sessions offer data, parity, stop-bit and flow-control options.'
+        : !login ? 'This protocol does not use a username or password.'
         : app.info.encryption !== true ? 'Connect once. Saving login is unavailable because secure encryption is unavailable.'
         : remember.checked ? 'Creates a saved session with this username and an encrypted password on this computer. Passwords entered in later login prompts are not saved.'
         : 'Connect once without saving. Check the box to keep this login in Sessions.';
@@ -106,6 +127,10 @@ class WelcomeTab {
       if (busy || this.disposed) return;
       if (!host.value.trim()) return host.focus();
       const parsed = target();
+      if (parsed.protocol === 'serial' && !validQuickBaud(parsed.baudRate)) {
+        error.textContent = 'Enter a positive numeric baud rate or auto.';
+        error.classList.remove('hidden'); port.focus(); return;
+      }
       if (parsed.protocol !== 'serial' && !parsed.host) return host.focus();
       const login = ['ssh', 'telnet', 'sftp'].includes(parsed.protocol);
       const q = { ...parsed, ...(login && user.value.trim() ? { username: user.value.trim() } : {}), ...(login && password.value ? { password: password.value } : {}) };
@@ -151,8 +176,8 @@ class WelcomeTab {
       }
     };
     const connect = h('button.btn.primary', { type: 'button', 'data-action': 'quick-connect', onclick: go }, 'Connect');
-    for (const control of [proto, host, port, user, password, remember]) {
-      control.addEventListener(control === proto || control === remember ? 'change' : 'input', () => { revision++; savedAttempt = null; sync(); });
+    for (const control of [proto, host, port, user, password, remember, serialProbe]) {
+      control.addEventListener(control === proto || control.type === 'checkbox' ? 'change' : 'input', () => { revision++; savedAttempt = null; sync(); });
     }
     for (const control of [host, port, user, password]) control.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); void go(); } });
     sync();
@@ -172,9 +197,9 @@ class WelcomeTab {
           'div.qc-form',
           h('label.field', h('span', 'Protocol'), proto),
           h('label.field', h('span', 'Host'), host),
-          h('label.field', h('span', 'Port'), port),
+          h('label.field', portLabel, port),
           userField, passwordField,
-          h('div.qc-actions', rememberField, connect),
+          h('div.qc-actions', rememberField, serialProbeField, connect),
           hint, error
         ),
         this.recentHost,
@@ -611,8 +636,8 @@ class App {
       t.kind === 'terminal' && { label: 'Clone', icon: 'copy', action: () => this.openTerminal(t.spec, t.cloneMeta()) },
       (t.kind === 'terminal' || t.kind === 'capture' || (t.kind === 'tool' && !['ai', 'incidents'].includes(t.toolKind))) && { label: 'Add evidence to incident…', icon: 'file', action: () => this.addToIncident(t) },
       t.kind === 'terminal' && t.protocol === 'ssh' && { label: 'Open SFTP tab', icon: 'file-transfer', disabled: t.state !== 'connected', action: () => this.openSftpFromTerminal(t) },
-      t.kind === 'terminal' && t.state !== 'connected' && { label: 'Reconnect', icon: 'refresh', action: () => t.reconnect() },
-      t.kind === 'terminal' && t.state === 'connected' && { label: 'Disconnect', icon: 'unplug', action: () => t.disconnect() },
+      t.kind === 'terminal' && t.state === 'disconnected' && { label: 'Reconnect', icon: 'refresh', action: () => t.reconnect() },
+      t.kind === 'terminal' && ['connected', 'connecting'].includes(t.state) && { label: t.state === 'connecting' ? 'Cancel connection' : 'Disconnect', icon: 'unplug', action: () => t.disconnect() },
       '-',
       { label: 'Close', icon: 'x', action: () => this.closeTab(t) },
       { label: 'Close others', action: () => this.tabs.filter((x) => x !== t).forEach((x) => this.closeTab(x)) },
@@ -674,6 +699,11 @@ class App {
   }
 
   quickConnect(q) {
+    if (q.protocol === 'serial') {
+      const baudRate = quickBaud(q.baudRate);
+      if (!validQuickBaud(baudRate)) { toast('Enter a positive numeric baud rate or auto.', 'err'); return null; }
+      q = { ...q, baudRate };
+    }
     const name = q.protocol === 'serial' ? q.serialPort : q.host;
     if (q.protocol === 'sftp') return this.quickSftp(q);
     return this.openTerminal({ ...q, auth: 'password', name }, { name, protocol: q.protocol, terminalHighlighting: q.terminalHighlighting });

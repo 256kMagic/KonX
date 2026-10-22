@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.17.0 — 2026-10-22
+
+- Add **Auto detect** for serial baud rate, including saved sessions and Quick Connect.
+- Listen for readable console output by default, with an explicit Enter-probe option for quiet consoles and a fresh sample required before connecting.
+- Report progress, the selected numeric rate, and unresolved silent or ambiguous results while preserving fixed-rate settings and other serial framing options.
+- Cancel detection on disconnect, suppress unconfirmed output and input, and clean up failed or late serial connections.
+- Preserve the initial serial prompt for automatic logging and saved logon actions; retain unfinished driver cleanup for retry before exit or update.
+
+See the [serial auto baud guide](docs/SERIAL_AUTO_BAUD.md) and [release notes](docs/releases/0.17.0.md).
+
 ## 0.16.1 — 2026-10-22
 
 - Replace the updater's temporary `payload.exe` name with `KonX-Setup-<version>.exe` for installed updates and `KonX-<version>-portable.exe` for portable updates.

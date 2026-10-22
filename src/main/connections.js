@@ -5,6 +5,7 @@ const path = require('path');
 const ssh = require('./ssh');
 const { TelnetConnection } = require('./telnet');
 const { SerialConnection } = require('./serial');
+const SERIAL_STARTUP_BYTES = 64 * 1024;
 
 const ANSI_RE = /\x1b\[[0-9;?<>=!]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[PX^_][^\x1b]*\x1b\\|\x1b[()][0-9A-Za-z]|\x1b[@-Z\\-_=>78]|[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g;
 
@@ -219,10 +220,13 @@ class ConnectionManager {
    *   ask(payload) -> Promise         interactive prompt in the renderer
    *   store                           Store instance
    *   defaultLogDir()                 folder for session logs
+   *   SerialConnection                optional serial transport constructor
    */
   constructor(deps) {
     this.deps = deps;
     this.conns = new Map();
+    this.serialOwners = new Set();
+    this.serialCleanupWaiters = new Set();
   }
 
   _hooks(id) {
@@ -279,7 +283,9 @@ class ConnectionManager {
       else if (protocol === 'serial') await this._openSerial(c);
       else throw new Error('Unknown protocol ' + protocol);
       if (c.closed || this.conns.get(id) !== c) throw new Error('Cancelled');
+      if (c.serialClosed) throw new Error('Serial port closed before connection completed');
     } catch (e) {
+      if (c.serialStartupError) e = c.serialStartupError;
       if (this.conns.get(id) === c) {
         this._local(id, `Connection failed: ${e.message}`, '31');
         this._teardown(c, `Connection failed: ${e.message}`);
@@ -292,12 +298,19 @@ class ConnectionManager {
     const info = this.info(id);
     this._status(id, 'connected', { info });
     if (s.logonActions && s.logonActions.length) {
-      const la = new LogonActions(s.logonActions, s, (t) => c.write(t), (m) => this._local(id, m, '33'));
+      const la = new LogonActions(s.logonActions, s, (t) => { if (!c.closed && this.conns.get(id) === c) this.write(id, t); }, (m) => this._local(id, m, '33'));
       c.watchers.push(la);
       la.start();
     }
     if (protocol === 'telnet' && (s.username || s.password) && s.autoLogin !== false) {
       c.watchers.push(new TelnetAutoLogin(s.username, s.password, (t) => c.write(t)));
+    }
+    // Serial may deliver a confirmed prompt before connect() resumes. The same
+    // bytes must reach automatic logging and logon actions after setup, once.
+    if (c.serialStartup) {
+      const startup = c.serialStartup.subarray(0, c.serialStartupUsed);
+      c.serialStartup = null;
+      this._data(c, startup);
     }
     return { ok: true, info };
   }
@@ -380,43 +393,81 @@ class ConnectionManager {
   }
 
   async _openSerial(c) {
-    const p = new SerialConnection(c.session);
+    const Serial = this.deps.SerialConnection || SerialConnection;
+    const p = new Serial(c.session);
+    this.serialOwners.add(p);
     c.serial = p;
     c.write = (d) => p.write(d);
     c.resize = () => {};
     c.end = () => p.close();
     p.on('data', (d) => { if (!c.closed) this._data(c, d); });
-    p.on('close', () => this._teardown(c, 'Serial port closed'));
+    p.on('close', () => {
+      this.serialOwners.delete(p);
+      for (const check of this.serialCleanupWaiters) check();
+      c.serialClosed = true;
+      // Detection may close its native handle before rejecting with the useful
+      // silence/ambiguity reason. Its connect promise owns that pending outcome.
+      if (c.ready) this._teardown(c, 'Serial port closed');
+    });
     p.on('error', (e) => { if (!c.closed) this._local(c.id, `Serial error: ${e.message}`, '31'); });
+    p.on('baud-detect', (progress) => {
+      if (c.closed || c.ready || this.conns.get(c.id) !== c) return;
+      this._status(c.id, 'connecting', { message: progress.message, baudDetect: progress });
+      // Candidate scans update status only; milestones keep the console useful
+      // without printing a line for every detection sample.
+      if (progress.phase === 'complete') this._local(c.id, progress.message, '36');
+    });
     await p.connect();
-    if (c.closed) {
-      p.close();
-      throw new Error('Cancelled');
-    }
+    if (c.closed || this.conns.get(c.id) !== c) throw new Error('Cancelled');
+    if (c.serialClosed) throw new Error('Serial port closed before connection completed');
   }
 
   _data(c, buf) {
-    if (c.logger) c.logger.write(buf);
-    if (c.watchers.length) {
-      const text = c.decoder.decode(buf, { stream: true });
-      for (const w of c.watchers) w.feed(text);
+    if (c.closed || this.conns.get(c.id) !== c) return;
+    if (c.protocol === 'serial' && !c.ready) {
+      const used = c.serialStartupUsed || 0;
+      if (buf.length > SERIAL_STARTUP_BYTES - used) {
+        c.serialStartupError = new Error('Serial startup output exceeded 64 KiB before the connection was ready. Reconnect and try again.');
+        this._local(c.id, `Connection failed: ${c.serialStartupError.message}`, '31');
+        this._teardown(c, `Connection failed: ${c.serialStartupError.message}`);
+        return;
+      }
+      if (!c.serialStartup) c.serialStartup = Buffer.alloc(SERIAL_STARTUP_BYTES);
+      buf.copy(c.serialStartup, used);
+      c.serialStartupUsed = used + buf.length;
+      return;
     }
+    if (c.logger) c.logger.write(buf);
     c.pending.push(buf);
     if (!c.flushScheduled) {
       c.flushScheduled = true;
       setImmediate(() => {
         c.flushScheduled = false;
-        if (!c.pending.length) return;
-        const out = c.pending.length === 1 ? c.pending[0] : Buffer.concat(c.pending);
-        c.pending = [];
-        this.deps.emit('conn:data', c.id, out);
+        this._flush(c);
       });
     }
+    if (c.watchers.length) {
+      const text = c.decoder.decode(buf, { stream: true });
+      for (const w of c.watchers) w.feed(text);
+    }
+  }
+
+  _flush(c) {
+    if (!c.pending.length) return;
+    const pending = c.pending;
+    c.pending = [];
+    if (this.conns.get(c.id) !== c) return;
+    this.deps.emit('conn:data', c.id, pending.length === 1 ? pending[0] : Buffer.concat(pending));
   }
 
   _teardown(c, reason) {
     if (c.closed) return;
     c.closed = true;
+    c.ready = false;
+    c.serialStartup = null;
+    // Closing owns transport cleanup on failed opens as well as user disconnect.
+    // Mark closed first: native close may synchronously emit another close event.
+    try { if (c.end) c.end(); } catch {}
     for (const w of c.watchers) w.stop && w.stop();
     if (c.stopForwards) c.stopForwards();
     if (c.logger) {
@@ -424,8 +475,11 @@ class ConnectionManager {
       c.logger.close();
       c.logger = null;
     }
-    if (this.conns.get(c.id) === c) this.conns.delete(c.id);
-    this._status(c.id, 'disconnected', { message: reason });
+    this._flush(c);
+    if (this.conns.get(c.id) === c) {
+      this.conns.delete(c.id);
+      this._status(c.id, 'disconnected', { message: reason });
+    }
   }
 
   info(id) {
@@ -438,9 +492,10 @@ class ConnectionManager {
       port: s.port || defaultPort(c.protocol),
       username: c.sshInfo ? c.sshInfo.username : s.username,
       serialPort: s.serialPort,
-      baudRate: s.baudRate,
+      baudRate: c.serial?.baudRate ?? s.baudRate,
       logging: c.logger ? c.logger.file : null,
     };
+    if (c.serial?.autoBaud) out.autoBaud = c.serial.autoBaud;
     if (c.sshInfo) {
       const a = c.sshInfo.algorithms || {};
       out.cipher = a.cs && a.cs.cipher;
@@ -453,7 +508,7 @@ class ConnectionManager {
 
   write(id, data, binary) {
     const c = this.conns.get(id);
-    if (!c || c.closed || !c.write) return;
+    if (!c || c.closed || !c.ready || !c.write) return;
     c.write(binary ? Buffer.from(data, 'binary') : Buffer.from(data, 'utf8'));
   }
 
@@ -466,6 +521,7 @@ class ConnectionManager {
 
   sendBreak(id) {
     const c = this.conns.get(id);
+    if (!c || c.closed || !c.ready) return;
     if (c && c.serial) c.serial.sendBreak();
     else if (c && c.telnet) c.telnet.sendBreak();
   }
@@ -518,14 +574,39 @@ class ConnectionManager {
   close(id) {
     const c = this.conns.get(id);
     if (!c) return;
-    try {
-      c.end && c.end();
-    } catch {}
     this._teardown(c, 'Disconnected');
   }
 
   closeAll() {
+    const detached = new Set(this.serialOwners);
+    for (const c of this.conns.values()) if (c.serial) detached.delete(c.serial);
     for (const id of [...this.conns.keys()]) this.close(id);
+    for (const serial of detached) { try { serial.close(); } catch {} }
+  }
+
+  get hasSerialOwnership() { return this.serialOwners.size > 0; }
+
+  /** Native close acknowledgement, not tab removal, releases serial ownership. */
+  waitForSerialCleanup(timeoutMs = 5000) {
+    if (!this.hasSerialOwnership) return Promise.resolve();
+    const wait = Number.isFinite(timeoutMs) ? Math.max(1, Math.min(30000, Math.floor(timeoutMs))) : 5000;
+    return new Promise((resolve, reject) => {
+      const check = () => {
+        if (this.hasSerialOwnership) return;
+        clearTimeout(timer);
+        this.serialCleanupWaiters.delete(check);
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        this.serialCleanupWaiters.delete(check);
+        if (!this.hasSerialOwnership) { resolve(); return; }
+        const reasons = [...new Set([...this.serialOwners].map(serial => serial.cleanupError?.message).filter(Boolean))];
+        reject(Object.assign(new Error(`Serial cleanup has not completed for ${this.serialOwners.size} connection(s).${reasons.length ? ' ' + reasons.join('; ') : ''}`), { code: 'SERIAL_CLEANUP_PENDING' }));
+      }, wait);
+      this.serialCleanupWaiters.add(check);
+      for (const serial of this.serialOwners) { try { serial.close(); } catch {} }
+      check();
+    });
   }
 }
 

@@ -1,6 +1,6 @@
 # KonX User Guide
 
-This guide covers KonX 0.16.1 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one window. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
+This guide covers KonX 0.17.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one window. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
 
 Version 0.4.0 adds [AI & Knowledge](AI_KNOWLEDGE_GUIDE.md): provider API keys, explanations of selected tool output, and an offline reference library backed by a background SQLite vector index. Older 0.3.0 builds do not include this feature.
 
@@ -29,6 +29,8 @@ Version 0.15.2 adds a prominent credential-retention checkbox and optional saved
 Version 0.16.0 adds [Cisco terminal highlighting](CISCO_HIGHLIGHTING.md): automatic error, interface-state, and IP-address colors with a live console switch and saved preferences. See the [release notes](releases/0.16.0.md).
 
 Version 0.16.1 replaces the generic updater filename with KonX and the target version. See [Updating KonX](UPDATING.md#update-filenames-in-windows-prompts) and the [release notes](releases/0.16.1.md).
+
+Version 0.17.0 adds [serial auto baud detection](SERIAL_AUTO_BAUD.md): a saved-session Auto detect choice, Quick Connect support, optional Enter probes, and visible progress. See the [release notes](releases/0.17.0.md).
 
 For downloads, build instructions, and project information, see the [README](../README.md) and [GitHub releases](https://github.com/256kMagic/KonX/releases).
 
@@ -70,7 +72,7 @@ Examples use reserved documentation addresses such as `192.0.2.10`, `198.51.100.
 
 ## Install, run, and update
 
-Download a Windows x64 executable from the [0.16.1 release](https://github.com/256kMagic/KonX/releases/tag/v0.16.1).
+Download a Windows x64 executable from the [0.17.0 release](https://github.com/256kMagic/KonX/releases/tag/v0.17.0).
 
 | Download | Use it when | How to start |
 | --- | --- | --- |
@@ -79,7 +81,7 @@ Download a Windows x64 executable from the [0.16.1 release](https://github.com/2
 
 The portable executable still uses a Windows user profile for settings, saved sessions, and editor recovery. It does **not** automatically place all data beside the executable or make encrypted credentials transferable between computers. See [Application data and backups](#application-data-and-backups).
 
-**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.16.1.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
+**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.17.0.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
 
 For updates from **installed 0.6.2 or later**, or **portable 0.6.0 or later**:
 
@@ -92,7 +94,7 @@ From 0.16.1, staged update filenames include KonX and the version being installe
 
 Installed copies retain their installation folder and mode. Portable copies retain their filename and location; the containing folder must be writable. Both continue to use the existing Windows profile. No update is applied just because you close KonX, and no release checks run in the background. See [Updating KonX](UPDATING.md) for cancellation, failures, and release preparation.
 
-Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.16.1 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
+Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.17.0 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
 
 Npcap is optional for packet capture; SSH, SFTP, Notepad, and the other tools do not require it. Updating KonX does not install or update Npcap.
 
@@ -214,8 +216,10 @@ Review imported sessions before connecting, especially non-default ports, identi
 | `raw://127.0.0.1:9000` | Raw TCP to a local test service |
 | `sftp://operator@192.0.2.10:22` | SFTP using password authentication |
 | `COM3` | Serial with the quick-connect default of 9600 baud |
+| `COM3@115200` | Serial at a fixed 115200 baud |
+| `COM3@auto` | Serial with automatic baud detection |
 
-Use a saved session for key authentication, agent authentication, detailed serial settings, a jump host, logon actions, forwarding, or automatic logging. For quick serial connections, the Home form lets you select **Serial**, enter the COM port, and use its **Port** field for baud rate.
+Use a saved session for key authentication, agent authentication, detailed serial settings, a jump host, logon actions, forwarding, or automatic logging. For quick serial connections, the Home form lets you select **Serial**, enter the COM port, and enter a numeric baud rate or `auto`. See [Serial auto baud](SERIAL_AUTO_BAUD.md).
 
 ### SSH connection options
 
@@ -261,11 +265,13 @@ Telnet and Raw TCP do not provide SSH's encryption or server identity verificati
 
 Choose **Serial**, select or type the COM port, and use the refresh control to list ports. Match the attached device's documented settings:
 
-- Baud: 1200 through 921600 from the provided list; default 9600.
+- Baud: **Auto detect**, or a fixed rate from 1200 through 921600; default 9600.
 - Data bits: 5, 6, 7, or 8; default 8.
 - Parity: None, Even, Odd, Mark, or Space.
 - Stop bits: 1 or 2.
 - Flow control: None, RTS/CTS, or XON/XOFF.
+
+With **Auto detect**, KonX listens at common rates and confirms a single readable result before connecting. Enable **Send Enter while detecting** if the console needs Enter to produce output. Click **Cancel** in the progress overlay or choose **Cancel connection** from the tab or terminal menu to stop detection. A silent, ambiguous, or unreadable port produces an explanation without selecting a rate. Detection changes only baud rate and keeps the saved Auto detect preference. See the [serial guide](SERIAL_AUTO_BAUD.md) for limits and troubleshooting.
 
 The serial library is an optional build dependency. If KonX reports **Serial support is not available in this build**, use a build that includes it. Another program holding the COM port can also prevent a connection.
 
@@ -740,7 +746,7 @@ Run this from the folder containing the portable executable. The environment var
 | **Unexpected host-key change** | Compare the old and new fingerprints with a trusted administrator. Replace the saved key only after establishing the reason. |
 | **Imported sessions behave differently** | Review the limited importer support above. Enter missing credentials, jump-host links, forwards, terminal settings, and actions in the session editor. |
 | **Serial port missing or cannot open** | Refresh the list; verify drivers, cable, COM number, and serial parameters; close other programs using the port. Check whether the build includes serial support. |
-| **Garbage characters in a serial console** | Match baud, data bits, parity, stop bits, and flow control to the device. |
+| **Garbage characters in a serial console** | Match data bits, parity, stop bits, and flow control to the device. Select a known baud or try Auto detect while readable console output is available. See [Serial auto baud](SERIAL_AUTO_BAUD.md). |
 | **An SFTP tab closes with its SSH terminal** | This is expected for SFTP opened from that terminal's shared transport. Use saved-session **Connect SFTP** for a separate connection. |
 | **SFTP transfer failed** | Check the transfer row's error, destination path/permissions, disk space, and transport. Reconnect if needed, then reselect and re-queue the source. Unsafe local filenames must be renamed on the server. |
 | **Remote save failed in Notepad** | Keep the document open and save a local copy if needed. Check whether its original SFTP tab is still connected. Reopening SFTP does not automatically rebind an old remote document; open the remote file again and deliberately transfer your changes. |

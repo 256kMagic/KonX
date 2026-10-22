@@ -24,6 +24,7 @@
     if (logging) checks.logging = logging;
     if (quickLogin) checks.quickLogin = quickLogin;
     if (ciscoHighlighting) checks.ciscoHighlighting = ciscoHighlighting;
+    if (serialAutoBaud) checks.serialAutoBaud = serialAutoBaud;
     // Portable launchers do not necessarily forward their app's stdout. Write
     // test evidence only to the parent-provided private artifact file.
     await api.invoke('np:write', options.resultPath, new TextEncoder().encode(JSON.stringify(checks, null, 2)));
@@ -67,13 +68,52 @@
   const supportsQuickLogin = versionParts[0] > 0 || versionParts[1] > 15 ||
     (versionParts[1] === 15 && parseInt(info.version.split('.')[2], 10) >= 2);
   const supportsCiscoHighlighting = versionParts[0] > 0 || versionParts[1] >= 16;
+  const supportsSerialAutoBaud = versionParts[0] > 0 || versionParts[1] >= 17;
   let sessionManagement = null;
   let logging = null;
   let quickLogin = null;
   let ciscoHighlighting = null;
+  let serialAutoBaud = null;
   const sessionName = 'Package smoke synthetic saved session';
+  const serialName = 'Package smoke serial auto fixture';
+  const serialControl = name => document.querySelector('.modal [name="' + name + '"]');
+  const setSerialControl = (name, value) => {
+    const input = serialControl(name); assert(input, 'Missing serial editor input: ' + name);
+    input.value = String(value); input.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  const serialFooter = label => {
+    const button = [...document.querySelectorAll('.modal footer button')].find(button => button.textContent === label);
+    assert(button, 'Missing serial editor action: ' + label); button.click();
+  };
+  const checkSavedSerialEditor = async saved => {
+    const editing = app.editSession(saved);
+    await until(() => !!serialControl('baudRate'), 'saved serial editor');
+    assert(serialControl('baudRate').value === 'auto' && serialControl('serialAutoBaudProbe')?.checked === true,
+      'Serial automatic rate and explicit Enter probe did not reopen');
+    assert(serialControl('dataBits').value === '7' && serialControl('parity').value === 'even' &&
+      serialControl('stopBits').value === '2' && serialControl('flowControl').value === 'xonxoff', 'Serial framing changed on reopen');
+    serialFooter('Cancel'); await editing;
+  };
 
   if (options.phase === 'save') {
+    if (supportsSerialAutoBaud) {
+      assert(info.serial === true, 'Packaged native serial module is unavailable');
+      const terminalCount = app.tabs.filter(tab => tab.kind === 'terminal').length;
+      const editing = app.editSession(); await until(() => !!serialControl('baudRate'), 'new serial editor');
+      setSerialControl('protocol', 'serial');
+      assert(serialControl('baudRate').value === '9600' && !serialControl('serialAutoBaudProbe').checked,
+        'Serial auto detection or Enter probes must not be enabled by default');
+      setSerialControl('name', serialName); setSerialControl('serialPort', 'COM9999'); setSerialControl('baudRate', 'auto');
+      const probe = serialControl('serialAutoBaudProbe');
+      assert(!probe.disabled && probe.getBoundingClientRect().width > 0, 'Explicit Enter-probe checkbox is unavailable'); probe.click();
+      setSerialControl('dataBits', 7); setSerialControl('parity', 'even'); setSerialControl('stopBits', 2); setSerialControl('flowControl', 'xonxoff');
+      serialFooter('Save'); await editing;
+      const saved = app.sessions.data.sessions.find(session => session.name === serialName);
+      assert(saved?.baudRate === 'auto' && saved.serialAutoBaudProbe === true, 'Serial editor did not save automatic detection settings');
+      await checkSavedSerialEditor(saved);
+      assert(app.tabs.filter(tab => tab.kind === 'terminal').length === terminalCount, 'Saving a serial session opened a connection');
+      serialAutoBaud = { savedId: saved.id, nativeSerialAvailable: true, manualDefault: true, autoAndProbeSaved: true, framingRetained: true, reopened: true, noPortOpened: true };
+    }
     if (supportsSessionManagement) {
       const saved = await api.invoke('sessions:save', { name: sessionName, protocol: 'ssh', host: '192.0.2.15', port: 22, username: 'fixture-user', auth: 'password', password: options.token + '-session' });
       assert(saved.hasPassword && saved.username === 'fixture-user' && !Object.hasOwn(saved, 'password') && !Object.hasOwn(saved, 'passwordEnc'), 'Saved session exposed credentials or omitted its username');
@@ -379,6 +419,15 @@
     assert(ai.documentContent.textContent.includes('cached evidence'), 'Packaged local article did not render');
     await complete({ phase: options.phase, version: info.version, tools: supportsComparison ? 11 : supportsRunbooks ? 10 : supportsRemoteCapture ? 9 : supportsIncidents ? 8 : supportsRtp ? 7 : supportsSnapshots ? 6 : supportsDeviceInspector ? 5 : 4, ...(deviceInspector ? { deviceInspector } : {}), ...(deviceSnapshots ? { deviceSnapshots } : {}), ...(rtpMedia ? { rtpMedia } : {}), ...(incidentWorkspace ? { incidentWorkspace } : {}), ...(remoteCapture ? { remoteCapture } : {}), ...(runbooks ? { runbooks } : {}), ...(captureComparison ? { captureComparison } : {}), assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
   } else if (options.phase === 'forget') {
+    if (supportsSerialAutoBaud) {
+      assert(info.serial === true, 'Native serial support disappeared after restart');
+      await app.sessions.load(); const saved = app.sessions.data.sessions.find(session => session.name === serialName);
+      assert(saved?.baudRate === 'auto' && saved.serialAutoBaudProbe === true, 'Automatic serial settings did not survive restart');
+      await checkSavedSerialEditor(saved);
+      await api.invoke('sessions:delete', saved.id); await app.sessions.load();
+      assert(!app.sessions.data.sessions.some(session => session.id === saved.id), 'Synthetic serial session was not removed');
+      serialAutoBaud = { savedId: saved.id, persistedAcrossRestart: true, reopened: true, removed: true, noPortOpened: true };
+    }
     if (supportsCiscoHighlighting) {
       assert(app.settings.terminalHighlighting === 'off', 'Cisco highlighting preference did not survive packaged restart');
       ciscoHighlighting = { persistedAcrossRestart: true };

@@ -27,6 +27,7 @@ export class TerminalTab {
     this.state = 'idle';
     this.info = null;
     this.disposed = false;
+    this.connectionGeneration = 0;
     this.visibilityGeneration = 0;
     this.logRequest = null;
     this.lastLogPath = '';
@@ -121,15 +122,21 @@ export class TerminalTab {
 
   async connect() {
     if (this.disposed) return;
+    const generation = ++this.connectionGeneration;
     this._hideOverlay();
     this.state = 'connecting';
+    this.statusMessage = 'Connecting…';
+    if (this.protocol === 'serial') {
+      this.info = null;
+      this._showConnecting(this.statusMessage);
+    }
     this.logRequest = null;
     this.logError = '';
     this._renderLogging();
     this.app.tabStateChanged(this);
     this.refit();
     const r = await api.invoke('conn:open', this.id, this.spec, { cols: this.term.cols, rows: this.term.rows }).catch((e) => ({ ok: false, error: errMsg(e) }));
-    if (this.disposed) return;
+    if (this.disposed || generation !== this.connectionGeneration) return;
     if (!r.ok && this.state !== 'disconnected') this.onStatus({ state: 'disconnected', message: r.error });
   }
 
@@ -142,11 +149,13 @@ export class TerminalTab {
   onStatus(st) {
     if (this.disposed) return;
     this.state = st.state;
+    this.statusMessage = st.message || '';
     if (st.info) this.info = st.info;
     if (this.info?.logging) this.lastLogPath = this.info.logging;
     if (st.state === 'connected') {
       this._hideOverlay();
     }
+    if (st.state === 'connecting' && this.protocol === 'serial') this._showConnecting(this.statusMessage || 'Connecting…');
     if (st.state === 'disconnected') {
       this.logRequest = null;
       if (this.info) this.info = { ...this.info, logging: null };
@@ -165,6 +174,7 @@ export class TerminalTab {
   }
 
   disconnect() {
+    ++this.connectionGeneration;
     api.invoke('conn:close', this.id);
   }
 
@@ -190,6 +200,18 @@ export class TerminalTab {
       h('button.btn.sm.primary', { onclick: () => this.reconnect() }, icon('refresh'), 'Reconnect'),
       h('span.hint', 'or press Enter')
     );
+    this.wrap.append(this.overlay);
+  }
+
+  _showConnecting(message) {
+    if (this.overlay?.classList.contains('term-connecting')) {
+      this.overlay.querySelector('.msg').textContent = message;
+      return;
+    }
+    this._hideOverlay();
+    this.overlay = h('div.term-overlay.term-connecting',
+      h('span.msg', { role: 'status' }, message),
+      h('button.btn.sm', { type: 'button', 'aria-label': 'Cancel serial connection', onclick: () => this.disconnect() }, 'Cancel'));
     this.wrap.append(this.overlay);
   }
 
@@ -283,10 +305,10 @@ export class TerminalTab {
   statusSegments() {
     const i = this.info || {};
     const segs = [];
-    const state = this.state === 'connected' ? ['ok', 'Connected'] : this.state === 'connecting' ? ['warn', 'Connecting'] : ['err', 'Disconnected'];
+    const state = this.state === 'connected' ? ['ok', 'Connected'] : this.state === 'connecting' ? ['warn', this.statusMessage || 'Connecting'] : ['err', 'Disconnected'];
     segs.push({ icon: this.state === 'connected' ? 'plug' : 'unplug', text: state[1], cls: state[0] });
     segs.push({ text: PROTO_LABEL[this.protocol] || this.protocol });
-    if (this.protocol === 'serial') segs.push({ text: `${i.serialPort || ''} ${i.baudRate || ''}`.trim() });
+    if (this.protocol === 'serial') segs.push({ text: `${i.serialPort || ''} ${i.baudRate ? i.baudRate + ' baud' : ''}${i.autoBaud ? ' (detected)' : ''}`.trim() });
     else if (i.host) segs.push({ text: `${i.username ? i.username + '@' : ''}${i.host}:${i.port}` });
     if (i.via) segs.push({ icon: 'route', text: 'via ' + i.via });
     if (i.cipher) segs.push({ icon: 'lock', text: i.cipher });
@@ -466,8 +488,8 @@ export class TerminalTab {
       { label: this._highlightingMode() === 'cisco' ? 'Turn Cisco colors off' : 'Turn Cisco colors on', action: () => this.toggleCiscoHighlighting() },
       (this.protocol === 'serial' || this.protocol === 'telnet') && { label: 'Send Break', disabled: !connected, action: () => api.invoke('conn:break', this.id) },
       '-',
-      connected
-        ? { label: 'Disconnect', icon: 'unplug', action: () => this.disconnect() }
+      connected || this.state === 'connecting'
+        ? { label: this.state === 'connecting' ? 'Cancel connection' : 'Disconnect', icon: 'unplug', action: () => this.disconnect() }
         : { label: 'Reconnect', icon: 'refresh', action: () => this.reconnect() },
       { label: 'Clone Tab', icon: 'copy', action: () => this.app.openTerminal(this.spec, this.cloneMeta()) },
     ]);
@@ -475,6 +497,7 @@ export class TerminalTab {
 
   dispose() {
     if (this.disposed) return;
+    ++this.connectionGeneration;
     this.disposed = true;
     this.hide();
     this.ro.disconnect();

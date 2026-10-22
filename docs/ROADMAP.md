@@ -26,6 +26,8 @@ Version 0.16.0 adds Cisco terminal highlighting with a live switch and saved glo
 
 Version 0.16.1 gives staged update executables a KonX name and target version. See the [update guide](UPDATING.md) and [release validation](releases/0.16.1.md).
 
+Version 0.17.0 adds serial baud-rate detection with explicit probing, visible progress, cancellation, and readable-output confirmation. See the [serial guide](SERIAL_AUTO_BAUD.md) and [release validation](releases/0.17.0.md).
+
 ## Scope
 
 Device collection starts with connected Cisco IOS/IOS-XE SSH sessions and fixed read-only commands in a separate channel. Trace results show candidates and unresolved links when evidence is incomplete. Imported reports and a synthetic demo support offline use.

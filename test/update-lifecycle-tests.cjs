@@ -56,7 +56,12 @@ function fixture() {
     loadFile() {}
     show() {}
   }
-  const connections = { conns: new Map(), closeAll() { calls.push('close-connections'); this.conns.clear(); } };
+  const connections = {
+    conns: new Map(), hasSerialOwnership: false,
+    open() { calls.push('open-connection'); return { ok: true }; },
+    closeAll() { calls.push('close-connections'); this.conns.clear(); },
+    async waitForSerialCleanup() { calls.push('close-serial'); this.hasSerialOwnership = false; this.conns.clear(); },
+  };
   const sftp = { sessions: new Map(), pending: new Map(), queue: { active: new Map(), jobs: [] }, closeAll() { calls.push('close-sftp'); } };
   const capture = { sessions: new Map(), startRequests: new Map(), builtin: { sessions: new Map(), startRequests: new Map() }, stopAll() { calls.push('stop-capture'); } };
   const knowledge = { busy: false, close() { calls.push('close-knowledge'); return Promise.resolve(); } };

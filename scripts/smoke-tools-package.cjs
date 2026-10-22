@@ -161,12 +161,22 @@ async function main() {
   const supportsLoggingSwitch = major > 0 || minor > 15 || (minor === 15 && patch >= 1);
   const supportsQuickLogin = major > 0 || minor > 15 || (minor === 15 && patch >= 2);
   const supportsCiscoHighlighting = major > 0 || minor >= 16;
+  const supportsSerialAutoBaud = major > 0 || minor >= 17;
   let logging, quickLogin;
   try {
     result.nativeLoader = await nativeLoader(executable);
     if (supportsLoggingSwitch) logging = await loggingPeer(run);
     if (supportsQuickLogin) quickLogin = await quickLoginPeer();
     result.phases.push(await launch(executable, root, run, profile, version, 'save', logging?.options, quickLogin?.options));
+    if (supportsSerialAutoBaud) {
+      const checks = result.phases[0].checks.serialAutoBaud;
+      assert(checks?.nativeSerialAvailable && checks?.manualDefault && checks?.autoAndProbeSaved && checks?.framingRetained && checks?.reopened && checks?.noPortOpened,
+        'Packaged automatic serial settings did not pass editor checks');
+      const saved = JSON.parse(fs.readFileSync(path.join(profile, 'sessions.json'), 'utf8')).sessions.find(session => session.id === checks.savedId);
+      assert(saved?.baudRate === 'auto' && saved.serialAutoBaudProbe === true && Number(saved.dataBits) === 7 && saved.parity === 'even' &&
+        Number(saved.stopBits) === 2 && saved.flowControl === 'xonxoff', 'Serial editor did not persist the selected detection and framing settings');
+      result.serialAutoBaud = checks;
+    }
     if (quickLogin) {
       const checks = result.phases[0].checks.quickLogin;
       assert(checks?.optInInitiallyOff && checks?.connected && checks?.passwordCleared && checks?.publicMetadataPrivate,
@@ -220,6 +230,14 @@ async function main() {
       result.sessionCiphertextStored = true;
     }
     result.phases.push(await launch(executable, root, run, profile, version, 'forget', null, quickLogin?.options));
+    if (supportsSerialAutoBaud) {
+      const checks = result.phases[1].checks.serialAutoBaud;
+      assert(checks?.savedId === result.serialAutoBaud.savedId && checks?.persistedAcrossRestart && checks?.reopened && checks?.removed && checks?.noPortOpened,
+        'Packaged automatic serial settings did not reopen after restart');
+      assert(!JSON.parse(fs.readFileSync(path.join(profile, 'sessions.json'), 'utf8')).sessions.some(session => session.id === checks.savedId),
+        'Synthetic serial session remained on disk');
+      Object.assign(result.serialAutoBaud, { persistedAcrossRestart: true, removed: true });
+    }
     if (supportsCiscoHighlighting) {
       assert(result.phases[1].checks.ciscoHighlighting?.persistedAcrossRestart, 'Cisco setting did not survive the packaged restart');
       result.ciscoHighlighting.persistedAcrossRestart = true;

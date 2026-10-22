@@ -518,6 +518,10 @@ const fakeCrypt = {
   await require('./terminal-logging-ui-tests.cjs').runTerminalLoggingUiTests(test);
   await require('./cisco-highlighting-tests.cjs').runCiscoHighlightingTests(test);
   await require('./cisco-highlighting-ui-tests.cjs').runCiscoHighlightingUiTests(test);
+  await require('./serial-autobaud-tests.cjs').runSerialAutoBaudTests(test);
+  await require('./serial-connections-tests.cjs').runSerialConnectionsTests(test);
+  await require('./serial-lifecycle-tests.cjs').runSerialLifecycleTests(test);
+  await require('./serial-ui-tests.cjs').runSerialUiTests(test);
 
   const failed = results.filter((r) => !r[0]);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
