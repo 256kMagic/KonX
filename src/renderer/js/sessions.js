@@ -303,7 +303,7 @@ export async function editSessionDialog(app, input = {}) {
     { name: 'name', label: 'Name', placeholder: 'core-sw1', span: 2 },
     { name: 'folder', label: 'Folder', placeholder: '(top level)' },
     { name: 'protocol', label: 'Protocol', type: 'select', options: [['ssh', 'SSH2'], ['telnet', 'Telnet'], ['raw', 'Raw TCP'], ['serial', 'Serial']] },
-    { name: 'host', label: 'Hostname or IP', placeholder: '10.0.0.1', span: 2 },
+    { name: 'host', label: 'Hostname or IP', placeholder: '10.0.0.1' },
     { name: 'port', label: 'Port', type: 'number' },
     { name: 'username', label: 'Username' },
   ], s);
@@ -336,14 +336,15 @@ export async function editSessionDialog(app, input = {}) {
 
   // ---- authentication
   const pw = h('input', { type: 'password', name: 'password', 'aria-label': 'Password', placeholder: s.hasPassword ? 'Saved password — leave blank to keep' : 'Enter a password or leave blank to be asked', autocomplete: 'off' });
-  const savePw = h('input', { type: 'checkbox', name: 'savePassword', 'aria-label': 'Save password on this computer', checked: canSaveSecrets && (s.hasPassword || isNew), disabled: !canSaveSecrets });
+  const savePw = h('input', { type: 'checkbox', name: 'savePassword', 'aria-label': 'Remember username and password', checked: canSaveSecrets && (s.hasPassword || isNew), disabled: !canSaveSecrets });
   const removePw = h('input', { type: 'checkbox', name: 'removePassword', 'aria-label': 'Remove saved password' });
   const credentialHint = h('div.hint');
+  const savedStatus = h('span.session-saved-status', { role: 'status' });
   const usernameField = general.inputs.username.closest('.field');
   const credentials = h('section.session-credentials', { 'aria-label': 'Login credentials' },
-    h('h3', 'Login credentials'),
+    h('div.session-credentials-head', h('h3', 'Login credentials'), savedStatus),
+    h('label.check.session-remember', savePw, 'Remember username and password'),
     h('div.grid2', usernameField, h('label.field', h('span', 'Password'), pw)),
-    h('label.check', savePw, 'Save password on this computer'),
     s.hasPassword ? h('label.check', removePw, 'Remove saved password') : null,
     credentialHint);
   const auth = buildFields([
@@ -403,7 +404,7 @@ export async function editSessionDialog(app, input = {}) {
   const notes = buildFields([{ name: 'notes', label: 'Notes', type: 'textarea', rows: 6, span: 2 }], s);
 
   const panes = {
-    General: h('div.mpane.active', h('div.grid3', general.els.filter(field => field !== usernameField), folderList), credentials, serialBox),
+    General: h('div.mpane.active', h('div.grid3.session-identity', general.els.filter(field => field !== usernameField), folderList), credentials, serialBox),
     Authentication: authBox,
     Connection: h('div.mpane', h('div.grid2', conn.els), h('div.hint', 'A jump host is another saved SSH session; this session is reached through it.')),
     'Logon Actions': h('div.mpane', h('div.hint', 'Runs after connecting: wait for each prompt, then send the reply followed by Enter.'), actions.el),
@@ -423,11 +424,12 @@ export async function editSessionDialog(app, input = {}) {
   const proto = general.inputs.protocol;
   const syncCredentials = () => {
     savePw.disabled = !canSaveSecrets || removePw.checked;
+    savedStatus.textContent = removePw.checked ? 'Password will be removed' : s.hasPassword ? 'Password saved' : 'No saved password';
     const messages = [];
     if (removePw.checked) messages.push('The saved password will be removed when you save. A typed password is used only by Save & Connect.');
     else if (!canSaveSecrets) messages.push('Password saving is unavailable because secure encryption is unavailable. A typed password is used only by Save & Connect. Username is saved with the session.');
-    else if (savePw.checked) messages.push('Passwords are saved encrypted with Windows DPAPI. Username is saved with the session.');
-    else messages.push('A typed password is used only by Save & Connect and is not saved. Username is saved with the session.');
+    else if (savePw.checked) messages.push('Username is always saved with the session. A typed password is saved encrypted on this computer.');
+    else messages.push('Username is always saved with the session. A typed password is used only by Save & Connect and is not saved.');
     if (s.hasPassword && !removePw.checked) messages.push('Leave Password blank to keep the saved password. Select Remove saved password to delete it.');
     if (proto.value === 'telnet') messages.push('Telnet uses these credentials to answer login prompts automatically.');
     else if (proto.value === 'ssh') messages.push(`SSH method: ${auth.inputs.auth.selectedOptions[0].textContent}. Change it on Authentication.`);

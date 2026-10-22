@@ -59,23 +59,103 @@ class WelcomeTab {
     this.title = 'Home';
     this.icon = 'home';
     this.state = 'idle';
+    this.disposed = false;
     this.el = h('div.view');
     this.render();
   }
 
   render() {
     const app = this.app;
-    const proto = h('select.input', [['ssh', 'SSH2'], ['telnet', 'Telnet'], ['raw', 'Raw TCP'], ['serial', 'Serial']].map(([v, l]) => h('option', { value: v }, l)));
+    const proto = h('select.input', [['ssh', 'SSH2'], ['sftp', 'SFTP'], ['telnet', 'Telnet'], ['raw', 'Raw TCP'], ['serial', 'Serial']].map(([v, l]) => h('option', { value: v }, l)));
     const host = h('input.input', { placeholder: 'Hostname, IP or COM port', spellcheck: false });
     const port = h('input.input', { placeholder: '22', type: 'number' });
-    const user = h('input.input', { placeholder: 'Username (optional)', spellcheck: false });
-    proto.addEventListener('change', () => (port.placeholder = proto.value === 'ssh' ? '22' : proto.value === 'serial' ? 'baud' : '23'));
-    const go = () => {
-      if (!host.value.trim()) return host.focus();
-      if (proto.value === 'serial') app.quickConnect({ protocol: 'serial', serialPort: host.value.trim(), baudRate: Number(port.value) || 9600 });
-      else app.quickConnect({ ...parseQuick(host.value, proto.value), ...(port.value ? { port: Number(port.value) } : {}), ...(user.value.trim() ? { username: user.value.trim() } : {}) });
+    const user = h('input.input', { name: 'quickUsername', 'aria-label': 'Quick connect username', placeholder: 'Username (optional)', spellcheck: false, autocomplete: 'off' });
+    const password = h('input.input', { name: 'quickPassword', 'aria-label': 'Quick connect password', type: 'password', placeholder: 'Password (optional)', autocomplete: 'off' });
+    const remember = h('input', { name: 'saveQuickSession', 'aria-label': 'Save session and remember login', type: 'checkbox' });
+    const userField = h('label.field', h('span', 'Username'), user);
+    const passwordField = h('label.field', h('span', 'Password'), password);
+    const rememberField = h('label.check.qc-remember', remember, 'Save session and remember login');
+    const hint = h('div.hint.qc-hint');
+    const error = h('div.qc-error.errbox.hidden', { role: 'alert' });
+    let busy = false, revision = 0, savedAttempt = null;
+    this.clearQuickPassword = () => { password.value = ''; };
+    const target = () => {
+      const parsed = parseQuick(host.value, proto.value);
+      if (parsed.protocol === 'serial') return { protocol: 'serial', serialPort: parsed.serialPort || parsed.host || host.value.trim(), baudRate: Number(port.value) || 9600 };
+      return { ...parsed, ...(port.value ? { port: Number(port.value) } : {}) };
     };
-    for (const i of [host, port, user]) i.addEventListener('keydown', (e) => e.key === 'Enter' && go());
+    const sync = () => {
+      const protocol = target().protocol;
+      const login = ['ssh', 'telnet', 'sftp'].includes(protocol);
+      port.placeholder = protocol === 'serial' ? 'baud' : protocol === 'telnet' || protocol === 'raw' ? '23' : '22';
+      if (!login) { user.value = ''; password.value = ''; remember.checked = false; }
+      if (app.info.encryption !== true) remember.checked = false;
+      userField.classList.toggle('hidden', !login);
+      passwordField.classList.toggle('hidden', !login);
+      rememberField.classList.toggle('hidden', !login);
+      user.disabled = password.disabled = busy || !login;
+      remember.disabled = busy || !login || app.info.encryption !== true;
+      for (const control of [proto, host, port, connect]) control.disabled = busy;
+      connect.textContent = busy ? 'Saving session…' : remember.checked ? 'Save & connect' : 'Connect';
+      hint.textContent = !login ? 'This protocol does not use a username or password.'
+        : app.info.encryption !== true ? 'Connect once. Saving login is unavailable because secure encryption is unavailable.'
+        : remember.checked ? 'Creates a saved session with this username and an encrypted password on this computer. Passwords entered in later login prompts are not saved.'
+        : 'Connect once without saving. Check the box to keep this login in Sessions.';
+    };
+    const go = async () => {
+      if (busy || this.disposed) return;
+      if (!host.value.trim()) return host.focus();
+      const parsed = target();
+      if (parsed.protocol !== 'serial' && !parsed.host) return host.focus();
+      const login = ['ssh', 'telnet', 'sftp'].includes(parsed.protocol);
+      const q = { ...parsed, ...(login && user.value.trim() ? { username: user.value.trim() } : {}), ...(login && password.value ? { password: password.value } : {}) };
+      const save = login && remember.checked && app.info.encryption === true;
+      const attemptRevision = revision;
+      busy = true; error.classList.add('hidden'); sync();
+      try {
+        if (!save) {
+          app.quickConnect(q);
+          password.value = '';
+          return;
+        }
+        // A completed save owns its ID even if refreshing the list fails. A
+        // retry of unchanged form values reconnects that record, not a duplicate.
+        if (savedAttempt?.revision !== attemptRevision) {
+          const saved = await api.invoke('sessions:save', { ...q, protocol: q.protocol === 'sftp' ? 'ssh' : q.protocol, auth: 'password', name: q.host });
+          savedAttempt = { revision: attemptRevision, session: saved };
+          password.value = '';
+        }
+        await app.sessions.load();
+        if (this.disposed) {
+          toast('Session saved after Home closed. Open it from Sessions.', 'ok');
+          return;
+        }
+        const saved = savedAttempt.session;
+        app.sessions.selected = 's:' + saved.id;
+        app.sessions.render();
+        if (q.protocol === 'sftp') {
+          app.rememberRecent(saved.id);
+          app.openSftp({ sessionId: saved.id }, { name: saved.name || saved.host });
+        } else app.connectSession(saved);
+        savedAttempt = null;
+        password.value = '';
+      } catch (failure) {
+        const message = savedAttempt?.revision === attemptRevision
+          ? 'Session was saved, but could not be opened. Retry to use the saved session: ' + errMsg(failure)
+          : (save ? 'Session was not saved: ' : 'Could not connect: ') + errMsg(failure);
+        if (this.disposed) toast(message, 'err');
+        else { error.textContent = message; error.classList.remove('hidden'); }
+      } finally {
+        busy = false;
+        if (!this.disposed) sync();
+      }
+    };
+    const connect = h('button.btn.primary', { type: 'button', 'data-action': 'quick-connect', onclick: go }, 'Connect');
+    for (const control of [proto, host, port, user, password, remember]) {
+      control.addEventListener(control === proto || control === remember ? 'change' : 'input', () => { revision++; savedAttempt = null; sync(); });
+    }
+    for (const control of [host, port, user, password]) control.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); void go(); } });
+    sync();
     this.recentContent = h('div.welcome-recent-content');
     this.recentHost = h('section.welcome-recent', { 'aria-label': 'Recent sessions' },
       h('div.welcome-recent-head', h('h3', 'Recent sessions'),
@@ -93,8 +173,9 @@ class WelcomeTab {
           h('label.field', h('span', 'Protocol'), proto),
           h('label.field', h('span', 'Host'), host),
           h('label.field', h('span', 'Port'), port),
-          h('label.field', h('span', 'Username'), user),
-          h('button.btn.primary', { onclick: go }, icon('zap'), 'Connect')
+          userField, passwordField,
+          h('div.qc-actions', rememberField, connect),
+          hint, error
         ),
         this.recentHost,
         h('h3', 'Sessions'),
@@ -136,7 +217,10 @@ class WelcomeTab {
   statusSegments() {
     return [{ icon: 'home', text: 'Home' }];
   }
-  dispose() {}
+  dispose() {
+    this.disposed = true;
+    this.clearQuickPassword?.();
+  }
 }
 
 class App {
@@ -596,7 +680,7 @@ class App {
   }
 
   quickSftp(q) {
-    return this.openSftp({ protocol: 'ssh', host: q.host, port: q.port || 22, username: q.username, auth: 'password' }, { name: q.host });
+    return this.openSftp({ protocol: 'ssh', host: q.host, port: q.port || 22, username: q.username, password: q.password, auth: 'password' }, { name: q.host });
   }
 
   openSftp(spec, meta) {

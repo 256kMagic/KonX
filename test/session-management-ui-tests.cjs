@@ -14,6 +14,8 @@ const SAVED_NAME = 'Saved credential fixture';
 const ONCE_NAME = 'One-time credential fixture';
 const CANCEL_NAME = 'Delayed save fixture';
 const CANCEL_FAIL_NAME = 'Delayed failed save fixture';
+const QUICK_NAME = '127.0.0.1';
+const QUICK_CANCEL_NAME = '127.0.0.2';
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check, description, timeout = 12000) {
   const end = Date.now() + timeout;
@@ -24,15 +26,15 @@ async function until(check, description, timeout = 12000) {
 }
 
 async function runSessionManagementUiTests(test) {
-  await test('session management: real encrypted credential dialogs, one-time login, recent-history clear and restart', async () => {
+  await test('session management: visible credential opt-in, real encrypted Home/editor login, recent-history clear and restart', async () => {
     const base = fs.realpathSync(os.tmpdir());
     const root = fs.mkdtempSync(path.join(base, 'konx-session-ui-'));
-    const sockets = new Set(); let server, child;
+    const peers = new Set(); let server, child;
     try {
       const { startServer } = require('./ssh-test-server');
       const ssh = await startServer({ port: 0, root, user: USERNAME, password: PASSWORD, hostname: 'session-fixture' });
       server = ssh.server;
-      server.on('connection', socket => { sockets.add(socket); socket.on('close', () => sockets.delete(socket)); });
+      server.on('connection', client => { peers.add(client); client.on('close', () => peers.delete(client)); });
       for (const phase of ['exercise', 'restart']) {
         let output = '';
         const env = { ...process.env, KONX_USERDATA: path.join(root, 'profile'), KONX_SESSION_UI_ROOT: root,
@@ -54,14 +56,16 @@ async function runSessionManagementUiTests(test) {
       const raw = fs.readFileSync(path.join(root, 'profile', 'sessions.json'), 'utf8');
       assert.equal(raw.includes(PASSWORD), false, 'synthetic password must never be stored as plaintext');
       const sessions = JSON.parse(raw).sessions;
-      assert.equal(sessions.length, 3);
+      assert.equal(sessions.length, 5);
       assert.ok(sessions.find(s => s.name === SAVED_NAME).passwordEnc);
       assert.equal(Object.hasOwn(sessions.find(s => s.name === ONCE_NAME), 'passwordEnc'), false);
+      assert.equal(sessions.filter(s => s.name === QUICK_NAME).length, 1);
+      assert.ok(sessions.find(s => s.name === QUICK_NAME).passwordEnc);
     } finally {
       if (child && child.exitCode == null) {
         const stopped = new Promise(resolve => child.once('exit', resolve)); child.kill(); await stopped;
       }
-      for (const socket of sockets) socket.destroy();
+      for (const client of peers) client.end();
       if (server) await new Promise(resolve => server.close(resolve));
       assert.equal(path.dirname(root), base); assert.ok(path.basename(root).startsWith('konx-session-ui-'));
       fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -96,12 +100,21 @@ async function fixture() {
   dialog.showOpenDialog = async () => unexpected('native open');
   dialog.showSaveDialog = async () => unexpected('native save');
   dialog.showErrorBox = (title, message) => unexpected(title + ': ' + message);
-  // Control only two explicit failure/latency cases at the real save handler's
+  // Control explicit failure/latency cases at the real save handler's
   // producer. All successful persistence and encryption use the original Store.
   const { Store } = require('../src/main/store');
   const saveSession = Store.prototype.saveSession;
   let failedOnce = false, releaseDelayedSave = null, delayedStarted = false, rejectDelayedSave = null;
+  let quickSaveMode = null, quickSaveCalls = 0, releaseQuickSave = null;
   if (phase === 'exercise') Store.prototype.saveSession = function (input) {
+    if (!input.id && [QUICK_NAME, QUICK_CANCEL_NAME].includes(input.name)) {
+      quickSaveCalls++;
+      const mode = quickSaveMode; quickSaveMode = null;
+      if (mode === 'fail') throw new Error('Fixture Quick connect save failed before writing.');
+      if (mode === 'hold') return new Promise((resolve, reject) => {
+        releaseQuickSave = () => { try { resolve(saveSession.call(this, input)); } catch (error) { reject(error); } };
+      });
+    }
     if (input.name === SAVED_NAME && !input.id && !failedOnce) {
       failedOnce = true;
       throw new Error('Fixture save failed before writing; retry is available.');
@@ -149,7 +162,10 @@ async function fixture() {
       const footer = label => `[...document.querySelectorAll('.modal footer button')].find(b=>b.textContent===${JSON.stringify(label)})`;
       const row = name => `[...document.querySelectorAll('.tree-row')].find(e=>e.querySelector('.name')?.textContent===${JSON.stringify(name)})`;
       const password = `document.querySelector('.modal input[name="password"][aria-label="Password"]')`;
-      const savePassword = `document.querySelector('.modal input[name="savePassword"][aria-label="Save password on this computer"]')`;
+      const savePassword = `document.querySelector('.modal input[name="savePassword"][aria-label="Remember username and password"]')`;
+      const quickPassword = `window.__quickHome.el.querySelector('input[name="quickPassword"][aria-label="Quick connect password"]')`;
+      const quickRemember = `window.__quickHome.el.querySelector('input[name="saveQuickSession"][aria-label="Save session and remember login"]')`;
+      const quickButton = `window.__quickHome.el.querySelector('button[data-action="quick-connect"]')`;
       const closeDialog = async label => { await click(footer(label)); await until(() => run('!document.querySelector(".modal")'), 'session dialog closed'); };
       const capture = async (name, width, height, subject) => {
         await setViewport(win, run, width, height);
@@ -157,19 +173,23 @@ async function fixture() {
         await pause(75);
         if (subject === 'modal') {
           await run(`document.querySelector('.modal .body').scrollTop=0;true;`);
-          const geometry = await run(`(()=>{const box=document.querySelector('.modal'),footer=box.querySelector('footer'),tabs=box.querySelector('.mtabs'),pw=box.querySelector('input[name="password"]');const bounds=e=>{const r=e.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};return {width:innerWidth,height:innerHeight,documentWidth:document.documentElement.scrollWidth,box:bounds(box),footer:bounds(footer),tabs:bounds(tabs),password:bounds(pw),passwordType:pw.type};})()`);
+          const geometry = await run(`(()=>{const box=document.querySelector('.modal'),footer=box.querySelector('footer'),tabs=box.querySelector('.mtabs'),pw=box.querySelector('input[name="password"]'),save=box.querySelector('input[name="savePassword"]'),label=save.closest('label');const bounds=e=>{const r=e.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};const r=save.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return {width:innerWidth,height:innerHeight,documentWidth:document.documentElement.scrollWidth,box:bounds(box),footer:bounds(footer),tabs:bounds(tabs),password:bounds(pw),remember:bounds(label),rememberReachable:hit===save||label.contains(hit),passwordType:pw.type};})()`);
           assert.ok(geometry.documentWidth <= geometry.width + 3, 'modal causes horizontal document overflow');
-          for (const rect of [geometry.box, geometry.footer, geometry.tabs, geometry.password]) {
+          for (const rect of [geometry.box, geometry.footer, geometry.tabs, geometry.password, geometry.remember]) {
             assert.ok(rect.width > 0 && rect.height > 0 && rect.left >= -2 && rect.top >= -2 && rect.right <= geometry.width + 2 && rect.bottom <= geometry.height + 2, JSON.stringify(geometry));
           }
           assert.equal(geometry.passwordType, 'password');
+          assert.equal(geometry.rememberReachable, true, 'remember checkbox is visible and clickable at scrollTop=0, including 900x560');
         } else {
           await run(`window.__home.el.querySelector('.welcome-recent').scrollIntoView({block:'center',inline:'nearest'});true;`);
-          const quick = await run(`(()=>{const form=window.__home.el.querySelector('.qc-form'),rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};return {form:rect(form),clientWidth:form.clientWidth,scrollWidth:form.scrollWidth,controls:[...form.querySelectorAll('input,select,button')].map(e=>({kind:e.tagName+'/'+e.type,...rect(e)}))};})()`);
-          assert.equal(quick.controls.length, 5, 'Quick connect retains protocol, host, port, username and Connect');
+          const quick = await run(`(()=>{const form=window.__home.el.querySelector('.qc-form'),rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height};},save=form.querySelector('input[name="saveQuickSession"]'),label=save.closest('label');return {form:rect(form),clientWidth:form.clientWidth,scrollWidth:form.scrollWidth,controls:[...form.querySelectorAll('input:not([type="checkbox"]),select,button')].map(e=>({kind:e.tagName+'/'+e.type,...rect(e)})),remember:rect(label),passwordType:form.querySelector('input[name="quickPassword"]').type};})()`);
+          assert.equal(quick.controls.length, 6, 'Quick connect has protocol, host, port, username, password and Connect');
+          assert.equal(quick.passwordType, 'password');
+          quick.controls.push({ kind: 'remember-label', ...quick.remember });
           assert.ok(quick.scrollWidth <= quick.clientWidth + 3, JSON.stringify(quick));
           for (const control of quick.controls) {
-            assert.ok(control.width >= 120 && control.height >= 24, 'Quick connect control is unusably small: ' + JSON.stringify(quick));
+            const minimumWidth = control.kind.startsWith('BUTTON/') ? 64 : 120;
+            assert.ok(control.width >= minimumWidth && control.height >= 24, 'Quick connect control is unusably small: ' + JSON.stringify(quick));
             assert.ok(control.left >= quick.form.left - 2 && control.right <= quick.form.right + 2 && control.top >= quick.form.top - 2 && control.bottom <= quick.form.bottom + 2, 'Quick connect control escapes its form: ' + JSON.stringify(quick));
           }
           for (let i = 0; i < quick.controls.length; i++) for (let j = i + 1; j < quick.controls.length; j++) {
@@ -239,14 +259,19 @@ async function fixture() {
           assert.equal(await run('window.__app.recentSessions().length'), 0);
           assert.equal(await run(`document.querySelector('.welcome-recent').textContent.includes('No recent sessions.')`), true);
           const data = await assertPublic();
-          assert.equal(data.sessions.length, 3);
+          assert.equal(data.sessions.length, 5);
           assert.equal(data.sessions.find(s => s.name === SAVED_NAME).hasPassword, true);
           assert.equal(data.sessions.find(s => s.name === ONCE_NAME).hasPassword, false);
+          assert.equal(data.sessions.filter(s => s.name === QUICK_NAME).length, 1);
+          assert.equal(data.sessions.find(s => s.name === QUICK_NAME).hasPassword, true);
           assertEncrypted();
           assert.equal(await run('window.__app.workspaceLayout.get().layout'), 'workbench');
           await click(row(SAVED_NAME), 'left', 2); await terminalConnected(SAVED_NAME);
           assert.equal(await run('window.__credentialPrompts.length'), 0, 'stored login must not request credentials after restart');
           assert.equal(await run(`window.__app.tabs.find(t=>t.kind==='terminal').info.username`), USERNAME);
+          await click(row(QUICK_NAME), 'left', 2); await terminalConnected(QUICK_NAME);
+          assert.equal(await run('window.__credentialPrompts.length'), 0, 'Home opt-in credentials authenticate after process restart');
+          assert.equal(await run(`window.__app.tabs.find(t=>t.kind==='terminal'&&t.title===${JSON.stringify(QUICK_NAME)}).info.username`), USERNAME);
           await click(row(ONCE_NAME), 'left', 2);
           await until(() => run(`window.__credentialPrompts.some(p=>p.fields.includes('password'))`), 'one-time password is requested again after restart');
           await until(() => run(`window.__app.tabs.some(t=>t.kind==='terminal'&&t.title===${JSON.stringify(ONCE_NAME)}&&t.state==='disconnected')`), 'cancelled one-time login');
@@ -263,8 +288,17 @@ async function fixture() {
           assert.equal(await run(`localStorage.getItem('konx.session-fixture.keep')`), 'retained');
         }
 
+        await setViewport(win, run, 900, 560);
         await fillNew(SAVED_NAME, true);
+        assert.equal(await run(`/username.*always saved/i.test(document.querySelector('.modal .session-credentials').textContent)`), true, 'editor explains that username is always saved');
         await capture('session-general', 900, 560, 'modal');
+        const rememberPoint = await run(`(()=>{const r=${savePassword}.getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()`);
+        for (const checked of [false, true]) {
+          win.webContents.sendInputEvent({ type: 'mouseDown', button: 'left', clickCount: 1, ...rememberPoint });
+          win.webContents.sendInputEvent({ type: 'mouseUp', button: 'left', clickCount: 1, ...rememberPoint });
+          await until(() => run(`${savePassword}.checked===${checked}`), 'visible remember checkbox responds without scrolling');
+          assert.equal(await run(`document.querySelector('.modal .body').scrollTop`), 0);
+        }
         await capture('session-general', 1400, 880, 'modal');
         await run(`window.__dialogBefore=document.querySelector('.modal');window.__passwordBefore=${password};true;`);
         await click(footer('Save'));
@@ -361,6 +395,114 @@ async function fixture() {
         assert.equal(assertEncrypted(), originalCiphertext);
         await capture('home-recents-cleared', 900, 560, 'home');
         await capture('home-recents-cleared', 1400, 880, 'home');
+
+        // Exercise Home credentials through the real IPC/Store/DPAPI/SSH path.
+        // Existing dialog and history cases above still retain their original
+        // session counts and isolation checks.
+        const home = async () => {
+          await click(`document.querySelector('#toolbar button[title="Home"]')`);
+          await until(() => run('window.__app.active.kind==="welcome"'), 'Home quick-connect form active');
+          await run('window.__quickHome=window.__app.active;true;');
+        };
+        const fillQuick = async (host, remember) => {
+          await home();
+          await fill(`window.__quickHome.el.querySelector('.qc-form select')`, 'ssh');
+          await fill(`window.__quickHome.el.querySelector('input[placeholder="Hostname, IP or COM port"]')`, host);
+          await fill(`window.__quickHome.el.querySelector('.qc-form input[type="number"]')`, port);
+          await fill(`window.__quickHome.el.querySelector('input[name="quickUsername"]')`, USERNAME);
+          await fill(quickPassword, PASSWORD);
+          if (await run(`${quickRemember}.checked`) !== remember) await click(quickRemember);
+        };
+        const terminalIds = () => run(`window.__app.tabs.filter(t=>t.kind==='terminal').map(t=>t.id)`);
+        const newQuickConnected = async previous => until(() => run(`window.__app.tabs.some(t=>t.kind==='terminal'&&!${JSON.stringify(previous)}.includes(t.id)&&t.state==='connected'&&t.title===${JSON.stringify(QUICK_NAME)})`), 'new Home console authenticates');
+        const diskSessions = () => {
+          const raw = fs.readFileSync(path.join(profile, 'sessions.json'), 'utf8');
+          assert.equal(raw.includes(PASSWORD), false);
+          return JSON.parse(raw).sessions;
+        };
+        await home();
+        assert.equal(await run(`${quickRemember}.checked`), false, 'Home saving is opt-in');
+        assert.equal(await run(`${quickPassword}.type`), 'password');
+        const beforeQuick = await assertPublic(), beforeQuickCalls = quickSaveCalls;
+        const beforeOnceTabs = await terminalIds();
+        await fillQuick(QUICK_NAME, false); await click(quickButton); await newQuickConnected(beforeOnceTabs);
+        assert.deepEqual(await assertPublic(), beforeQuick, 'unchecked Home login never creates or changes a saved session');
+        assert.equal(quickSaveCalls, beforeQuickCalls);
+        assert.equal(diskSessions().length, 3);
+        assert.equal(await run(`${quickPassword}.value`), '', 'one-time Home password clears after use');
+        assert.equal(await run('window.__credentialPrompts.length'), 0);
+
+        await fillQuick(QUICK_NAME, true);
+        quickSaveMode = 'fail';
+        const beforeFailedTabs = await terminalIds();
+        await click(quickButton);
+        await until(() => run(`window.__quickHome.el.querySelector('.qc-error[role="alert"]').textContent.includes('Fixture Quick connect save failed')`), 'Home save failure is visible');
+        assert.deepEqual(await terminalIds(), beforeFailedTabs, 'failed Home persistence must not connect');
+        assert.deepEqual(await assertPublic(), beforeQuick);
+        assert.equal(await run(`${quickPassword}.value`), PASSWORD, 'failed save retains typed password for retry');
+        await until(() => run(`!${quickButton}.disabled`), 'Home retry enabled');
+
+        quickSaveMode = 'hold'; releaseQuickSave = null;
+        const callsBeforeDouble = quickSaveCalls;
+        const doublePoint = await run(`(()=>{const e=${quickButton};e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()`);
+        for (const clickCount of [1, 2]) {
+          win.webContents.sendInputEvent({ type: 'mouseDown', button: 'left', clickCount, ...doublePoint });
+          win.webContents.sendInputEvent({ type: 'mouseUp', button: 'left', clickCount, ...doublePoint });
+        }
+        await until(() => !!releaseQuickSave, 'double-click save reaches real handler once');
+        assert.equal(await run(`${quickButton}.disabled`), true);
+        assert.equal(quickSaveCalls, callsBeforeDouble + 1);
+        releaseQuickSave(); await newQuickConnected(beforeFailedTabs);
+        await until(async () => (await assertPublic()).sessions.length === 4, 'Home saved row visible');
+        assert.equal((await assertPublic()).sessions.filter(s => s.name === QUICK_NAME).length, 1, 'double click creates one persistent row');
+        const quickStored = diskSessions().find(s => s.name === QUICK_NAME);
+        assert.equal(quickStored.username, USERNAME); assert.ok(quickStored.passwordEnc);
+        assert.equal(Object.hasOwn(quickStored, 'password'), false);
+        assert.equal(safeStorage.decryptString(Buffer.from(quickStored.passwordEnc, 'base64')), PASSWORD);
+        assert.equal(await run('window.__credentialPrompts.length'), 0);
+
+        // A successful handoff must release its retry cache. Reusing exactly
+        // the same Home form after external deletion must save a fresh record.
+        await home();
+        assert.equal(await run(`${quickPassword}.value`), '');
+        assert.equal(await run(`${quickRemember}.checked`), true);
+        await run(`window.__quickInputsBefore=[...window.__quickHome.el.querySelectorAll('input,select')];window.__quickValuesBefore=window.__quickInputsBefore.map(e=>e.value);true;`);
+        await run(`(async()=>{await window.api.invoke('sessions:delete',${JSON.stringify(quickStored.id)});await window.__app.sessions.load();return true;})()`);
+        assert.equal((await assertPublic()).sessions.some(s => s.id === quickStored.id), false);
+        const beforeRepeatTabs = await terminalIds(), callsBeforeRepeat = quickSaveCalls;
+        await click(quickButton);
+        await until(async () => (await assertPublic()).sessions.some(s => s.name === QUICK_NAME && s.id !== quickStored.id), 'unchanged Home form saves a new ID after deletion');
+        assert.equal(quickSaveCalls, callsBeforeRepeat + 1);
+        assert.equal(await run('window.__quickInputsBefore.every((e,i)=>e.isConnected&&e.value===window.__quickValuesBefore[i])'), true, 'fresh save does not depend on a form edit');
+        await until(() => run(`window.__app.tabs.some(t=>t.kind==='terminal'&&!${JSON.stringify(beforeRepeatTabs)}.includes(t.id)&&t.state==='disconnected')`), 'fresh session asks for its now-empty password and fixture cancels');
+        const freshQuick = (await assertPublic()).sessions.find(s => s.name === QUICK_NAME);
+        assert.notEqual(freshQuick.id, quickStored.id);
+        assert.equal(freshQuick.hasPassword, false, 'a cleared password must not be reused from a previous successful handoff');
+        assert.equal(diskSessions().length, 4);
+        await editor(QUICK_NAME); await fill(password, PASSWORD);
+        assert.equal(await run(`${savePassword}.checked`), false);
+        await click(savePassword); await closeDialog('Save');
+        const restoredQuick = diskSessions().find(s => s.id === freshQuick.id);
+        assert.equal(safeStorage.decryptString(Buffer.from(restoredQuick.passwordEnc, 'base64')), PASSWORD);
+        assert.equal((await assertPublic()).sessions.find(s => s.id === freshQuick.id).hasPassword, true);
+
+        await fillQuick(QUICK_CANCEL_NAME, true);
+        quickSaveMode = 'hold'; releaseQuickSave = null;
+        const beforeClosedTabs = await terminalIds();
+        await click(quickButton); await until(() => !!releaseQuickSave, 'Home pending save reaches handler');
+        await click(`[...document.querySelectorAll('#tabbar .tab')].find(e=>e.querySelector('.title')?.textContent==='Home').querySelector('button.close')`);
+        await until(() => run('!window.__app.tabs.includes(window.__quickHome)'), 'pending Home tab closes');
+        releaseQuickSave();
+        await until(async () => (await assertPublic()).sessions.some(s => s.name === QUICK_CANCEL_NAME), 'late Home save finishes persistence');
+        await pause(50);
+        assert.deepEqual(await terminalIds(), beforeClosedTabs, 'closing Home suppresses a late connection after save');
+        assert.equal(diskSessions().length, 5);
+        await home();
+        assert.equal(await run(`${quickRemember}.checked`), false, 'new Home still defaults to one-time credentials');
+        assert.equal(await run(`${quickPassword}.value`), '', 'new Home does not refill saved passwords');
+        await click(`window.__quickHome.el.querySelector('[data-action="clear-recent-sessions"]')`);
+        assert.equal(await run(`localStorage.getItem('konx.recent')`), null, 'restart still checks explicitly cleared recent history');
+        await assertPublic();
         console.log('SESSION_MANAGEMENT_UI_PASS exercise'); await finish(0);
       } catch (error) { await finish(1, error); }
     });

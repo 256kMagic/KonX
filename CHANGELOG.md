@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.15.2 — 2026-10-22
+
+- Put **Remember username and password** prominently beside the session editor's login fields, with visible saved-password status and explicit removal.
+- Add a masked password field and opt-in **Save session and remember login** checkbox to Home Quick Connect for SSH, Telnet, and SFTP.
+- Save selected Quick Connect credentials through the existing encrypted session store before connecting; leave unchecked logins transient and forward one-time passwords to SFTP.
+- Prevent duplicate saves, preserve populated forms after save failures, and avoid opening late connections after Home closes.
+- Keep existing saved-password retention, one-time overrides, and explicit removal behavior; username remains part of saved sessions.
+
+See the [session management guide](docs/SESSION_MANAGEMENT.md) and [release notes](docs/releases/0.15.2.md).
+
 ## 0.15.1 — 2026-10-22
 
 - Add a visible **Log to text file** switch to each console, with a green On indicator confirmed by the backend, the saved path, and a folder button. Keep state coherent across switch clicks, context-menu actions, tabs, layouts, failures, and disconnects.

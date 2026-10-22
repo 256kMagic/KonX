@@ -41,6 +41,43 @@ async function loggingPeer(run) {
   } };
 }
 
+async function quickLoginPeer() {
+  const { Server, utils } = require('ssh2');
+  const key = crypto.generateKeyPairSync('rsa', { modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs1', format: 'pem' } }).privateKey;
+  const fingerprint = 'SHA256:' + crypto.createHash('sha256').update(utils.parseKey(key).getPublicSSH()).digest('base64').replace(/=+$/, '');
+  const nonce = crypto.randomBytes(12).toString('hex');
+  const options = { host: '127.0.0.1', port: null, username: 'konx-fixture-' + nonce.slice(0, 8),
+    password: 'Synthetic-password-' + nonce, fingerprint, marker: 'KONX_SAVED_LOGIN_' + nonce };
+  const clients = new Set(), observed = { successfulAuthentications: 0, shells: 0 };
+  const server = new Server({ hostKeys: [key] }, client => {
+    clients.add(client); client.on('close', () => clients.delete(client)); client.on('error', () => {});
+    client.on('authentication', context => {
+      if (context.method === 'password' && context.username === options.username && context.password === options.password) {
+        observed.successfulAuthentications++; context.accept();
+      } else context.reject(['password']);
+    });
+    client.on('ready', () => client.on('session', accept => {
+      const session = accept();
+      session.on('pty', acceptPty => acceptPty?.());
+      session.on('window-change', acceptChange => acceptChange?.());
+      session.on('shell', acceptShell => {
+        observed.shells++;
+        const stream = acceptShell(); stream.on('error', () => {});
+        stream.write(options.marker + '\r\n');
+      });
+    }));
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject); server.listen(0, options.host, resolve);
+  });
+  options.port = server.address().port;
+  return { options, observed, close: async () => {
+    for (const client of clients) client.end();
+    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  } };
+}
+
 async function nativeLoader(executable) {
   const archive = path.join(path.dirname(executable), 'resources', 'app.asar');
   if (process.platform !== 'win32' || !fs.existsSync(archive)) return { skipped: true, reason: 'No directly accessible Windows app archive beside this executable' };
@@ -54,11 +91,14 @@ async function nativeLoader(executable) {
   return JSON.parse(marker[1]);
 }
 
-async function launch(executable, root, run, profile, version, phase, logging = null) {
+async function launch(executable, root, run, profile, version, phase, logging = null, quickLogin = null) {
   const demoPath = path.join(run, phase + '-demo.js');
   const screenshot = path.join(run, phase + '.png');
   const resultPath = path.join(run, phase + '-checks.json');
-  fs.writeFileSync(demoPath, 'window.__KONX_TOOLS_SMOKE = ' + JSON.stringify({ version, phase, token: TOKEN, resultPath, logging }) + ';\n' +
+  // The second launch receives no password; its real SSH authentication must
+  // use the credential the first launch saved through the Home checkbox.
+  const loginOptions = quickLogin && (phase === 'save' ? quickLogin : { ...quickLogin, password: undefined });
+  fs.writeFileSync(demoPath, 'window.__KONX_TOOLS_SMOKE = ' + JSON.stringify({ version, phase, token: TOKEN, resultPath, logging, quickLogin: loginOptions }) + ';\n' +
     fs.readFileSync(path.join(__dirname, 'smoke-tools-demo.js'), 'utf8'));
   const env = {
     ...process.env, KONX_USERDATA: profile, KONX_CAPTURE: screenshot,
@@ -117,11 +157,27 @@ async function main() {
   const result = { passed: false, executable, expectedVersion: version, run, phases: [] };
   const [major, minor, patch] = version.match(/^(\d+)\.(\d+)\.(\d+)/).slice(1).map(Number);
   const supportsLoggingSwitch = major > 0 || minor > 15 || (minor === 15 && patch >= 1);
-  let logging;
+  const supportsQuickLogin = major > 0 || minor > 15 || (minor === 15 && patch >= 2);
+  let logging, quickLogin;
   try {
     result.nativeLoader = await nativeLoader(executable);
     if (supportsLoggingSwitch) logging = await loggingPeer(run);
-    result.phases.push(await launch(executable, root, run, profile, version, 'save', logging?.options));
+    if (supportsQuickLogin) quickLogin = await quickLoginPeer();
+    result.phases.push(await launch(executable, root, run, profile, version, 'save', logging?.options, quickLogin?.options));
+    if (quickLogin) {
+      const checks = result.phases[0].checks.quickLogin;
+      assert(checks?.optInInitiallyOff && checks?.connected && checks?.passwordCleared && checks?.publicMetadataPrivate,
+        'Home Quick Connect did not pass its saved-login UI checks');
+      const sessionsText = fs.readFileSync(path.join(profile, 'sessions.json'), 'utf8');
+      const session = JSON.parse(sessionsText).sessions.find(item => item.id === checks.savedId);
+      assert(session?.host === quickLogin.options.host && Number(session.port) === quickLogin.options.port &&
+        session.username === quickLogin.options.username && typeof session.passwordEnc === 'string' && session.passwordEnc.length > 32,
+        'Home Quick Connect did not persist its encrypted username/password session');
+      assert(!Object.hasOwn(session, 'password') && !sessionsText.includes(quickLogin.options.password) &&
+        !sessionsText.includes(Buffer.from(quickLogin.options.password).toString('base64')), 'Home Quick Connect password was stored without encryption');
+      assert(quickLogin.observed.successfulAuthentications === 1 && quickLogin.observed.shells === 1, 'Home Quick Connect did not authenticate exactly once with the synthetic credential');
+      result.quickLogin = { savedId: checks.savedId, checkboxFlow: true, ciphertextStored: true, initialAuthentication: true };
+    }
     if (logging) {
       const checks = result.phases[0].checks.logging;
       assert(checks?.switchedOn && checks?.switchedOff && checks?.litStateMatchesStatus && checks?.bothMarkersDisplayed,
@@ -152,7 +208,17 @@ async function main() {
       assert(!Object.hasOwn(session, 'password') && !sessionsText.includes(TOKEN + '-session') && !sessionsText.includes(Buffer.from(TOKEN + '-session').toString('base64')), 'Synthetic session password was written without encryption');
       result.sessionCiphertextStored = true;
     }
-    result.phases.push(await launch(executable, root, run, profile, version, 'forget'));
+    result.phases.push(await launch(executable, root, run, profile, version, 'forget', null, quickLogin?.options));
+    if (quickLogin) {
+      const checks = result.phases[1].checks.quickLogin;
+      assert(checks?.savedId === result.quickLogin.savedId && checks?.reconnectedWithoutPrompt && checks?.removed,
+        'Saved Home login did not reconnect and remove cleanly after restart');
+      assert(quickLogin.observed.successfulAuthentications === 2 && quickLogin.observed.shells === 2, 'Restart did not authenticate using the encrypted saved login');
+      assert(!JSON.parse(fs.readFileSync(path.join(profile, 'sessions.json'), 'utf8')).sessions.some(item => item.id === result.quickLogin.savedId),
+        'Synthetic Quick Connect session remained on disk after removal');
+      Object.assign(result.quickLogin, { persistedAcrossRestart: true, authenticatedFromSavedCredential: true, removed: true, loopbackOnly: true });
+      await quickLogin.close(); quickLogin = null;
+    }
     const forgotten = JSON.parse(fs.readFileSync(path.join(profile, 'mist.json'), 'utf8'));
     assert(forgotten.version === 1 && !Object.hasOwn(forgotten, 'tokenEnc'), 'Encrypted token remained on disk after Forget token');
     assert(!Object.hasOwn(JSON.parse(fs.readFileSync(path.join(profile, 'ai.json'), 'utf8')).providers.nyquest, 'keyEnc'), 'AI key remained on disk after Forget');
@@ -163,7 +229,7 @@ async function main() {
     result.error = error.stack || String(error);
     throw error;
   } finally {
-    try { if (logging) await logging.close(); }
+    try { await Promise.all([logging?.close(), quickLogin?.close()]); }
     finally {
       fs.writeFileSync(path.join(run, 'result.json'), JSON.stringify(result, null, 2));
       console.log((result.passed ? 'PASS: ' : 'FAIL: ') + path.join(run, 'result.json'));

@@ -9,6 +9,11 @@
       await pause();
     }
   };
+  const terminalContains = (tab, marker) => {
+    const buffer = tab.term.buffer.active, lines = [];
+    for (let i = 0; i < buffer.length; i++) lines.push(buffer.getLine(i)?.translateToString(true) || '');
+    return lines.join('').includes(marker);
+  };
   await until(() => window.__app, 'application initialization');
   const app = window.__app;
   const { api } = await import('./js/ui.js');
@@ -17,6 +22,7 @@
   const complete = async (checks) => {
     if (sessionManagement) checks.sessionManagement = sessionManagement;
     if (logging) checks.logging = logging;
+    if (quickLogin) checks.quickLogin = quickLogin;
     // Portable launchers do not necessarily forward their app's stdout. Write
     // test evidence only to the parent-provided private artifact file.
     await api.invoke('np:write', options.resultPath, new TextEncoder().encode(JSON.stringify(checks, null, 2)));
@@ -57,8 +63,11 @@
   const supportsSessionManagement = versionParts[0] > 0 || versionParts[1] >= 15;
   const supportsLoggingSwitch = versionParts[0] > 0 || versionParts[1] > 15 ||
     (versionParts[1] === 15 && parseInt(info.version.split('.')[2], 10) >= 1);
+  const supportsQuickLogin = versionParts[0] > 0 || versionParts[1] > 15 ||
+    (versionParts[1] === 15 && parseInt(info.version.split('.')[2], 10) >= 2);
   let sessionManagement = null;
   let logging = null;
+  let quickLogin = null;
   const sessionName = 'Package smoke synthetic saved session';
 
   if (options.phase === 'save') {
@@ -72,17 +81,61 @@
       assert((await api.invoke('sessions:list')).sessions.some(item => item.id === saved.id && item.hasPassword), 'Clearing history removed a saved credential');
       sessionManagement = { usernameSaved: true, passwordPresencePrivate: true, historyCleared: true, savedSessionRetained: true };
     }
+    if (supportsQuickLogin) {
+      const fixture = options.quickLogin;
+      assert(fixture?.host === '127.0.0.1' && Number.isInteger(fixture.port) && fixture.password && fixture.fingerprint,
+        'Saved Quick Connect requires the parent-owned synthetic SSH fixture');
+      app.showHome();
+      const home = app.active, form = home.el.querySelector('.qc-form');
+      const password = form?.querySelector('input[name="quickPassword"]');
+      const remember = form?.querySelector('input[name="saveQuickSession"]');
+      const username = form?.querySelector('input[name="quickUsername"]');
+      const connect = form?.querySelector('button[data-action="quick-connect"]');
+      assert(password?.type === 'password' && remember?.type === 'checkbox' && !remember.checked && !remember.disabled && username && connect,
+        'Home needs a masked password and unchecked saved-login checkbox');
+      form.querySelector('select').value = 'ssh';
+      form.querySelector('select').dispatchEvent(new Event('change'));
+      form.querySelector('input[placeholder="Hostname, IP or COM port"]').value = fixture.host;
+      form.querySelector('input[type="number"]').value = String(fixture.port);
+      username.value = fixture.username; password.value = fixture.password;
+      remember.click(); assert(remember.checked, 'Saved-login checkbox did not select');
+      const existingTabs = new Set(app.tabs.map(tab => tab.id));
+      let consoleTab;
+      try {
+        connect.click();
+        await until(() => {
+          assert(!home.el.querySelector('.qc-error')?.textContent.trim(), 'Quick Connect rejected the synthetic fixture');
+          consoleTab = app.tabs.find(tab => tab.kind === 'terminal' && !existingTabs.has(tab.id));
+          return !!consoleTab;
+        }, 'Home saved-login terminal');
+        await until(() => document.querySelector('.modal .fp'), 'synthetic SSH host verification');
+        const hostPrompt = document.querySelector('.modal');
+        assert(hostPrompt.querySelector('.fp').textContent.includes(fixture.fingerprint), 'Quick Connect presented a different host identity');
+        const accept = [...hostPrompt.querySelectorAll('button')].find(button => button.textContent.trim() === 'Accept & save');
+        assert(accept, 'Host verification save control is missing'); accept.click();
+        await until(() => ['connected', 'disconnected'].includes(consoleTab.state), 'Home SSH authentication');
+        assert(consoleTab.state === 'connected', 'Home did not authenticate with its entered username and password');
+        await until(() => terminalContains(consoleTab, fixture.marker), 'authenticated synthetic shell output');
+        const saved = (await api.invoke('sessions:list')).sessions.find(item => item.id === consoleTab.spec.sessionId);
+        assert(saved?.host === fixture.host && Number(saved.port) === fixture.port && saved.username === fixture.username && saved.hasPassword,
+          'Home opt-in did not save the selected host, username and password presence');
+        assert(!Object.hasOwn(saved, 'password') && !Object.hasOwn(saved, 'passwordEnc') && !Object.hasOwn(saved, '_oncePassword') &&
+          !JSON.stringify(saved).includes(fixture.password), 'Home returned saved credential material in public metadata');
+        assert(password.value === '', 'Home password input retained the secret after connecting');
+        quickLogin = { savedId: saved.id, optInInitiallyOff: true, connected: true, passwordCleared: true, publicMetadataPrivate: true };
+      } finally {
+        if (consoleTab) { await api.invoke('conn:close', consoleTab.id); await app.closeTab(consoleTab); }
+      }
+      // Keep the existing clear-history restart invariant after this explicitly
+      // saved connection has exercised the recent-session path.
+      app.clearRecentSessions();
+    }
     if (supportsLoggingSwitch) {
       const fixture = options.logging;
       assert(fixture?.host === '127.0.0.1' && Number.isInteger(fixture.port) && fixture.port > 0 && fixture.logPath,
         'Console logging requires the parent-owned loopback fixture and log file');
       const consoleTab = app.openTerminal({ name: 'Synthetic logging console', protocol: 'raw', host: fixture.host, port: fixture.port,
         logging: { enabled: false, path: fixture.logPath, timestamps: false } }, { name: 'Synthetic logging console', protocol: 'raw' });
-      const terminalContains = marker => {
-        const buffer = consoleTab.term.buffer.active, lines = [];
-        for (let i = 0; i < buffer.length; i++) lines.push(buffer.getLine(i)?.translateToString(true) || '');
-        return lines.join('').includes(marker);
-      };
       try {
         await until(() => ['connected', 'disconnected'].includes(consoleTab.state), 'synthetic raw console connection');
         assert(consoleTab.state === 'connected', 'Local synthetic console did not connect');
@@ -100,14 +153,14 @@
         assert(getComputedStyle(track).boxShadow !== 'none' && consoleTab.logState.textContent === 'On', 'Active logging indicator did not light up');
         assert(consoleTab.el.querySelector('.term-log-path').textContent === fixture.logPath, 'Confirmed log path is not visible');
         consoleTab.sendText(fixture.onMarker + '\r\n');
-        await until(() => terminalContains(fixture.onMarker), 'echoed marker while logging is on');
+        await until(() => terminalContains(consoleTab, fixture.onMarker), 'echoed marker while logging is on');
         toggle.click();
         await until(() => toggle.getAttribute('aria-checked') === 'false' && toggle.getAttribute('aria-busy') === 'false', 'logging switch off');
         assert(!(await api.invoke('conn:info', consoleTab.id)).logging && !consoleTab.info.logging,
           'Logging switch turned off before the backend stopped logging');
         assert(getComputedStyle(track).boxShadow === 'none' && consoleTab.logState.textContent === 'Off', 'Stopped logging indicator remained lit');
         consoleTab.sendText(fixture.offMarker + '\r\n');
-        await until(() => terminalContains(fixture.offMarker), 'echoed marker while logging is off');
+        await until(() => terminalContains(consoleTab, fixture.offMarker), 'echoed marker while logging is off');
         logging = { path: fixture.logPath, switchedOn: true, switchedOff: true, litStateMatchesStatus: true, bothMarkersDisplayed: true };
       } finally {
         await api.invoke('conn:close', consoleTab.id);
@@ -303,6 +356,26 @@
       assert(!cleared.hasPassword && cleared.username === 'fixture-user', 'Explicit password removal changed the saved username');
       await api.invoke('sessions:delete', saved.id); localStorage.removeItem('konx.session-smoke-marker');
       sessionManagement = { persistedAcrossRestart: true, historyStayedCleared: true, unrelatedPreferencesRetained: true, passwordRemoved: true };
+    }
+    if (supportsQuickLogin) {
+      const fixture = options.quickLogin;
+      assert(fixture?.host === '127.0.0.1' && !Object.hasOwn(fixture, 'password'), 'Restart must not receive a synthetic login password');
+      await app.sessions.load();
+      const saved = app.sessions.data.sessions.find(item => item.host === fixture.host && Number(item.port) === fixture.port && item.username === fixture.username);
+      assert(saved?.hasPassword && !Object.hasOwn(saved, 'password') && !Object.hasOwn(saved, 'passwordEnc') && !Object.hasOwn(saved, '_oncePassword'),
+        'Saved Quick Connect credentials did not survive restart privately');
+      const consoleTab = app.connectSession(saved);
+      try {
+        await until(() => {
+          assert(!document.querySelector('.modal'), 'Saved login unexpectedly requested credentials or host trust after restart');
+          return ['connected', 'disconnected'].includes(consoleTab.state);
+        }, 'SSH reconnect from encrypted saved login');
+        assert(consoleTab.state === 'connected', 'Encrypted saved login did not authenticate after restart');
+        await until(() => terminalContains(consoleTab, fixture.marker), 'restored synthetic shell output');
+      } finally { await api.invoke('conn:close', consoleTab.id); await app.closeTab(consoleTab); }
+      await api.invoke('sessions:delete', saved.id); await app.sessions.load(); app.clearRecentSessions();
+      assert(!app.sessions.data.sessions.some(item => item.id === saved.id), 'Synthetic Home saved session was not removed');
+      quickLogin = { savedId: saved.id, reconnectedWithoutPrompt: true, removed: true };
     }
     if (supportsLayouts) assert(app.settings.uiLayout === 'focus' && app.workspaceLayout.get().layout === 'focus', 'Workspace layout did not survive packaged restart');
     assert(mist.config.hasToken && !mist.testButton.disabled, 'Encrypted Mist token did not survive app restart');

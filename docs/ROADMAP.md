@@ -20,6 +20,8 @@ Version 0.15.0 adds clearable recent session history and places username and enc
 
 Version 0.15.1 adds a visible per-console text logging switch and extends SSH 2 transport compatibility and private-key loading for terminals, SFTP, and jump hosts, with shared transport policy for SSH audits and explicit runtime limits. See [Session logging](USER_GUIDE.md#session-logging), the [SSH compatibility guide](SSH_COMPATIBILITY.md), and [release validation](releases/0.15.1.md).
 
+Version 0.15.2 makes the session credential-retention checkbox prominent and adds opt-in saved logins to Home Quick Connect. See the [session management guide](SESSION_MANAGEMENT.md) and [release validation](releases/0.15.2.md).
+
 ## Scope
 
 Device collection starts with connected Cisco IOS/IOS-XE SSH sessions and fixed read-only commands in a separate channel. Trace results show candidates and unresolved links when evidence is incomplete. Imported reports and a synthetic demo support offline use.

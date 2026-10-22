@@ -316,6 +316,12 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
 
 .session-credentials { display: flex; flex-direction: column; gap: 9px; padding: 12px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--panel-2); }
 .session-credentials h3 { margin: 0; font-size: 13px; color: var(--text-strong); }
+.session-identity { grid-template-columns: 1fr 2fr 1fr; }
+.session-credentials-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+.session-saved-status { font-size: 12px; color: var(--muted); }
+.session-remember { padding: 9px; border: 1px solid var(--border-strong); border-radius: 5px; background: var(--panel-3); font-weight: 600; }
+.session-remember:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.session-remember:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
 .session-credentials .check { white-space: normal; align-items: flex-start; line-height: 1.4; }
 .session-credentials .check input { flex: none; margin-top: 2px; }
 
@@ -472,6 +478,11 @@ canvas.spark { width: 160px; height: 20px; display: block; }
 .card .t { font-weight: 600; color: var(--text-strong); }
 .card .d { color: var(--muted); font-size: 12px; margin-top: 2px; line-height: 1.4; }
 .qc-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); gap: 10px; align-items: end; max-width: 1100px; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+.qc-actions { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.qc-remember { min-width: 0; white-space: normal; line-height: 1.4; padding: 7px 0; }
+.qc-remember input { flex: none; }
+.qc-hint, .qc-error { grid-column: 1 / -1; min-width: 0; overflow-wrap: anywhere; }
+.qc-error { padding: 9px; border: 1px solid var(--err); border-radius: 5px; color: var(--err); }
 
 /* ---------------------------------------------------------------- packet capture */
 .cap { display: flex; flex-direction: column; flex: 1; min-height: 0; }
