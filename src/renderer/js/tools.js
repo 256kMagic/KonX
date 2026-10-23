@@ -14,10 +14,12 @@ import { RunbookTab } from './runbooks.js';
 import { CaptureComparisonTab } from './capture-compare.js';
 import { SiteWorkspacesTab } from './site-workspaces.js';
 import { TopologyTab } from './topology.js';
+import { EventsTab } from './events.js';
 
 export const TOOLS = [
   { kind: 'sites', label: 'Saved Site Workspaces', icon: 'folder', desc: 'Save site session groups, notes, capture and incident references, and panel arrangements' },
   { kind: 'topology', label: 'Visual Topology', icon: 'link', desc: 'Explore observed device links, command evidence, and candidate endpoint paths' },
+  { kind: 'events', label: 'Live Events', icon: 'activity', desc: 'Receive local syslog and SNMP traps, inspect events, and export selected evidence' },
   { kind: 'capture-compare', label: 'Capture Comparison', icon: 'columns', desc: 'Compare working and failing captures with observed DNS, TCP and HTTP behavior and original packet evidence' },
   { kind: 'runbook', label: 'Troubleshooting Runbooks', icon: 'route', desc: 'Run reviewed DNS, ping, TCP and device checks with explicit targets and manual capture guidance' },
   { kind: 'remote-capture', label: 'Remote Capture', icon: 'capture', desc: 'Collect bounded Linux packet captures over an existing SSH session and inspect retained traffic locally' },
@@ -1020,6 +1022,7 @@ const CLASSES = { capture: CaptureTab, ping: PingTool, sweep: SweepTool, portsca
 export function createTool(app, kind, params = {}) {
   if (kind === 'sites') return new SiteWorkspacesTab(app, params);
   if (kind === 'topology') return new TopologyTab(app, params);
+  if (kind === 'events') return new EventsTab(app, params);
   if (kind === 'capture-compare') return new CaptureComparisonTab(app, params);
   if (kind === 'runbook') return new RunbookTab(app, params);
   if (kind === 'remote-capture') return new RemoteCaptureTab(app, params);

@@ -536,6 +536,9 @@ const fakeCrypt = {
   await require('./topology-tests.cjs').runTopologyTests(test);
   await require('./topology-ui-tests.cjs').runTopologyUiTests(test);
   await require('./topology-ipc-tests.cjs').runTopologyIpcTests(test);
+  await require('./events-tests.cjs').runEventsTests(test);
+  await require('./events-ui-tests.cjs').runEventsUiTests(test);
+  await require('./events-ipc-tests.cjs').runEventsIpcTests(test);
 
   const failed = results.filter((r) => !r[0]);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

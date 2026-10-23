@@ -227,6 +227,36 @@ async function runSiteWorkspaceTests(test) {
     assert.equal(changed, true); assert.equal((await store.list()).workspaces.length, 1);
     assert.deepEqual((await fs.readFile(source)).subarray(0, original.length), original);
   }));
+  await test('site workspace export rejects an ancestor junction into its library and writes only through the checked canonical parent', withStore(async (store, directory) => {
+    const saved = await store.save({ name: 'Canonical export boundary' }), before = await fs.readFile(store.file(saved.id));
+    const alias = path.join(directory, 'profile-alias'), linkType = process.platform === 'win32' ? 'junction' : 'dir';
+    await fs.symlink(directory, alias, linkType);
+    await assert.rejects(store.exportFile(saved.id, path.join(alias, 'site-workspaces', saved.id + '.json')), /outside the managed/);
+    assert.deepEqual(await fs.readFile(store.file(saved.id)), before); assert.deepEqual(await store.get(saved.id), saved);
+    const originalRoot = path.join(directory, 'chosen'), alternateRoot = path.join(directory, 'retargeted'), exportAlias = path.join(directory, 'export-alias');
+    await fs.mkdir(path.join(originalRoot, 'nested'), { recursive: true }); await fs.mkdir(path.join(alternateRoot, 'nested'), { recursive: true });
+    await fs.symlink(originalRoot, exportAlias, linkType);
+    const selected = path.join(exportAlias, 'nested', 'review.json'); let retargeted = false;
+    const guarded = new SiteWorkspaceStore(directory, { fs: faultFs({ realpath: async file => {
+      const actual = await fs.realpath(file);
+      if (file === path.dirname(selected) && !retargeted) { retargeted = true; await fs.unlink(exportAlias); await fs.symlink(alternateRoot, exportAlias, linkType); }
+      return actual;
+    } }) });
+    assert.deepEqual(await guarded.exportFile(saved.id, selected), { path: selected }); assert.equal(retargeted, true);
+    assert.equal(JSON.parse(await fs.readFile(path.join(originalRoot, 'nested', 'review.json'), 'utf8')).workspace.name, saved.name);
+    await assert.rejects(fs.access(path.join(alternateRoot, 'nested', 'review.json')), code('ENOENT')); assert.equal(guarded.hasOwnership, false);
+  }));
+  await test('site workspace exact serialized 1 MiB record stays readable and a one-byte overflow preserves it', withStore(async (store, directory) => {
+    const saved = await store.save({ name: 'Exact file boundary',
+      sessions: Array.from({ length: LIMITS.sessions }, (_, i) => ({ id: 'session-' + i, name: '測'.repeat(256), group: '測'.repeat(512) })),
+      captures: Array.from({ length: LIMITS.captures }, (_, i) => ({ id: 'capture-' + i, name: 'Fixture', path: path.join(directory, '測'.repeat(3500), i + '.pcap') })) });
+    const padding = LIMITS.fileBytes - (await fs.stat(store.file(saved.id))).size; assert.ok(padding > 0 && padding < LIMITS.notesBytes);
+    const exact = await store.save({ ...saved, notes: 'x'.repeat(padding) }); assert.equal((await fs.stat(store.file(exact.id))).size, LIMITS.fileBytes);
+    assert.deepEqual(await new SiteWorkspaceStore(directory).get(exact.id), exact);
+    const before = await fs.readFile(store.file(exact.id));
+    await assert.rejects(store.save({ ...exact, notes: exact.notes + 'x' }), code('SITE_WORKSPACE_LIMIT'));
+    assert.deepEqual(await fs.readFile(store.file(exact.id)), before); assert.deepEqual(await store.get(exact.id), exact);
+  }));
 }
 
 module.exports = { runSiteWorkspaceTests };

@@ -785,7 +785,7 @@ class App {
 
   openTool(kind, params = {}) {
     const tab = createTool(this, kind, params);
-    if (kind !== 'ai') {
+    if (kind !== 'ai' && kind !== 'events') {
       const heading = tab.el.querySelector('.tool-title') || tab.el.querySelector('.tool-head') || tab.el.querySelector('.cap-frow');
       heading?.append(h('button.btn.sm', { title: 'Preview these results in AI & Knowledge', onclick: () => this.explainTool(tab) }, icon('insight'), 'Explain with AI'));
       if (kind !== 'incidents') heading?.append(h('button.btn.sm', { title: 'Choose an incident for a snapshot of this evidence', onclick: () => this.addToIncident(tab) }, icon('file'), 'Add to incident'));

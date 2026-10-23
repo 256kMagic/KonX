@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.21.0 — 2026-10-23
+
+- Add Live Events with explicitly started IPv4/IPv6 UDP syslog and SNMPv1/v2c trap receivers.
+- Parse readable headers, structured fields, numeric OIDs and typed varbinds while preserving unknown source times and unsupported formats. SNMP community bytes and raw packets are excluded.
+- Add bounded searchable history, filters, click-through details, exact saved-host matches, reviewed JSON/text exports, and selected incident evidence.
+- Keep listener ownership through stop, late close, cleanup failure, application shutdown, and updater checks.
+- Prevent workspace exports through Windows folder aliases from overwriting the managed workspace library; retain exact-limit file readability.
+
+See the [event console guide](docs/EVENTS.md) and [release notes](docs/releases/0.21.0.md).
+
 ## 0.20.0 — 2026-10-23
 
 - Add interactive Visual Topology from canonical CDP/LLDP, interface, ARP, and MAC observations with clickable source evidence.

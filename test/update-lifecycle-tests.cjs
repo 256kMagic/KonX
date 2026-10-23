@@ -88,6 +88,7 @@ function fixture() {
   };
   const dialogs = { open: async () => ({ canceled: true, filePaths: [] }), save: async () => ({ canceled: true }) };
   const sites = { hasOwnership: false, close: async () => { sites.hasOwnership = false; } };
+  const events = { hasOwnership: false, run: async () => {}, list: () => ({ listeners: [] }), close: async () => { events.hasOwnership = false; } };
   const handoff = {
     async commit() { calls.push('commit-helper'); },
     async cancel() { calls.push('cancel-helper'); },
@@ -104,6 +105,8 @@ function fixture() {
     './site-workspaces': { SiteWorkspaceStore: class { constructor() { return sites; } } },
     './site-workspace-ipc': load('./site-workspace-ipc'),
     './topology-ipc': load('./topology-ipc'),
+    './events-ipc': load('./events-ipc'),
+    './events': { EventConsole: class { constructor() { return events; } } },
     './remote-capture': { run: (...args) => remote.run(...args), closePending: () => remote.closePending(), get hasPendingCleanup() { return remote.hasPendingCleanup; } },
     './remote-results': { RemoteCaptureResults: class {
       get hasOpenHandles() { return remote.hasOpenHandles; }
@@ -160,7 +163,7 @@ function fixture() {
   vm.runInContext(fs.readFileSync(filename, 'utf8'), context, { filename });
   ready();
   return {
-    app, calls, sent, manager, behavior, handoff, connections, remote, runbook, sites, dialogs,
+    app, calls, sent, manager, behavior, handoff, connections, remote, runbook, sites, events, dialogs,
     get jobs() { return vm.runInContext('toolJobs', context); },
     get controller() { return vm.runInContext('updates', context); },
     get window() { return window; },
@@ -178,6 +181,21 @@ function fixture() {
 }
 
 async function runUpdateLifecycleTests(test) {
+  await test('event lifecycle: quit waits for a running listener and rejects late listener start', async () => {
+    const f = fixture(), closed = deferred();
+    f.events.run = async (_params, _emit, signal) => { f.events.hasOwnership = true; signal.onStop = () => f.calls.push('stop-events'); await closed.promise; f.events.hasOwnership = false; };
+    await f.invoke('tools:start', 'events', {}, 'event-job'); await tick();
+    f.app.quit(); assert.equal(f.app.exited, false); assert.ok(f.calls.includes('stop-events'));
+    assert.throws(() => f.invoke('tools:start', 'events', {}, 'late-event'), /closing/);
+    closed.resolve(); await tick(); await tick(); assert.equal(f.app.exited, true);
+  });
+  await test('event lifecycle: retained socket ownership blocks install and failed close can retry', async () => {
+    const f = fixture(); f.events.hasOwnership = true;
+    await assert.rejects(f.invoke('app:updateInstall'), /event listeners/); assert.ok(!f.calls.includes('launch-helper'));
+    f.events.close = async () => { throw new Error('Synthetic socket close failure'); };
+    f.app.quit(); await tick(); assert.equal(f.app.exited, false); assert.ok(f.calls.includes('shutdown-error'));
+    f.events.close = async () => { f.events.hasOwnership = false; }; f.app.quit(); await tick(); assert.equal(f.app.exited, true);
+  });
   await test('update lifecycle: normal app quit waits for download cleanup and never launches an installer', async () => {
     const f = fixture(), cleanup = deferred(); f.behavior.cancel = () => cleanup.promise;
     assert.deepEqual(f.calls, [], 'Startup must not check releases or install');

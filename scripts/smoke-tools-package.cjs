@@ -6,6 +6,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const net = require('node:net');
+const dgram = require('node:dgram');
 const crypto = require('node:crypto');
 const { spawn, execFile } = require('node:child_process');
 
@@ -80,6 +81,19 @@ async function quickLoginPeer() {
   } };
 }
 
+async function eventPeer() {
+  const reservation = dgram.createSocket('udp4');
+  await new Promise((resolve, reject) => { reservation.once('error', reject); reservation.bind(0, '127.0.0.1', resolve); });
+  const port = reservation.address().port;
+  await new Promise(resolve => reservation.close(resolve));
+  const socket = dgram.createSocket('udp4'), marker = 'KONX_SYNTHETIC_EVENT_' + crypto.randomBytes(12).toString('hex');
+  const message = Buffer.from('<134>1 2026-10-23T12:00:00Z fixture konx 1 TEST - ' + marker);
+  socket.on('error', () => {});
+  await new Promise(resolve => socket.bind(0, '127.0.0.1', resolve));
+  const timer = setInterval(() => socket.send(message, port, '127.0.0.1', () => {}), 100);
+  return { options: { port, marker }, close: async () => { clearInterval(timer); await new Promise(resolve => socket.close(resolve)); } };
+}
+
 async function nativeLoader(executable) {
   const archive = path.join(path.dirname(executable), 'resources', 'app.asar');
   if (process.platform !== 'win32' || !fs.existsSync(archive)) return { skipped: true, reason: 'No directly accessible Windows app archive beside this executable' };
@@ -93,14 +107,14 @@ async function nativeLoader(executable) {
   return JSON.parse(marker[1]);
 }
 
-async function launch(executable, root, run, profile, version, phase, logging = null, quickLogin = null, workspaceGeometry = null) {
+async function launch(executable, root, run, profile, version, phase, logging = null, quickLogin = null, workspaceGeometry = null, events = null) {
   const demoPath = path.join(run, phase + '-demo.js');
   const screenshot = path.join(run, phase + '.png');
   const resultPath = path.join(run, phase + '-checks.json');
   // The second launch receives no password; its real SSH authentication must
   // use the credential the first launch saved through the Home checkbox.
   const loginOptions = quickLogin && (phase === 'save' ? quickLogin : { ...quickLogin, password: undefined });
-  fs.writeFileSync(demoPath, 'window.__KONX_TOOLS_SMOKE = ' + JSON.stringify({ version, phase, token: TOKEN, resultPath, logging, quickLogin: loginOptions, workspaceGeometry }) + ';\n' +
+  fs.writeFileSync(demoPath, 'window.__KONX_TOOLS_SMOKE = ' + JSON.stringify({ version, phase, token: TOKEN, resultPath, logging, quickLogin: loginOptions, workspaceGeometry, events }) + ';\n' +
     fs.readFileSync(path.join(__dirname, 'smoke-tools-demo.js'), 'utf8'));
   const env = {
     ...process.env, KONX_USERDATA: profile, KONX_CAPTURE: screenshot,
@@ -164,12 +178,14 @@ async function main() {
   const supportsCiscoHighlighting = major > 0 || minor >= 16;
   const supportsSerialAutoBaud = major > 0 || minor >= 17;
   const supportsWorkspaceWindows = major > 0 || minor >= 18;
-  let logging, quickLogin;
+  let logging, quickLogin, events;
   try {
     result.nativeLoader = await nativeLoader(executable);
     if (supportsLoggingSwitch) logging = await loggingPeer(run);
     if (supportsQuickLogin) quickLogin = await quickLoginPeer();
-    result.phases.push(await launch(executable, root, run, profile, version, 'save', logging?.options, quickLogin?.options));
+    if (major > 0 || minor >= 21) events = await eventPeer();
+    result.phases.push(await launch(executable, root, run, profile, version, 'save', logging?.options, quickLogin?.options, null, events?.options));
+    if (events) { await events.close(); events = null; }
     if (supportsWorkspaceWindows) {
       const checks = result.phases[0].checks.workspaceWindows;
       assert(checks?.floated && checks?.nativePopout && checks?.docked && checks?.nativeCloseAcknowledged &&
@@ -281,7 +297,7 @@ async function main() {
     result.error = error.stack || String(error);
     throw error;
   } finally {
-    try { await Promise.all([logging?.close(), quickLogin?.close()]); }
+    try { await Promise.all([logging?.close(), quickLogin?.close(), events?.close()]); }
     finally {
       fs.writeFileSync(path.join(run, 'result.json'), JSON.stringify(result, null, 2));
       console.log((result.passed ? 'PASS: ' : 'FAIL: ') + path.join(run, 'result.json'));

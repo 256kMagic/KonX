@@ -20,6 +20,8 @@ Capture and incident references open only when requested. A moved or deleted cap
 
 Duplicate creates a separate workspace record. Export creates a JSON document that can be imported into another KonX profile. Import creates a new record and never overwrites an existing site or starts a connection.
 
+Choose an export folder outside KonX's managed workspace library. From 0.21.0, this check also resolves Windows folder aliases so an export cannot replace a saved workspace through a junction.
+
 Review notes, display names, paths, and incident references before sharing. Structured session credentials and executable connection specifications are excluded, but text you type can contain sensitive information. Session IDs, capture paths, and incident IDs may not exist on the receiving computer; map or replace those references there.
 
 Deleting a site removes its workspace record. Saved sessions, captures, and incidents remain owned by their respective tools.

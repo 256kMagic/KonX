@@ -1,6 +1,8 @@
 # KonX User Guide
 
-This guide covers KonX 0.20.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one application. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
+This guide covers KonX 0.21.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one application. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
+
+Version 0.21.0 adds [Live Events](EVENTS.md): explicitly started UDP syslog and SNMP trap receivers with filters, readable details, incident attachments, and reviewed JSON/text exports. See the [release notes](releases/0.21.0.md).
 
 Version 0.20.0 adds [Visual Topology](TOPOLOGY.md): clickable maps from observed CDP/LLDP neighbors, recorded interface state, and candidate MAC/IP paths. Open it from Device Inspector, a saved snapshot, or Network Tools. See the [release notes](releases/0.20.0.md).
 

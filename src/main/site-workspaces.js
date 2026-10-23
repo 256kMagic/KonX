@@ -10,7 +10,7 @@ const { TextDecoder } = require('node:util');
 const LIMITS = Object.freeze({ workspaces: 100, fileBytes: 1024 * 1024, listBytes: 16 * 1024 * 1024,
   sessions: 128, captures: 64, incidents: 64, panels: 32, notesBytes: 128 * 1024 });
 const LAYOUTS = Object.freeze(['classic', 'workbench', 'incident-desk', 'operations-wall', 'focus']);
-const PASSIVE_TOOLS = Object.freeze(['capture', 'capture-compare', 'runbook', 'remote-capture', 'incidents', 'snapshots', 'device', 'topology',
+const PASSIVE_TOOLS = Object.freeze(['capture', 'capture-compare', 'runbook', 'remote-capture', 'incidents', 'snapshots', 'device', 'topology', 'events',
   'security', 'ai', 'ping', 'sweep', 'portscan', 'traceroute', 'dns', 'whois', 'subnet', 'wol']);
 const SPLITS = ['workbench', 'incident-desk', 'operations-wall'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -328,9 +328,14 @@ class SiteWorkspaceStore {
     return this.serialize(async () => {
       await this.ready(); const value = (await this.read(id)).value, directory = await this.io.lstat(path.dirname(resolved));
       if (!directory.isDirectory() || directory.isSymbolicLink()) fail('Export folder must be a real directory');
+      // A regular parent can still be reached through an ancestor junction.
+      // Compare resolved directories and keep writing through that checked path.
+      const parent = await this.io.realpath(path.dirname(resolved)), library = await this.io.realpath(this.directory);
+      const destination = path.join(parent, path.basename(resolved));
+      if (fold(destination) === fold(library) || fold(destination).startsWith(fold(library) + path.sep)) fail('Export outside the managed workspace library');
       let initial = false;
-      try { await this.regular(resolved); } catch (error) { if (error.code !== 'ENOENT') throw error; initial = true; }
-      await this.writeAtomic(resolved, json({ schemaVersion: 1, kind: KIND + '-export', exportedAt: new Date().toISOString(), workspace: normalizeData(value) }), initial);
+      try { await this.regular(destination); } catch (error) { if (error.code !== 'ENOENT') throw error; initial = true; }
+      await this.writeAtomic(destination, json({ schemaVersion: 1, kind: KIND + '-export', exportedAt: new Date().toISOString(), workspace: normalizeData(value) }), initial);
       return { path: resolved };
     });
   }

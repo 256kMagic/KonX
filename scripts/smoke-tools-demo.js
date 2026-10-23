@@ -29,6 +29,7 @@
     if (supportReport) checks.supportReport = supportReport;
     if (siteWorkspaces) checks.siteWorkspaces = siteWorkspaces;
     if (visualTopology) checks.visualTopology = visualTopology;
+    if (liveEvents) checks.liveEvents = liveEvents;
     // Portable launchers do not necessarily forward their app's stdout. Write
     // test evidence only to the parent-provided private artifact file.
     await api.invoke('np:write', options.resultPath, new TextEncoder().encode(JSON.stringify(checks, null, 2)));
@@ -78,6 +79,8 @@
   const supportsSites = versionParts[0] > 0 || versionParts[1] >= 19;
   const supportsTopology = versionParts[0] > 0 || versionParts[1] >= 20;
   let visualTopology = null;
+  const supportsEvents = versionParts[0] > 0 || versionParts[1] >= 21;
+  let liveEvents = null;
   let siteWorkspaces = null;
   let supportReport = null;
   if (supportsSupport) {
@@ -299,6 +302,27 @@
       await app.saveSettings({ uiLayout: 'focus' });
       assert(app.jobs.size === 0, 'Layout started a tool job');
     }
+    if (supportsEvents) {
+      assert((await api.invoke('tools:eventsList')).listeners.length === 0, 'Opening KonX started an event listener');
+      const events = app.openTool('events'); await events.ready;
+      assert(getComputedStyle(events.el.querySelector('.events-body')).display === 'grid' && getComputedStyle(events.el.querySelector('.events-table-scroll')).overflow === 'auto', 'Packaged Event Console styles are missing');
+      assert(!events.jobId && !events.summary, 'Event console was not passive on open');
+      events.address.value = '127.0.0.1'; events.port.value = options.events.port; await events.start();
+      await until(() => events.summary?.state === 'listening', 'packaged event socket listening');
+      await until(() => events.records.some(record => record.message === options.events.marker), 'packaged loopback syslog');
+      const record = events.records.find(record => record.message === options.events.marker);
+      assert(record.parseStatus === 'parsed' && record.source.address === '127.0.0.1' && record.severity === 6, 'Packaged syslog fields are incorrect');
+      events.select(record, true); events.detailSequence = record.sequence; events.renderDetails();
+      assert(events.report?.selectedRecords.some(item => item.message === options.events.marker), 'Selected event evidence is missing');
+      assert(events.updateBlockers().length > 0, 'Running event socket does not block update');
+      const { toolContext } = await import('./js/tool-context.mjs');
+      assert(!toolContext(events).includes(options.events.marker), 'Event AI summary included payload');
+      assert(await events.stop(), 'Packaged listener did not close'); await until(() => app.jobs.size === 0, 'event job cleanup');
+      assert(!(await api.invoke('tools:eventsSnapshot', events.listenerId)).hasOwnership, 'Stopped socket ownership remained');
+      await api.invoke('tools:eventsClear', events.listenerId); assert((await api.invoke('tools:eventsSnapshot', events.listenerId)).records.length === 0, 'Clear event history failed');
+      await app.closeTab(events);
+      liveEvents = { explicitStart: true, realLoopbackSyslog: true, parsedDetails: true, selectedEvidence: true, summaryOnlyAI: true, stoppedAndCleared: true };
+    }
     let deviceInspector = null;
     let deviceSnapshots = null;
     let rtpMedia = null;
@@ -517,6 +541,10 @@
     assert(ai.documentContent.textContent.includes('cached evidence'), 'Packaged local article did not render');
     await complete({ phase: options.phase, version: info.version, tools: supportsComparison ? 11 : supportsRunbooks ? 10 : supportsRemoteCapture ? 9 : supportsIncidents ? 8 : supportsRtp ? 7 : supportsSnapshots ? 6 : supportsDeviceInspector ? 5 : 4, ...(deviceInspector ? { deviceInspector } : {}), ...(deviceSnapshots ? { deviceSnapshots } : {}), ...(rtpMedia ? { rtpMedia } : {}), ...(incidentWorkspace ? { incidentWorkspace } : {}), ...(remoteCapture ? { remoteCapture } : {}), ...(runbooks ? { runbooks } : {}), ...(captureComparison ? { captureComparison } : {}), assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
   } else if (options.phase === 'forget') {
+    if (supportsEvents) {
+      assert((await api.invoke('tools:eventsList')).listeners.length === 0, 'Event sockets/history were automatically restored');
+      liveEvents = { noAutomaticListenersAfterRestart: true, historyIsMemoryOnly: true };
+    }
     if (supportsSites) {
       const sites = app.openTool('sites'); await sites.ready;
       const record = sites.workspaces.find(w => w.name === 'Synthetic package smoke site');
