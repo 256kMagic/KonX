@@ -1,5 +1,5 @@
 'use strict';
-const { sameFile, sameVersion, replaceOwnedFile } = require('./atomic-replacement');
+const { sameFile, sameVersion, replaceOwnedFile, publishNewFile } = require('./atomic-replacement');
 
 // Local, explicitly imported incident evidence. Assets are immutable copies;
 // the manifest is an atomic append-only index. No sockets or cloud clients.
@@ -70,7 +70,7 @@ function parseSyslog(text, options = {}) {
 class IncidentStore {
   constructor(userDataDir, options = {}) {
     if (typeof userDataDir !== 'string' || !path.isAbsolute(userDataDir)) throw new Error('Incident storage requires an absolute profile directory');
-    this.directory = path.join(userDataDir, 'incidents'); this.io = options.fs || fs; this.queue = Promise.resolve();
+    this.directory = path.join(userDataDir, 'incidents'); this.io = options.fs || fs; this.publishNew = options.publishNew || publishNewFile; this.queue = Promise.resolve();
     this.operations = 0; this.owners = new Set(); this.readVersions = new WeakMap(); this.closing = null;
   }
   get hasOwnership() { return this.operations > 0 || this.owners.size > 0; }
@@ -140,7 +140,7 @@ class IncidentStore {
       owner.identity = await owner.handle.stat({ bigint: true }); await owner.handle.writeFile(bytes); await owner.handle.sync();
       const sourceVersion = await owner.handle.stat({ bigint: true }); if (!sameFile(owner.identity, sourceVersion)) throw new Error('Owned incident replacement identity is unavailable');
       await owner.handle.close(); owner.handle = null;
-      if (initial) await this.io.link(temp, destination);
+      if (initial) owner.remove = !await this.publishNew(this.io, temp, destination, sourceVersion);
       else { try { await replaceOwnedFile(this.io, temp, destination, sourceVersion, targetVersion); } catch (error) { if (error.code === 'ATOMIC_CONFLICT') error.code = 'INCIDENT_CONFLICT'; throw error; } owner.remove = false; }
       published = true;
     } finally { try { await this.cleanup(owner); } catch (error) { if (!published) throw error; } }
@@ -398,7 +398,7 @@ class IncidentStore {
       owner.identity = await owner.handle.stat({ bigint: true }); await owner.handle.writeFile(content, 'utf8'); await owner.handle.sync();
       const sourceVersion = await owner.handle.stat({ bigint: true }); await owner.handle.close(); owner.handle = null;
       if (targetVersion) { await replaceOwnedFile(this.io, temp, target, sourceVersion, targetVersion); owner.remove = false; }
-      else await this.io.link(temp, target);
+      else owner.remove = !await this.publishNew(this.io, temp, target, sourceVersion);
       published = true; return destination;
     } finally { try { await this.cleanup(owner); } catch (error) { if (!published) throw error; } }
   }); }

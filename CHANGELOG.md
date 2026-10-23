@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.27.0 — 2026-10-23
+
+- Review and run a bounded single-target Ping, DNS query or Traceroute from a completed Copilot answer.
+- Review an exact editor selection replacement, then recheck the live model, version and selection before one undoable edit; no automatic save or upload.
+- Save an exact answer or selected excerpt as a new local Knowledge note, with provenance.
+- Retain action targets, review digests and outcomes. Expired, stale and replayed reviews are rejected; uncertain outcomes never trigger an automatic retry.
+- Avoid the reproduced Windows initial hard-link publication failure with an exclusive native move for new Copilot, Incident, Change Validation and saved-site files, preserving collision and cleanup ownership checks.
+
+See the [Copilot guide](docs/COPILOT.md) and [release notes](docs/releases/0.27.0.md).
+
 ## 0.26.0 — 2026-10-23
 
 - Add explicit device, snapshot, topology, event, site, incident, completed runbook and change-validation evidence choices in Copilot.

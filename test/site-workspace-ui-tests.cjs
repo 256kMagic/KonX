@@ -19,7 +19,9 @@ async function runSiteWorkspaceUiTests(test) {
         const timer = setTimeout(() => { child.kill(); reject(new Error('Site fixture timed out\n' + output)); }, 45000);
         child.once('error', error => { clearTimeout(timer); reject(error); }); child.once('close', code => { clearTimeout(timer); resolve(code); });
       });
-      assert.equal(code, 0, output); assert.match(output, /SITE_WORKSPACE_UI_PASS/);
+      const failurePath = path.join(root, 'failure.json');
+      const failure = fs.existsSync(failurePath) ? JSON.parse(fs.readFileSync(failurePath, 'utf8')) : null;
+      assert.equal(code, 0, `Site fixture exited ${code}: ${failure?.error || 'no renderer failure report'}\n${output}`); assert.match(output, /SITE_WORKSPACE_UI_PASS/);
       const report = JSON.parse(fs.readFileSync(path.join(root, 'result.json')));
       assert.equal(report.passed, true); assert.ok(report.checks >= 45, JSON.stringify(report));
       const files = fs.readdirSync(path.join(root, 'profile/site-workspaces')).filter(file => file.endsWith('.json'));
@@ -28,6 +30,17 @@ async function runSiteWorkspaceUiTests(test) {
         const text = fs.readFileSync(path.join(root, 'profile/site-workspaces', file), 'utf8');
         for (const secret of ['NEVER_PERSIST_PASSWORD', 'NEVER_PERSIST_HOST', 'NEVER_PERSIST_COMMAND']) assert.ok(!text.includes(secret), secret);
       }
+    } catch (error) {
+      // Preserve owned synthetic evidence before deleting the isolated profile.
+      const evidence = path.join(repo, 'review', 'site-workspace-ui-failures', path.basename(root));
+      fs.mkdirSync(evidence, { recursive: true });
+      fs.writeFileSync(path.join(evidence, 'child-output.log'), output);
+      fs.writeFileSync(path.join(evidence, 'parent-error.log'), String(error?.stack || error));
+      for (const file of ['result.json', 'failure.json', 'failure.png']) {
+        if (fs.existsSync(path.join(root, file))) fs.copyFileSync(path.join(root, file), path.join(evidence, file));
+      }
+      error.message += '\nFailure evidence: ' + evidence;
+      throw error;
     } finally {
       if (child && child.exitCode == null) child.kill();
       assert.equal(path.dirname(root), base); assert.ok(path.basename(root).startsWith('konx-site-ui-'));
@@ -41,7 +54,7 @@ async function browserChecks() {
   const { WorkspaceLayout } = await import('./js/workspace-layout.js');
   const { h } = await import('./js/ui.js');
   let checks = 0;
-  const ok = (value, message) => { checks++; if (!value) throw new Error(message); };
+  const ok = (value, message) => { checks++; window.__siteCheck = { checks, message }; if (!value) throw new Error(message); };
   const equal = (a, b, message) => ok(JSON.stringify(a) === JSON.stringify(b), message + '\n' + JSON.stringify(a) + ' != ' + JSON.stringify(b));
   const until = async (predicate, label) => { const end = Date.now() + 5000; while (!predicate()) { if (Date.now() > end) throw new Error('Timed out: ' + label); await new Promise(resolve => setTimeout(resolve, 10)); } };
   const app = { tabs: [], byId: new Map(), jobs: new Map(), active: null, settings: { uiLayout: 'classic' }, sessions: { data: { sessions: [] }, async load() { this.data = await window.api.invoke('sessions:list'); } }, calls: { connect: [], tools: [], sftp: [], disconnect: 0 },
@@ -190,7 +203,13 @@ async function fixture() {
   await app.whenReady();
   const win = new BrowserWindow({ show: false, width: 1280, height: 900, webPreferences: { preload: path.join(root, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false } });
   try { await win.loadFile(path.join(root, 'index.html')); const result = await win.webContents.executeJavaScript('(' + browserChecks.toString() + ')()'); fs.writeFileSync(path.join(root, 'result.json'), JSON.stringify(result)); console.log('SITE_WORKSPACE_UI_PASS ' + result.checks); win.destroy(); app.exit(0); }
-  catch (error) { console.error(error.stack || error); win.destroy(); app.exit(1); }
+  catch (error) {
+    const report = { error: String(error?.stack || error), diagnostics: null };
+    try { report.diagnostics = await win.webContents.executeJavaScript(`({check:window.__siteCheck || null,alerts:[...document.querySelectorAll('[role="alert"]')].map(el=>el.textContent),modals:[...document.querySelectorAll('.modal')].map(el=>el.textContent)})`); } catch (diagnosticError) { report.diagnostics = { error: String(diagnosticError) }; }
+    fs.writeFileSync(path.join(root, 'failure.json'), JSON.stringify(report, null, 2));
+    try { fs.writeFileSync(path.join(root, 'failure.png'), (await win.webContents.capturePage()).toPNG()); } catch {}
+    console.error(error.stack || error); win.destroy(); app.exit(1);
+  }
 }
 module.exports = { runSiteWorkspaceUiTests };
 if (process.versions.electron && process.argv.includes('--site-fixture')) fixture().catch(error => { console.error(error.stack || error); require('electron').app.exit(1); });

@@ -51,6 +51,7 @@ function fixture() {
       super(); window = this; this.destroyed = false;
       this.webContents = new EventEmitter();
       this.webContents.mainFrame = {};
+      this.webContents.isDestroyed = () => this.destroyed;
       this.webContents.send = (...args) => sent.push(args);
       this.webContents.setWindowOpenHandler = handler => { this.openWindow = handler; };
       this.webContents.getBackgroundThrottling = () => true;
@@ -101,6 +102,11 @@ function fixture() {
     list: async () => ({ conversations: [], issues: [] }), run: async () => {},
     close: async () => { copilot.hasOwnership = false; copilot.hasPendingCleanup = false; },
   };
+  const actions = { hasOwnership: false, hasPendingCleanup: false, run: async () => {},
+    candidates: async () => ({ candidates: [], issues: [] }), prepare: async input => input,
+    discard: () => ({ discarded: true }), acknowledgeEditor: input => ({ accepted: !!input }),
+    close: async () => { actions.hasOwnership = false; actions.hasPendingCleanup = false; },
+  };
   const handoff = {
     async commit() { calls.push('commit-helper'); },
     async cancel() { calls.push('cancel-helper'); },
@@ -122,7 +128,10 @@ function fixture() {
     './change-validation-ipc': load('./change-validation-ipc'),
     './copilot-ipc': load('./copilot-ipc'),
     './copilot-store': { CopilotStore: class {} },
-    './copilot': { CopilotService: class { constructor() { return copilot; } } },
+    './copilot': { CopilotService: class { constructor(options) { copilot.options = options; return copilot; } } },
+    './copilot-actions': { CopilotActions: class { constructor(options) { actions.options = options; return actions; } } },
+    './copilot-action-diagnostics': { createActionDiagnostics: () => ({}) },
+    './copilot-actions-ipc': require('../src/main/copilot-actions-ipc'),
     './change-validation': { ChangeValidationStore: class { constructor(profile, dependencies) { changes.profile = profile; changes.dependencies = dependencies; return changes; } } },
     './remote-capture': { run: (...args) => remote.run(...args), closePending: () => remote.closePending(), get hasPendingCleanup() { return remote.hasPendingCleanup; } },
     './remote-results': { RemoteCaptureResults: class {
@@ -181,7 +190,7 @@ function fixture() {
   vm.runInContext(fs.readFileSync(filename, 'utf8'), context, { filename });
   ready();
   return {
-    app, calls, sent, manager, behavior, handoff, connections, remote, runbook, sites, events, changes, copilot, incidents, dialogs,
+    app, calls, sent, manager, behavior, handoff, connections, remote, runbook, sites, events, changes, copilot, actions, incidents, dialogs,
     get jobs() { return vm.runInContext('toolJobs', context); },
     get controller() { return vm.runInContext('updates', context); },
     get window() { return window; },

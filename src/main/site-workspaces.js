@@ -6,6 +6,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { TextDecoder } = require('node:util');
+const { publishNewFile } = require('./atomic-replacement');
 
 const LIMITS = Object.freeze({ workspaces: 100, fileBytes: 1024 * 1024, listBytes: 16 * 1024 * 1024,
   sessions: 128, captures: 64, incidents: 64, panels: 32, notesBytes: 128 * 1024 });
@@ -156,7 +157,7 @@ function importData(text) {
 class SiteWorkspaceStore {
   constructor(userDataDir, options = {}) {
     if (typeof userDataDir !== 'string' || !path.isAbsolute(userDataDir)) fail('Workspace storage requires an absolute profile directory');
-    this.directory = path.join(userDataDir, 'site-workspaces'); this.io = options.fs || fs; this.queue = Promise.resolve();
+    this.directory = path.join(userDataDir, 'site-workspaces'); this.io = options.fs || fs; this.publishNew = options.publishNew || publishNewFile; this.queue = Promise.resolve();
     this.cleanup = new Map(); this.pendingHandles = new Set(); this.pendingOperations = 0; this.closing = null;
   }
   get hasOwnership() { return this.pendingOperations > 0 || this.cleanup.size > 0 || this.pendingHandles.size > 0; }
@@ -185,11 +186,14 @@ class SiteWorkspaceStore {
     for (const [file, owned] of this.cleanup) {
       try {
         if (owned.handle) { owned.stat ||= await owned.handle.stat(); await owned.handle.close(); owned.handle = null; }
-        const current = await this.io.lstat(file);
-        if (!current.isFile() || current.isSymbolicLink() || current.dev !== owned.stat.dev || !current.ino || current.ino !== owned.stat.ino) continue;
-        await this.io.unlink(file); this.cleanup.delete(file);
+        await this.removeTemporary(file, owned);
       } catch (error) { if (error.code === 'ENOENT') this.cleanup.delete(file); }
     }
+  }
+  async removeTemporary(file, owned) {
+    const current = await this.io.lstat(file);
+    if (!owned.stat || !current.isFile() || current.isSymbolicLink() || current.dev !== owned.stat.dev || !current.ino || current.ino !== owned.stat.ino) return;
+    await this.io.unlink(file); this.cleanup.delete(file);
   }
   capacity() { if (this.cleanup.size + this.pendingHandles.size >= LIMITS.workspaces) fail('Workspace cleanup is still pending; retry after the filesystem is available', 'SITE_WORKSPACE_LIMIT'); }
   async closeHandle(handle) { await handle.close(); this.pendingHandles.delete(handle); }
@@ -258,12 +262,13 @@ class SiteWorkspaceStore {
     const owned = { handle: null, stat: null }; let created = false, published = false;
     try {
       owned.handle = await this.io.open(temp, 'wx', 0o600); created = true; this.cleanup.set(temp, owned); owned.stat = await owned.handle.stat();
-      await owned.handle.writeFile(data, 'utf8'); await owned.handle.sync(); await owned.handle.close(); owned.handle = null;
-      if (initial) await this.io.link(temp, destination); else { await this.regular(destination); await this.io.rename(temp, destination); created = false; this.cleanup.delete(temp); }
+      await owned.handle.writeFile(data, 'utf8'); await owned.handle.sync(); const sourceVersion = await owned.handle.stat({ bigint: true }); await owned.handle.close(); owned.handle = null;
+      if (initial) { if (await this.publishNew(this.io, temp, destination, sourceVersion)) { created = false; this.cleanup.delete(temp); } }
+      else { await this.regular(destination); await this.io.rename(temp, destination); created = false; this.cleanup.delete(temp); }
       published = true;
     } finally {
       if (owned.handle) { try { owned.stat ||= await owned.handle.stat(); await owned.handle.close(); owned.handle = null; } catch {} }
-      if (created && !owned.handle) { try { await this.io.unlink(temp); this.cleanup.delete(temp); } catch {} }
+      if (created && !owned.handle) { try { await this.removeTemporary(temp, owned); } catch (error) { if (error.code === 'ENOENT') this.cleanup.delete(temp); } }
     }
     // Temporary-link cleanup is retried by ready() and listed if it remains.
     // It must not turn an already committed save into a duplicate-save retry.

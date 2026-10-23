@@ -342,6 +342,11 @@ const actions = {
       .sort((a, b) => (scores.get(b.id) || 0) - (scores.get(a.id) || 0) || a.title.localeCompare(b.title));
   },
   get(id) { return fromRow(db.prepare('SELECT * FROM documents WHERE id=?').get(identifier(id))); },
+  prepareArticle(value) {
+    if (value?.id !== undefined) throw new Error('Reviewed notes must create a new article');
+    const { id, builtin, ...article } = normalizeArticle(value);
+    return article;
+  },
   save(value) {
     const article = normalizeArticle(value);
     const existing = db.prepare('SELECT builtin FROM documents WHERE id=?').get(article.id);

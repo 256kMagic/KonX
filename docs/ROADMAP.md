@@ -55,7 +55,7 @@ Each phase is tested and published separately with updated release notes and use
 | 0.24.0 | Terminal, sessions, serial, forwarding, logging, SFTP, and editor assistance | Complete; 1,013 tests and packaged checks passed |
 | 0.25.0 | Packet streams, SIP/RTP, capture comparison, security, Wi-Fi, and Mist assistance | Complete; 1,014 tests and packaged checks passed |
 | 0.26.0 | Device, topology, events, sites, incidents, runbooks, and change-validation investigations | Complete; 1,033 tests and packaged checks passed |
-| 0.27.0 | Reviewed diagnostic actions and editor patches with retained outcomes | Planned |
+| 0.27.0 | Reviewed diagnostic actions and editor patches with retained outcomes | Complete; 1,063 tests and packaged checks passed |
 
 Opening a prepared tool is separate from starting work. Proposed actions show their target and inputs before execution. Collection, commands, file changes, and sharing remain explicit; observations, uncertainty, and evidence provenance stay visible.
 

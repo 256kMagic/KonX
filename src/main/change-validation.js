@@ -1,5 +1,5 @@
 'use strict';
-const { sameFile, replaceOwnedFile } = require('./atomic-replacement');
+const { sameFile, replaceOwnedFile, publishNewFile } = require('./atomic-replacement');
 // Local workflow records own decisions and retained copies, never collectors or
 // connections. Snapshot interpretation stays with the existing comparison owner.
 const fs = require('node:fs/promises');
@@ -113,7 +113,7 @@ function validateRecord(value, expectedId) {
 class ChangeValidationStore {
   constructor(profile, options = {}) {
     if (typeof profile !== 'string' || !path.isAbsolute(profile)) fail('Change validation needs an absolute profile path.');
-    this.directory = path.join(profile, 'change-validation'); this.io = options.fs || fs; this.snapshots = options.snapshots; this.incidents = options.incidents;
+    this.directory = path.join(profile, 'change-validation'); this.io = options.fs || fs; this.publishNew = options.publishNew || publishNewFile; this.snapshots = options.snapshots; this.incidents = options.incidents;
     this.readVersions = new WeakMap(); this.queue = Promise.resolve(); this.operations = 0; this.owners = new Set(); this.closing = null;
   }
   get hasOwnership() { return this.operations > 0 || this.owners.size > 0; }
@@ -165,7 +165,7 @@ class ChangeValidationStore {
       owner.identity = await owner.handle.stat({ bigint: true }); await owner.handle.writeFile(content, 'utf8'); await owner.handle.sync();
       const sourceVersion = await owner.handle.stat({ bigint: true }); if (!sameFile(owner.identity, sourceVersion)) fail('Owned replacement identity is unavailable.', 'CHANGE_CONFLICT');
       await owner.handle.close(); owner.handle = null;
-      if (initial) await this.io.link(file, destination);
+      if (initial) owner.remove = !await this.publishNew(this.io, file, destination, sourceVersion);
       else { try { await replaceOwnedFile(this.io, file, destination, sourceVersion, targetVersion); } catch (error) { if (error.code === 'ATOMIC_CONFLICT') error.code = 'CHANGE_CONFLICT'; throw error; } owner.remove = false; }
       published = true;
     } finally { try { await this.cleanup(owner); } catch (error) { if (!published) throw error; } }

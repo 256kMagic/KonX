@@ -11,6 +11,7 @@ const { AIClient } = require('../src/main/ai');
 const { CopilotStore, LIMITS, normalizeSnapshot, emptyUsage, validateRecord } = require('../src/main/copilot-store');
 const { CopilotService } = require('../src/main/copilot');
 const { registerCopilot } = require('../src/main/copilot-ipc');
+const { publishNewFile } = require('../src/main/atomic-replacement');
 const KEY = 'Synthetic_Copilot_Key_Only_1234567890';
 const secondKey = 'Second_Synthetic_Copilot_Key_1234567890';
 const now = () => new Date().toISOString();
@@ -44,7 +45,7 @@ async function fixture(fn, options = {}) {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const request = (options, callback) => http.request({ ...options, protocol: 'http:', hostname: '127.0.0.1', port: server.address().port }, callback);
   const ai = new AIClient({ dir, crypt: crypt(), request, knowledge: { search(query) { searches.push(query); return refs; } } }); ai.configure({ key: KEY });
-  const store = new CopilotStore(dir, { fs: options.io || fsp, now: options.now });
+  const store = new CopilotStore(dir, { fs: options.io || fsp, now: options.now, publishNew: options.publishNew });
   const service = new CopilotService({ store, ai, now: options.now });
   try { return await fn({ dir, ai, store, service, calls, searches, refs, sockets, setHandler: next => { handler = next; } }); }
   finally {
@@ -194,7 +195,8 @@ async function runCopilotTests(test) {
       await assert.rejects(store.create({ name: 'Must not write through a junction' }), /real directory/); assert.deepEqual(fs.readdirSync(target), []);
     });
     let failUnlink = true; const io = Object.create(fsp); io.unlink = async (...args) => { if (failUnlink && path.basename(args[0]).startsWith('.copilot-')) throw Object.assign(new Error('Owned cleanup failure'), { code: 'EACCES' }); return fsp.unlink(...args); };
-    await fixture(async ({ service }) => { await create(service); assert.equal(service.hasPendingCleanup, true); await assert.rejects(service.close(), /cleanup/); failUnlink = false; await service.close(); assert.equal(service.hasOwnership, false); }, { io });
+    // Exercise the retained-alias cleanup path used by POSIX publication.
+    await fixture(async ({ service }) => { await create(service); assert.equal(service.hasPendingCleanup, true); await assert.rejects(service.close(), /cleanup/); failUnlink = false; await service.close(); assert.equal(service.hasOwnership, false); }, { io, publishNew: (...args) => publishNewFile(...args, { platform: 'linux' }) });
   });
 
   await test('OpenAI SSE handles byte-fragmented UTF-8 and split secrets without exposing raw deltas', async () => fixture(async ({ service, setHandler, ai }) => {
@@ -266,12 +268,12 @@ async function runCopilotTests(test) {
   }));
 
   await test('Copilot IPC reports a committed save honestly when shutdown begins during the write', async () => {
-    let duringLink = () => {}, closing = false; const io = Object.create(fsp); io.link = async (...args) => { const value = await fsp.link(...args); duringLink(); return value; };
+    let duringPublish = () => {}, closing = false; const publishNew = async (...args) => { const value = await publishNewFile(...args); duringPublish(); return value; };
     await fixture(async ({ service }) => {
       const handlers = new Map(); registerCopilot((name, handler) => handlers.set(name, handler), { copilot: service, isClosing: () => closing });
-      duringLink = () => { closing = true; }; const saved = await handlers.get('tools:copilotCreate')({ name: 'Committed before shutdown' }); assert.equal(saved.revision, 1);
+      duringPublish = () => { closing = true; }; const saved = await handlers.get('tools:copilotCreate')({ name: 'Committed before shutdown' }); assert.equal(saved.revision, 1);
       closing = false; assert.equal((await service.list()).conversations.length, 1);
-    }, { io });
+    }, { publishNew });
   });
 }
 

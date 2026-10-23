@@ -14,6 +14,7 @@ import { WorkspaceLayout } from './workspace-layout.js';
 import { WorkspacePopouts } from './workspace-popouts.js';
 import { supportDialog } from './support.js';
 import { CopilotController } from './copilot.js';
+import { applyReviewedEditorAction } from './copilot-editor-actions.mjs';
 import { captureCopilotContext, copilotContextSupport } from './copilot-context.mjs';
 
 const RECENT_KEY = 'konx.recent';
@@ -965,6 +966,16 @@ class App {
     api.on('tools:event', (jobId, type, data) => {
       const t = this.jobs.get(jobId);
       if (t) t.onJobEvent(type, data);
+    });
+    // Only the main-process reviewed-action owner emits this event after durable
+    // admission. Historical evidence and model text never call editor methods.
+    api.on('copilot:editorAction', async request => {
+      const target = this.byId.get(request?.target?.tabId);
+      let acknowledgment;
+      try { acknowledgment = await applyReviewedEditorAction(target, request); }
+      catch { acknowledgment = { operationId: request?.operationId, nonce: request?.nonce, status: 'rejected' }; }
+      try { await api.invoke('tools:copilotActionEditorAck', acknowledgment); }
+      catch { toast('The editor outcome could not be acknowledged. Check the document; KonX will not repeat this edit.', 'err'); }
     });
     api.on('ui:prompt', async (p) => {
       let value = null;

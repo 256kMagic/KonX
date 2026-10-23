@@ -28,7 +28,7 @@ async function runAiIntegrationTests(test) {
       require(name) {
         if (name === 'electron') return { app: { whenReady: () => ({ then() {} }), on: (name, callback) => appEvents.set(name, callback), quit: () => quit++ },
           shell: { openExternal: async (url) => calls.push(url) }, ipcMain: { handle: (name, callback) => handlers.set(name, callback), on() {} } };
-        if (['./workspace-windows', './site-workspace-ipc', './topology-ipc', './events-ipc', './change-validation-ipc', './copilot-ipc'].includes(name)) return load(name);
+        if (['./workspace-windows', './site-workspace-ipc', './topology-ipc', './events-ipc', './change-validation-ipc', './copilot-ipc', './copilot-actions-ipc'].includes(name)) return load(name);
         if (name.startsWith('./')) return {};
         return load(name);
       },

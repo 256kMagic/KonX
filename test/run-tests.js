@@ -24,7 +24,7 @@ async function test(name, fn) {
     console.log(`  ok   ${name} (${Date.now() - t0} ms)`);
   } catch (e) {
     results.push([false, name, Date.now() - t0, e]);
-    console.log(`  FAIL ${name}\n       ${e.stack.split('\n').slice(0, 4).join('\n       ')}`);
+    console.log(`  FAIL ${name}\n       ${String(e?.stack || e).split('\n').join('\n       ')}`);
   }
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -478,6 +478,11 @@ const fakeCrypt = {
   await require('./copilot-context-tests.cjs').runCopilotContextTests(test);
   await require('./copilot-tests.cjs').runCopilotTests(test);
   await require('./copilot-ui-tests.cjs').runCopilotUiTests(test);
+  await require('./copilot-actions-tests.cjs').runCopilotActionsTests(test);
+  await require('./atomic-publication-tests.cjs').runAtomicPublicationTests(test);
+  await require('./copilot-editor-action-tests.cjs').runCopilotEditorActionTests(test);
+  await require('./copilot-actions-ui-tests.cjs').runCopilotActionsUiTests(test);
+  await require('./copilot-action-lifecycle-tests.cjs').runCopilotActionLifecycleTests(test);
   await require('./copilot-workspace-tests.cjs').runCopilotWorkspaceTests(test);
   await require('./copilot-traffic-tests.cjs').runCopilotTrafficTests(test);
   await require('./copilot-investigation-tests.cjs').runCopilotInvestigationTests(test);

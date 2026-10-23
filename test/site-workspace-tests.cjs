@@ -5,6 +5,7 @@ const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
 const { SiteWorkspaceStore, LIMITS, PASSIVE_TOOLS } = require('../src/main/site-workspaces');
+const { publishNewFile } = require('../src/main/atomic-replacement');
 const faultFs = overrides => new Proxy(fs, { get(target, name) { return Object.hasOwn(overrides, name) ? overrides[name] : target[name]; } });
 const code = expected => error => error.code === expected;
 const withStore = fn => async () => {
@@ -148,11 +149,11 @@ async function runSiteWorkspaceTests(test) {
     deny = false; await guarded.close(); assert.equal(guarded.hasOwnership, false);
     assert.equal((await guarded.get(saved.id)).name, 'Owned read'); assert.equal(guarded.pendingHandles.size, 0); assert.ok(retried >= 3);
   }));
-  await test('site workspace retains cleanup ownership after failed unlink without falsely failing a committed save', withStore(async (_store, directory) => {
+  await test('site workspace POSIX publication retains cleanup ownership after failed unlink without falsely failing a committed save', withStore(async (_store, directory) => {
     let deny = true;
     const store = new SiteWorkspaceStore(directory, { fs: faultFs({ unlink: async file => {
       if (deny && path.basename(file).startsWith('.workspace-')) throw Object.assign(new Error('Synthetic cleanup denied'), { code: 'EPERM' }); return fs.unlink(file);
-    } }) });
+    } }), publishNew: (io, from, to, version) => publishNewFile(io, from, to, version, { platform: 'linux' }) });
     const saved = await store.save({ name: 'Committed once' }); assert.equal(saved.revision, 1); assert.equal(store.cleanup.size, 1);
     const before = await store.list(); assert.equal(before.workspaces.length, 1); assert.ok(before.issues.length);
     await assert.rejects(store.close(), code('SITE_WORKSPACE_CLEANUP')); assert.equal(store.hasOwnership, true);
@@ -161,13 +162,28 @@ async function runSiteWorkspaceTests(test) {
   }));
   await test('site workspace closing waits for queued publication and prevents new work until cleanup completes', withStore(async (_store, directory) => {
     let release, began; const blocked = new Promise(resolve => { release = resolve; }), started = new Promise(resolve => { began = resolve; });
-    const store = new SiteWorkspaceStore(directory, { fs: faultFs({ link: async (...args) => { began(); await blocked; return fs.link(...args); } }) });
+    const store = new SiteWorkspaceStore(directory, { publishNew: async (...args) => { began(); await blocked; return publishNewFile(...args); } });
     const saving = store.save({ name: 'Finish before closing' }); assert.equal(store.hasOwnership, true); await started;
     let finished = false; const closing = store.close().then(() => { finished = true; });
     assert.throws(() => store.list(), code('SITE_WORKSPACE_CLOSING')); await new Promise(resolve => setImmediate(resolve)); assert.equal(finished, false);
     release(); const saved = await saving; await closing; assert.equal(store.hasOwnership, false);
     assert.equal((await new SiteWorkspaceStore(directory).get(saved.id)).name, 'Finish before closing');
     assert.equal((await store.get(saved.id)).revision, 1, 'A cancelled app shutdown may resume the same store');
+  }));
+  await test('site workspace rejected publication retains a foreign temporary occupant until its exact owned file returns', withStore(async (_store, directory) => {
+    let temporary, original;
+    const store = new SiteWorkspaceStore(directory, { publishNew: async (io, from, to, version) => {
+      temporary = from; original = path.join(directory, 'owned-original.tmp');
+      await fs.rename(from, original); await fs.writeFile(from, 'FOREIGN_OCCUPANT', { flag: 'wx' });
+      return publishNewFile(io, from, to, version);
+    } });
+    await assert.rejects(store.save({ name: 'Rejected changed source' }), code('ATOMIC_CONFLICT'));
+    assert.equal(await fs.readFile(temporary, 'utf8'), 'FOREIGN_OCCUPANT'); assert.equal(store.hasOwnership, true);
+    await assert.rejects(store.close(), code('SITE_WORKSPACE_CLEANUP'));
+    assert.equal(await fs.readFile(temporary, 'utf8'), 'FOREIGN_OCCUPANT');
+    const retained = path.join(directory, 'foreign-retained.tmp'); await fs.rename(temporary, retained); await fs.rename(original, temporary);
+    await store.close(); assert.equal(store.hasOwnership, false); await assert.rejects(fs.lstat(temporary), code('ENOENT'));
+    assert.equal(await fs.readFile(retained, 'utf8'), 'FOREIGN_OCCUPANT'); assert.deepEqual(await fs.readdir(store.directory), []);
   }));
   await test('site workspace retains a newly opened temporary handle when initial identity inspection fails', withStore(async (_store, directory) => {
     let deny = true;

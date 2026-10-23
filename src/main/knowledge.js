@@ -98,6 +98,9 @@ class KnowledgeLibrary {
   get busy() { return this._state === 'indexing' || this._pending.size > 0; }
   list(options) { return this._rpc('list', [options]); }
   get(id) { return this._rpc('get', [id]); }
+  // Pure canonicalization by the same worker owner that will save the article.
+  // Reviewed notes preview and hash these exact bytes before requesting a write.
+  prepareArticle(article) { return this._rpc('prepareArticle', [article]); }
   save(article) { return this._rpc('save', [article]); }
   remove(id) { return this._rpc('remove', [id]); }
   rebuild() { return this._rpc('rebuild'); }

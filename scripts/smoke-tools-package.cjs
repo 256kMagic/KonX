@@ -178,6 +178,21 @@ async function main() {
   const supportsCiscoHighlighting = major > 0 || minor >= 16;
   const supportsSerialAutoBaud = major > 0 || minor >= 17;
   const supportsWorkspaceWindows = major > 0 || minor >= 18;
+  if (major > 0 || minor >= 27) {
+    // Seed only the newly created isolated profile with a labeled completed
+    // synthetic answer through the production store. No provider is contacted.
+    const { CopilotStore, emptyUsage } = require('../src/main/copilot-store');
+    const store = new CopilotStore(profile);
+    try {
+      const value = await store.create({ name: 'Synthetic package reviewed actions' });
+      const turn = { id: crypto.randomUUID(), status: 'pending', createdAt: new Date().toISOString(), completedAt: null,
+        question: 'Synthetic package action fixture', attachmentIds: [], historyTurnIds: [],
+        request: { digest: 'a'.repeat(64), provider: 'openai', model: 'synthetic-offline', providerRevision: 'fixture', body: '{}', endpoint: 'https://example.test/v1', references: [], evidence: [] },
+        answer: '', usage: emptyUsage(), limitations: [], error: '' };
+      await store.beginTurn(value.id, value.revision, turn);
+      await store.finishTurn(value.id, turn.id, { status: 'complete', answer: 'Synthetic answer for local packaged action checks. Verify every observation.', usage: emptyUsage(), limitations: ['Synthetic offline fixture; no provider was contacted.'], error: '' });
+    } finally { await store.close(); }
+  }
   let logging, quickLogin, events;
   try {
     result.nativeLoader = await nativeLoader(executable);

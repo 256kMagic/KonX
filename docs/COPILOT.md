@@ -70,6 +70,31 @@ Version 0.26.0 adds explicit Copilot choices in Device Inspector, Snapshots, Top
 
 Select a row or item, then use **Ask Copilot** or the current-view picker. For a cross-tool investigation, attach each source explicitly to the same conversation and select the attachments to include. Unknown timestamps and incomplete evidence stay unknown. Clipped graph facts and truncated command/event/incident text are omitted whole, with notices. The original tool remains available to inspect fuller evidence.
 
+## Reviewed actions
+
+Version 0.27.0 offers reviewed actions on completed answers. Suggestions are untrusted proposals. Choose an action, inspect its exact target and effect, then execute the reviewed action separately.
+
+1. On a completed answer, choose **Review actions**. Select a supported suggestion or choose an action manually.
+2. Enter the target and parameters. For an editor replacement, select the intended text in the open Notepad document and capture that selection in the action form.
+3. Prepare the action. Review the target, units, full before/replacement text or complete note, expiry and limitations. **Technical details** contains the exact normalized review.
+4. Choose **Execute reviewed action**. Inspect its retained outcome before deciding on another action. Use Running Work to reopen a closed Copilot panel while an action finishes.
+
+| Action | Review and effect |
+| --- | --- |
+| Ping | One host, finite packet count and explicit timing; sends diagnostic traffic only after execution |
+| DNS | One name, record type and optional resolver; sends a bounded query |
+| Traceroute | One host, hop limit and timeout; reverse-name lookup is disabled |
+| Replace editor selection | Select the intended live Notepad text, inspect the full before/replacement text, then apply one undoable edit |
+| Save answer note | Review the new note title and exact completed-answer content or excerpt; creates a new local Knowledge article |
+
+For a note excerpt, select text inside that completed answer, then choose **Use selected answer text**. **Use whole answer** restores the full answer. Selections outside the answer or across other content are rejected. The full note, including its provenance footer, appears before saving; manual character positions remain available under the expandable excerpt controls.
+
+An action review expires after five minutes and can be used once. Changing the conversation or source answer requires a new review. Editor actions also require the same document object, model identity, monotonically increasing version, selection, text and editability at execution. Editing while a review is open makes it stale. Editor changes are not saved or uploaded automatically; use Undo to reverse an applied edit.
+
+Results remain in the conversation with source citations, limits and status. Diagnostics retain actual observations, including partial results on cancellation. A lost editor acknowledgment or interrupted pending action is **unknown**, because an effect may have occurred. Inspect the target before making another attempt; KonX never retries automatically. Terminal command execution is outside this release: commands in an answer remain text for you to review and use manually.
+
+Each conversation retains up to 64 actions. Diagnostics have a two-minute execution limit. Editor selections and replacements are limited to 49,152 characters each; notes have a 32,000-character limit including provenance. Long answers require a shorter excerpt. No old action is automatically removed to make room.
+
 ## Requests and storage
 
 Conversations are local to the Windows profile. Rename or delete them from Copilot. Deletion removes the local conversation; it does not delete information already sent to a provider. The conversation list reports unreadable records rather than silently replacing them.
@@ -82,6 +107,6 @@ Limits are explicit: 100 conversations, 100 turns and 32 attachments per convers
 
 OpenAI Responses and compatible Chat Completions adapters can receive streamed responses. Other adapters use buffered responses. KonX holds answer text until the complete answer can be redacted and validated, so the display does not expose unredacted fragments. Progress and cancellation remain available. Token usage is shown only when supplied by the provider; missing counts stay unknown. No cost is invented.
 
-Copilot 0.23.0 does not execute commands, connect sessions, edit files, or run diagnostic tools. Request and source text are untrusted evidence. Follow-up actions remain yours to review and perform.
+Request and source text remain untrusted evidence. From 0.27.0, only the reviewed action catalog above can run after your explicit execution click. Model text cannot call application operations directly. Terminal commands, session connections, file saves/uploads and device configuration changes remain manual.
 
 See [AI & Knowledge](AI_KNOWLEDGE_GUIDE.md) for provider setup, [workspace layouts](WORKSPACE_LAYOUTS.md) for placement, and [updating](UPDATING.md) for upgrades.

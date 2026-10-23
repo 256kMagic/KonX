@@ -251,10 +251,10 @@ function defineIncidentTests(test) {
   }));
 
   test('failed initial publication removes its incomplete owned workspace', withStore(async (store, directory) => {
-    const failed = new IncidentStore(directory, { fs: failingFs({ link: async (from, to) => {
-      if (path.basename(to) === 'manifest.json') throw new Error('Injected link failure'); return fs.link(from, to);
-    } }) });
-    await assert.rejects(failed.create({ title: 'Not published' }), /Injected link/);
+    const failed = new IncidentStore(directory, { publishNew: async (io, from, to, version) => {
+      if (path.basename(to) === 'manifest.json') throw new Error('Injected publication failure'); return require('../src/main/atomic-replacement').publishNewFile(io, from, to, version);
+    } });
+    await assert.rejects(failed.create({ title: 'Not published' }), /Injected publication/);
     assert.deepEqual(await fs.readdir(store.directory), []);
   }));
 

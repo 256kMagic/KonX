@@ -86,9 +86,9 @@ async function runAtomicEvidenceTests(test) {
       await assert.rejects(save(store), /changed during atomic replacement/i); assert.equal(attempts, 0); assert.ok((await fs.readFile(file, 'utf8')).includes('External revision')); assert.equal(store.hasOwnership, false);
     }));
   }
-  await test('incident committed publication retains failed temporary cleanup, rejects unsafe replacement cleanup and recovers exactly once', async () => {
+  await test('incident POSIX link publication retains failed alias cleanup, rejects unsafe replacement cleanup and recovers exactly once', async () => {
     const base = await fs.realpath(os.tmpdir()), root = await fs.mkdtemp(path.join(base, 'konx-atomic-evidence-'));
-    let blocked = true; const store = new IncidentStore(root, { fs: io({ unlink: async file => { if (blocked && path.basename(file).startsWith('.manifest-')) throw failure('EPERM'); return fs.unlink(file); } }) });
+    let blocked = true; const store = new IncidentStore(root, { fs: io({ unlink: async file => { if (blocked && path.basename(file).startsWith('.manifest-')) throw failure('EPERM'); return fs.unlink(file); } }), publishNew: (...args) => require('../src/main/atomic-replacement').publishNewFile(...args, { platform: 'linux' }) });
     try {
       const record = await store.create({ title: 'Committed once' }); assert.ok(record.id); assert.equal(store.hasOwnership, true); await assert.rejects(store.close(), /cleanup/);
       const owner = [...store.owners][0], backup = owner.file + '.fixture-owned'; await fs.rename(owner.file, backup); await fs.writeFile(owner.file, 'Synthetic foreign occupant'); blocked = false;

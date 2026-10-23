@@ -699,6 +699,34 @@
         canonicalViewRetained: true, draftGuard: true, conversationSaved: true, noProviderRequests: true,
         ...(versionParts[1] >= 26 ? { retainedInvestigationAttached: true, manualDecisionsPreserved: true, investigationSourceOpened: true } : {}) };
     }
+    if (versionParts[1] >= 27) {
+      const record = (await api.invoke('tools:copilotList')).conversations.find(item => item.name === 'Synthetic package reviewed actions');
+      const panel = await app.openCopilot(); const controller = app.copilot;
+      await controller.selectConversation(record.id); const actions = controller.actions;
+      const choose = async kind => { await actions.selectTurn(controller.conversation.turns[0]); actions.setKind(kind); };
+      await choose('diagnostic.ping'); actions.setParam('host', '127.0.0.1'); actions.setParam('count', 1);
+      await actions.prepare();
+      assert(actions.preview?.params.host === '127.0.0.1' && actions.preview.params.count === 1 && controller.conversation.actions.length === 0 && app.jobs.size === 0, 'Action preparation caused an effect or changed its target');
+      await actions.execute(); await until(() => !actions.jobId, 'reviewed loopback Ping');
+      assert(controller.conversation.actions.at(-1).status === 'succeeded' && controller.conversation.actions.at(-1).result.observations.length > 0, 'Packaged reviewed diagnostic failed');
+      await choose('note.saveAnswer'); actions.setParam('title', 'Synthetic package reviewed note'); await actions.prepare();
+      const reviewedNote = actions.preview?.preview.article;
+      assert(reviewedNote?.content, 'Exact local note was not reviewed');
+      await actions.execute(); await until(() => !actions.jobId, 'reviewed local note');
+      const noteAction = controller.conversation.actions.at(-1), savedNote = await api.invoke('tools:knowledgeGet', noteAction.result.articleId);
+      assert(noteAction.status === 'succeeded' && savedNote.content === reviewedNote.content, 'Saved note differs from its exact preview');
+      const editor = await app.openNotepad(), doc = editor.newDoc({ title: 'Reviewed edit fixture', text: 'before fixture\nretained second line' });
+      editor.editor.setSelection({ startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 15 });
+      await app.openCopilot(editor); await choose('editor.replaceSelection'); actions.editorSelect.value = editor.id; actions.editorSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      await actions.captureEditor(); assert(actions.draft?.target?.beforeText === 'before fixture', 'Editor selection was not captured: ' + actions.message); actions.setParam('replacement', 'after fixture');
+      await actions.prepare(); assert(actions.preview?.preview.before === 'before fixture' && doc.model.getValue().startsWith('before fixture'), 'Editor changed before exact review');
+      await actions.execute(); await until(() => !actions.jobId, 'reviewed editor replacement');
+      assert(controller.conversation.actions.at(-1).status === 'succeeded' && doc.model.getValue() === 'after fixture\nretained second line', 'Packaged editor bridge did not apply the reviewed selection');
+      editor.editor.trigger('package-smoke', 'undo', {}); assert(doc.model.getValue() === 'before fixture\nretained second line', 'Reviewed edit did not undo in one step');
+      for (const item of editor.docs) item.dirty = false;
+      await app.closeTab(editor); await app.closeTab(panel);
+      copilotChecks.reviewedActions = { boundedLoopbackPing: true, exactLocalNote: true, editorBridge: true, oneUndo: true, noAutomaticProviderRequests: true };
+    }
     const article = await api.invoke('tools:knowledgeSave', { title: noteTitle, vendor: 'Synthetic fixture', content: 'Wireless RSSI observations are cached evidence. Verify the adapter and collection time.' });
     await ai.readDocument(article.id);
     assert(ai.documentContent.textContent.includes('cached evidence'), 'Packaged local article did not render');
@@ -713,6 +741,15 @@
       assert(app.copilot.conversation.id === record.id && app.jobs.size === 0 && !app.copilot.prepared, 'Opening a saved conversation started work');
       await api.invoke('tools:copilotRemove', record.id, conversation.revision); app.copilot.applyConversation(null); await app.closeTab(panel);
       copilotChecks = { persistedAcrossRestart: true, immutableEvidenceRetained: true, noAutomaticRequests: true, localConversationReopened: true, removed: true };
+    }
+    if (versionParts[1] >= 27) {
+      const record = (await api.invoke('tools:copilotList')).conversations.find(item => item.name === 'Synthetic package reviewed actions');
+      const value = await api.invoke('tools:copilotGet', record.id);
+      assert(value.actions.length === 3 && value.actions.every(action => action.status === 'succeeded') && app.jobs.size === 0, 'Reviewed outcomes were lost or automatically repeated after restart');
+      const note = value.actions.find(action => action.kind === 'note.saveAnswer');
+      assert((await api.invoke('tools:knowledgeGet', note.result.articleId)).title === 'Synthetic package reviewed note', 'Reviewed note was lost after restart');
+      await api.invoke('tools:knowledgeRemove', note.result.articleId); await api.invoke('tools:copilotRemove', value.id, value.revision);
+      copilotChecks.reviewedActions = { persistedAcrossRestart: true, noAutomaticRepeat: true, noteRetained: true, syntheticConversationAndNoteRemoved: true };
     }
     if (supportsEvents) {
       assert((await api.invoke('tools:eventsList')).listeners.length === 0, 'Event sockets/history were automatically restored');

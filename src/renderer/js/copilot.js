@@ -1,5 +1,6 @@
 import { h, icon, api, modal, toast, errMsg } from './ui.js';
 import { captureCopilotContext, copilotContextSupport } from './copilot-context.mjs';
+import { CopilotReviewedActions } from './copilot-actions.js';
 
 const text = value => typeof value === 'string' ? value : '';
 const when = value => { const date = new Date(value); return Number.isFinite(date.getTime()) ? date.toLocaleString() : 'Unknown time'; };
@@ -21,25 +22,26 @@ export class CopilotController {
     this.busy = false; this.prompting = false; this.jobId = null; this.jobSequence = 0; this.state = 'idle';
     this.message = 'Choose a conversation or start a new one. Nothing is sent automatically.';
     this.liveAnswer = ''; this.liveUsage = null; this.disposed = false; this.viewClosed = true;
-    this.panel = new CopilotPanel(this); this.draftBaseline = this.draftSignature();
+    this.actions = new CopilotReviewedActions(this); this.panel = new CopilotPanel(this); this.draftBaseline = this.draftSignature();
   }
 
   draftSignature() { return JSON.stringify([this.question, [...this.attachmentIds], [...this.historyTurnIds], this.includeKnowledge, this.stream]); }
-  hasUnsavedInput() { return this.draftSignature() !== this.draftBaseline || !!this.prepared; }
+  hasUnsavedInput() { return this.draftSignature() !== this.draftBaseline || !!this.prepared || this.actions.hasDraft(); }
   updateBlockers() {
     return [...(this.jobId ? ['Wait for Copilot to finish or cancel its request.'] : []),
       ...(this.busy || this.prompting ? ['Wait for the Copilot operation to finish.'] : []),
       ...(this.hasUnsavedInput() ? ['Send or discard the unsent Copilot draft.'] : []),
-      ...(this.discardIds.size ? ['Retry discarding the unused Copilot request review.'] : [])];
+      ...(this.discardIds.size ? ['Retry discarding the unused Copilot request review.'] : []), ...this.actions.updateBlockers()];
   }
   changed() {
     if (this.disposed) return;
+    this.actions.conversationChanged(this.conversation);
     this.panel.render();
     if (this.app.active === this.panel) this.app.updateStatus?.(this.panel);
     this.app.workspaceLayout?.updateContext();
   }
   async operation(message, action) {
-    if (this.disposed || this.busy || this.prompting || this.jobId) return null;
+    if (this.disposed || this.busy || this.prompting || this.jobId || this.actions.locked) return null;
     this.busy = true; this.message = message; this.changed();
     try { return await action(); }
     catch (error) { if (!this.disposed) { this.message = errMsg(error); toast(this.message, 'err'); } return null; }
@@ -93,7 +95,7 @@ export class CopilotController {
     if (this.disposed) throw new Error('Copilot has been disposed.');
     this.viewClosed = false; this.panel.disposed = false;
     if (sourceTab) this.focusedTabChanged(sourceTab);
-    if ((this.busy || this.jobId || this.prompting) && (snapshot || typeof question === 'string')) {
+    if ((this.busy || this.jobId || this.prompting || this.actions.locked) && (snapshot || typeof question === 'string')) {
       this.message = 'Finish or cancel the current operation before adding new evidence or replacing the question.'; this.changed(); return this.panel;
     }
     if (!this.busy && !this.jobId) await this.operation('Reading local conversations…', async () => { await this.refreshStatus(); await this.refreshList(); await this.flushDiscard(); });
@@ -127,7 +129,7 @@ export class CopilotController {
     this.changed();
   }
   async selectConversation(id) {
-    if (this.busy || this.jobId || this.prompting || id === this.conversation?.id) return;
+    if (this.busy || this.jobId || this.prompting || this.actions.locked || id === this.conversation?.id) return;
     if (!await this.confirmDraft()) { this.changed(); return; }
     this.invalidate();
     await this.operation('Opening conversation…', async () => {
@@ -143,7 +145,7 @@ export class CopilotController {
     return result === true ? input.value.trim() : null;
   }
   async createConversation() {
-    if (this.busy || this.jobId || this.prompting || !await this.confirmDraft()) return;
+    if (this.busy || this.jobId || this.prompting || this.actions.locked || !await this.confirmDraft()) return;
     const name = await this.nameDialog('New conversation', 'New conversation'); if (!name || this.disposed) return;
     this.invalidate();
     await this.operation('Creating conversation…', async () => {
@@ -151,7 +153,7 @@ export class CopilotController {
     });
   }
   async renameConversation() {
-    if (!this.conversation || this.busy || this.jobId || this.prompting) return;
+    if (!this.conversation || this.busy || this.jobId || this.prompting || this.actions.locked) return;
     const before = this.conversation, name = await this.nameDialog('Rename conversation', before.name); if (!name || this.disposed) return;
     this.invalidate();
     await this.operation('Renaming conversation…', async () => {
@@ -159,7 +161,7 @@ export class CopilotController {
     });
   }
   async removeConversation() {
-    if (!this.conversation || this.busy || this.jobId || this.prompting) return;
+    if (!this.conversation || this.busy || this.jobId || this.prompting || this.actions.locked) return;
     const before = this.conversation;
     const answer = await this.dialog({ title: 'Delete conversation', body: h('p', `Delete “${before.name}”, its saved replies and evidence? Any unsent draft in this conversation will also be discarded.`),
       buttons: [{ label: 'Cancel', value: null }, { label: 'Delete conversation', value: true, danger: true }] });
@@ -170,7 +172,7 @@ export class CopilotController {
     });
   }
   async attach(snapshot) {
-    if (this.busy || this.jobId || this.prompting || this.disposed) return null;
+    if (this.busy || this.jobId || this.prompting || this.actions.locked || this.disposed) return null;
     this.invalidate();
     return this.operation('Saving evidence snapshot…', async () => {
       if (!this.conversation) this.applyConversation(await api.invoke('tools:copilotCreate', { name: text(snapshot.title) || 'Evidence discussion' }));
@@ -182,7 +184,7 @@ export class CopilotController {
     });
   }
   async attachCurrentView(source = this.focusedTab) {
-    if (this.busy || this.jobId || this.prompting || this.disposed || !source || source.disposed) return;
+    if (this.busy || this.jobId || this.prompting || this.actions.locked || this.disposed || !source || source.disposed) return;
     try {
       const support = copilotContextSupport(source);
       if (!support.supported) throw new Error(support.reason);
@@ -202,13 +204,13 @@ export class CopilotController {
     } catch (error) { this.message = errMsg(error); toast(this.message, 'err'); this.changed(); }
   }
   async detach(id) {
-    if (!this.conversation || this.busy || this.jobId || this.prompting || this.disposed) return; this.invalidate();
+    if (!this.conversation || this.busy || this.jobId || this.prompting || this.actions.locked || this.disposed) return; this.invalidate();
     await this.operation('Removing attachment…', async () => {
       this.applyConversation(await api.invoke('tools:copilotDetach', this.conversation.id, this.conversation.revision, id), { retainDraft: true }); await this.refreshList(); this.message = 'Attachment removed. Past replies retain their original evidence.';
     });
   }
   async prepare(test = false) {
-    if (this.busy || this.jobId || this.prompting) return;
+    if (this.busy || this.jobId || this.prompting || this.actions.locked) return;
     if (!test && (!this.conversation || !this.question.trim())) return;
     this.invalidate(); const generation = this.generation;
     await this.operation(test ? 'Preparing connection test for review…' : 'Preparing the exact request for review…', async () => {
@@ -225,7 +227,7 @@ export class CopilotController {
     });
   }
   async send() {
-    if (!this.prepared || this.busy || this.jobId || this.prompting || this.disposed) return;
+    if (!this.prepared || this.busy || this.jobId || this.prompting || this.actions.locked || this.disposed) return;
     const prepared = this.prepared, generation = this.generation;
     await this.operation('Checking the reviewed request…', async () => {
       await this.refreshStatus();
@@ -276,13 +278,16 @@ export class CopilotController {
     this.changed();
   }
   async requestClose() {
-    if (this.busy || this.prompting) { toast('Wait for the Copilot operation to finish.', 'err'); return false; }
+    if (this.busy || this.prompting || this.actions.busy) { toast('Wait for the Copilot operation to finish.', 'err'); return false; }
+    if (this.actions.jobId) return await this.dialog({ title: 'Close Copilot', body: h('p', 'Cancel the reviewed action and close? Any effect already applied remains; its outcome will be retained without automatic retry.'),
+      buttons: [{ label: 'Keep open', value: null }, { label: 'Cancel action and close', value: true, danger: true }] }) === true;
     if (this.jobId) return await this.dialog({ title: 'Close Copilot', body: h('p', 'Cancel this request and discard the unsent draft? Saved conversations and evidence remain available.'),
       buttons: [{ label: 'Keep open', value: null }, { label: 'Cancel request and close', value: true, danger: true }] }) === true;
     if (!await this.confirmDraft('Discard this unsent draft and close Copilot? Saved conversations and evidence remain available.')) return false;
-    this.invalidate(); return await this.flushDiscard();
+    this.invalidate(); this.actions.invalidate(); return await this.flushDiscard() && await this.actions.flushDiscard();
   }
   closeView() {
+    this.actions.closeView();
     this.viewClosed = true; this.invalidate(); this.question = ''; this.draftBaseline = this.draftSignature(); this.dialogControl?.close(null);
     if (this.jobId) void this.stop(); this.changed();
   }
@@ -300,10 +305,11 @@ export class CopilotController {
     this.changed();
   }
   async dispose() {
-    this.closeView(); await this.flushDiscard();
+    this.closeView(); await this.flushDiscard(); await this.actions.flushDiscard();
     // Root owns app shutdown and waits for registered jobs before destroying the
     // controller. Do not drop the final cancellation/report subscription early.
-    if (this.jobId || this.busy || this.prompting || this.discardIds.size) return false;
+    if (this.jobId || this.busy || this.prompting || this.discardIds.size || this.actions.locked || this.actions.discards.size) return false;
+    this.actions.disposed = true;
     this.disposed = true; this.panel.disposed = true; return true;
   }
 }
@@ -349,10 +355,10 @@ export class CopilotPanel {
       h('div.copilot-scroll', h('div.copilot-conversations', this.conversationSelect, this.newButton, this.renameButton, this.deleteButton),
         this.providerStatus, this.connectionDetails, this.focusStatus, this.attachButton, this.issues, this.evidenceDetails, this.historyDetails,
         h('section.copilot-compose', h('label.field', h('span', 'Your question'), this.question), h('label.copilot-check', this.knowledge, 'Include local knowledge references'),
-          h('p.hint', 'Review first, then send. Copilot does not run commands or change devices.'), h('div.copilot-actions', this.prepareButton, this.cancelButton), this.status, this.cleanupButton), this.review, this.turns));
+          h('p.hint', 'Review first, then send. Answers never execute themselves. Separate reviewed actions offer bounded diagnostics, local editor edits and answer notes.'), h('div.copilot-actions', this.prepareButton, this.cancelButton), this.status, this.cleanupButton), this.review, this.turns, controller.actions.el));
   }
   render() {
-    const c = this.controller, locked = c.busy || c.prompting || !!c.jobId, conversation = c.conversation;
+    const c = this.controller, locked = c.busy || c.prompting || !!c.jobId || c.actions.locked, conversation = c.conversation;
     this.state = c.state;
     if (this.question.value !== c.question) this.question.value = c.question;
     this.question.disabled = locked; this.knowledge.disabled = locked || !conversation; this.knowledge.checked = c.includeKnowledge;
@@ -385,6 +391,7 @@ export class CopilotPanel {
       this.reviewLimitations.replaceChildren(...(preview.limitations || []).map(item => h('li', text(item))));
     } else this.requestBody.textContent = '';
     this.sendButton.disabled = locked || !preview; this.discardButton.disabled = locked || !preview;
+    c.actions.render();
   }
   renderEvidence(locked) {
     const c = this.controller, attachments = c.conversation?.attachments || [];
@@ -433,11 +440,12 @@ export class CopilotPanel {
     const c = this.controller;
     if (this.renderedTurns !== c.conversation?.turns) {
       this.renderedTurns = c.conversation?.turns;
+      c.actions.turnButtons.clear(); c.actions.renderedActions = null;
       this.savedTurns.replaceChildren(...(c.conversation?.turns || []).map(turn => h('article.copilot-turn',
       h('p.copilot-turn-meta', `${turn.status} · ${when(turn.createdAt)}`), h('h3', turn.question), h('div.copilot-answer', text(turn.answer) || text(turn.error) || 'No answer was saved.'),
       h('p.hint', usageText(turn.usage)), ...(turn.limitations || []).map(item => h('p.hint', text(item))),
       h('details', h('summary', 'Original request and sources'), h('p.hint', `${turn.request?.provider || 'Unknown provider'} · ${turn.request?.model || 'Unknown model'}`),
-        h('pre.copilot-request', { tabindex: 0 }, text(turn.request?.body))))));
+        h('pre.copilot-request', { tabindex: 0 }, text(turn.request?.body))), c.actions.turnControl(turn))));
     }
     this.pendingTurn.classList.toggle('hidden', !c.jobId);
     if (c.jobId) this.pendingTurn.replaceChildren(h('p.copilot-turn-meta', 'Request in progress'),

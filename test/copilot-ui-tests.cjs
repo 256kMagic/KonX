@@ -5,10 +5,10 @@ const os = require('node:os');
 const path = require('node:path');
 const { EventEmitter } = require('node:events');
 const { spawn } = require('node:child_process');
-let REPO = __dirname;
-while (!fs.existsSync(path.join(REPO, 'src/main/main.js'))) { const parent = path.dirname(REPO); if (parent === REPO) throw new Error('KonX source checkout required'); REPO = parent; }
+const REPO = path.resolve(__dirname, '..');
 const MAIN = path.join(REPO, 'src/main');
 const UI = path.join(REPO, 'src/renderer');
+const ownRenderer = relative => path.join(UI, relative);
 const pause = (ms = 20) => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check, label, timeout = 12000) { const stop = Date.now() + timeout; while (!await check()) { if (Date.now() >= stop) throw new Error('Timed out: ' + label); await pause(); } }
 
@@ -54,10 +54,10 @@ async function fixture() {
   dialog.showErrorBox = (title, body) => { throw new Error(`${title}: ${body}`); };
   await app.whenReady();
   fs.mkdirSync(path.join(temp, 'profile'), { recursive: true }); fs.mkdirSync(path.join(temp, 'js'));
-  for (const file of ['ui.js', 'copilot-context.mjs', 'workspace-layout.js', 'workspace-layouts.mjs', 'workspace-panels-model.mjs']) fs.copyFileSync(path.join(REPO, 'src/renderer/js', file), path.join(temp, 'js', file));
-  fs.copyFileSync(path.join(UI, 'js/copilot.js'), path.join(temp, 'js/copilot.js'));
+  for (const file of ['ui.js', 'copilot-context.mjs', 'copilot-actions.js', 'copilot-editor-actions.mjs', 'workspace-layout.js', 'workspace-layouts.mjs', 'workspace-panels-model.mjs']) fs.copyFileSync(ownRenderer('js/' + file), path.join(temp, 'js', file));
+  fs.copyFileSync(ownRenderer('js/copilot.js'), path.join(temp, 'js/copilot.js'));
   for (const file of ['styles.css', 'workspace-layout.css', 'workspace-popouts.css']) fs.copyFileSync(path.join(REPO, 'src/renderer', file), path.join(temp, file));
-  fs.copyFileSync(path.join(UI, 'copilot.css'), path.join(temp, 'copilot.css'));
+  fs.copyFileSync(ownRenderer('copilot.css'), path.join(temp, 'copilot.css'));
   fs.writeFileSync(path.join(temp, 'preload.cjs'), `const {contextBridge,ipcRenderer}=require('electron');contextBridge.exposeInMainWorld('api',{invoke:(...args)=>ipcRenderer.invoke(...args),on:(name,cb)=>{const listener=(_e,...args)=>cb(...args);ipcRenderer.on(name,listener);return()=>ipcRenderer.removeListener(name,listener);}});`);
   const css = '<link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="workspace-layout.css"><link rel="stylesheet" href="workspace-popouts.css"><link rel="stylesheet" href="copilot.css">';
   fs.writeFileSync(path.join(temp, 'child.html'), `<!doctype html><html><head>${css}</head><body style="margin:0;height:100vh"><main id="child-host" style="height:100%;display:flex"></main></body></html>`);

@@ -125,9 +125,9 @@ async function runChangeValidationTests(test) {
     const owned = new ChangeValidationStore(root, { snapshots, incidents, fs: io }); const pending = owned.get(record.id); await started; assert.equal(owned.hasOwnership, true);
     const closing = owned.close(); await assert.rejects(owned.get(record.id), /closing/); release(); assert.equal((await pending).id, record.id); await closing; assert.equal(owned.hasOwnership, false);
   }));
-  await test('change committed save remains successful through temp cleanup failure and never deletes a replaced temp identity', () => inStore(async ({ root }) => {
+  await test('change POSIX link publication remains successful through alias cleanup failure and never deletes a replaced identity', () => inStore(async ({ root }) => {
     let failUnlink = true; const io = Object.create(fs); io.unlink = async file => { if (failUnlink && path.basename(file).startsWith('.change-')) throw Error('Synthetic unlink failure'); return fs.unlink(file); };
-    const store = new ChangeValidationStore(root, { fs: io }); const record = await store.create(plan()); assert.equal(record.revision, 1); assert.equal(store.hasOwnership, true);
+    const store = new ChangeValidationStore(root, { fs: io, publishNew: (...args) => require('../src/main/atomic-replacement').publishNewFile(...args, { platform: 'linux' }) }); const record = await store.create(plan()); assert.equal(record.revision, 1); assert.equal(store.hasOwnership, true);
     const owner = [...store.owners][0]; assert.equal(path.dirname(owner.file), store.directory);
     await fs.unlink(owner.file); const replacement = path.join(store.directory, 'replacement.tmp'); await fs.writeFile(replacement, 'FOREIGN_SYNTHETIC_FILE'); await fs.rename(replacement, owner.file);
     failUnlink = false; await assert.rejects(store.close(), /cleanup remains pending/); assert.equal(await fs.readFile(owner.file, 'utf8'), 'FOREIGN_SYNTHETIC_FILE'); assert.equal(store.hasOwnership, true);

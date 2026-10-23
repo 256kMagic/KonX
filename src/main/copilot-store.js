@@ -4,6 +4,8 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { TextDecoder } = require('node:util');
+const { ACTION_LIMITS, validateAction } = require('./copilot-action-schema');
+const { publishNewFile } = require('./atomic-replacement');
 
 const LIMITS = Object.freeze({ conversations: 100, turns: 100, attachments: 32, selectedAttachments: 8, historyTurns: 12,
   questionChars: 8000, answerChars: 50000, snapshotBytes: 64 * 1024, requestBytes: 256 * 1024,
@@ -90,24 +92,28 @@ function validateTurn(turn) {
   return turn;
 }
 function validateRecord(value, id = value?.id) {
-  object(value, ['schemaVersion', 'kind', 'id', 'revision', 'name', 'createdAt', 'updatedAt', 'attachments', 'turns'], 'Conversation');
+  object(value, ['schemaVersion', 'kind', 'id', 'revision', 'name', 'createdAt', 'updatedAt', 'attachments', 'turns', 'actions'], 'Conversation');
   if (value.schemaVersion !== 1 || value.kind !== 'konx-copilot-conversation' || value.id !== uuid(id)) fail('Invalid conversation identity');
   revision(value.revision); text(value.name, 256, 'Conversation name', false); timestamp(value.createdAt); timestamp(value.updatedAt);
   const attachments = array(value.attachments, LIMITS.attachments, 'Attachments');
   for (const entry of attachments) { object(entry, ['id', 'revision', 'createdAt', 'snapshot']); uuid(entry.id); if (entry.revision !== 1) fail('Invalid attachment revision'); timestamp(entry.createdAt); normalizeSnapshot(entry.snapshot); }
   const turns = array(value.turns, LIMITS.turns, 'Conversation turns'); turns.forEach(validateTurn);
   if (new Set(attachments.map(v => v.id)).size !== attachments.length || new Set(turns.map(v => v.id)).size !== turns.length || turns.filter(v => v.status === 'pending').length > 1) fail('Invalid duplicate conversation entries');
-  json(value); return value;
+  const actions = value.actions === undefined ? [] : array(value.actions, ACTION_LIMITS.actions, 'Reviewed actions'); actions.forEach(validateAction);
+  if (new Set(actions.map(a => a.id)).size !== actions.length || actions.some(a => !turns.some(t => t.id === a.source.turnId && t.status === 'complete')) || actions.filter(a => a.status === 'pending').length + turns.filter(t => t.status === 'pending').length > 1) fail('Invalid reviewed action identity or source');
+  // Check the existing v1 serialized record before supplying its optional field.
+  // Old records remain readable, including those at the old exact byte limit.
+  json(value); value.actions = actions; return value;
 }
 const emptyUsage = () => ({ inputTokens: null, outputTokens: null, totalTokens: null, source: 'provider' });
 
 class CopilotStore {
-  constructor(profile, { fs: io = fs, now = () => Date.now() } = {}) {
+  constructor(profile, { fs: io = fs, now = () => Date.now(), publishNew = publishNewFile } = {}) {
     if (typeof profile !== 'string' || !path.isAbsolute(profile)) fail('Copilot requires an absolute profile directory');
-    this.directory = path.join(profile, 'copilot-conversations'); this.io = io; this.now = now;
-    this.queue = Promise.resolve(); this.pendingOperations = 0; this.cleanup = new Map(); this.handles = new Set(); this.activeTurns = new Set(); this.reservations = new Map(); this.closing = null;
+    this.directory = path.join(profile, 'copilot-conversations'); this.io = io; this.now = now; this.publishNew = publishNew;
+    this.queue = Promise.resolve(); this.pendingOperations = 0; this.cleanup = new Map(); this.handles = new Set(); this.activeTurns = new Set(); this.activeActions = new Set(); this.reservations = new Map(); this.closing = null;
   }
-  get hasOwnership() { return this.pendingOperations > 0 || this.cleanup.size > 0 || this.handles.size > 0 || this.activeTurns.size > 0; }
+  get hasOwnership() { return this.pendingOperations > 0 || this.cleanup.size > 0 || this.handles.size > 0 || this.activeTurns.size > 0 || this.activeActions.size > 0; }
   get hasPendingCleanup() { return this.cleanup.size > 0 || this.handles.size > 0; }
   serialize(fn) {
     if (this.closing) fail('Copilot storage is closing', 'COPILOT_CLOSING');
@@ -167,8 +173,8 @@ class CopilotStore {
     const owned = { handle: null, stat: null }; let created = false;
     try {
       owned.handle = await this.io.open(temp, 'wx', 0o600); created = true; this.cleanup.set(temp, owned); owned.stat = await owned.handle.stat();
-      await owned.handle.writeFile(data, 'utf8'); await owned.handle.sync(); await owned.handle.close(); owned.handle = null;
-      if (initial) await this.io.link(temp, target);
+      await owned.handle.writeFile(data, 'utf8'); await owned.handle.sync(); const sourceVersion = await owned.handle.stat({ bigint: true }); await owned.handle.close(); owned.handle = null;
+      if (initial) { if (await this.publishNew(this.io, temp, target, sourceVersion)) { created = false; this.cleanup.delete(temp); } }
       else { await this.replaceOwned(temp, target, owned.stat); created = false; this.cleanup.delete(temp); }
     } finally {
       if (owned.handle) { try { owned.stat ||= await owned.handle.stat(); await owned.handle.close(); owned.handle = null; } catch {} }
@@ -192,8 +198,10 @@ class CopilotStore {
   }
   async recover(value) {
     const interrupted = value.turns.filter(t => t.status === 'pending' && !this.activeTurns.has(t.id));
-    if (interrupted.length) {
+    const unknown = value.actions.filter(a => a.status === 'pending' && !this.activeActions.has(a.id));
+    if (interrupted.length || unknown.length) {
       for (const turn of interrupted) { turn.status = 'interrupted'; turn.completedAt = this.time(); turn.error = 'KonX closed before this request finished. It was not sent again.'; }
+      for (const action of unknown) { action.status = 'unknown'; action.completedAt = this.time(); action.error = 'KonX closed before this action outcome was saved. The effect may have occurred. It was not repeated.'; }
       value.revision++; value.updatedAt = this.time(); return this.publish(value);
     }
     return value;
@@ -213,13 +221,13 @@ class CopilotStore {
   get(id) { uuid(id); return this.serialize(async () => { await this.ready(); return clone(await this.recover(await this.read(id))); }); }
   create(input) {
     object(input, ['name']); const name = text(input.name, 256, 'Conversation name', false).trim();
-    return this.serialize(async () => { await this.ready(); const now = this.time(); return this.publish({ schemaVersion: 1, kind: 'konx-copilot-conversation', id: crypto.randomUUID(), revision: 1, name, createdAt: now, updatedAt: now, attachments: [], turns: [] }, true); });
+    return this.serialize(async () => { await this.ready(); const now = this.time(); return this.publish({ schemaVersion: 1, kind: 'konx-copilot-conversation', id: crypto.randomUUID(), revision: 1, name, createdAt: now, updatedAt: now, attachments: [], turns: [], actions: [] }, true); });
   }
   mutate(id, expected, fn, { pending = false, reserve = 0 } = {}) {
     uuid(id); revision(expected);
     return this.serialize(async () => { await this.ready(); const value = await this.recover(await this.read(id));
       if (value.revision !== expected) fail('Conversation changed; reopen it and review again', 'COPILOT_CONFLICT');
-      if (!pending && value.turns.some(t => t.status === 'pending')) fail('Wait for this conversation’s request to finish', 'COPILOT_BUSY');
+      if (!pending && (value.turns.some(t => t.status === 'pending') || value.actions.some(a => a.status === 'pending'))) fail('Wait for this conversation’s request or reviewed action to finish', 'COPILOT_BUSY');
       if (value.revision >= Number.MAX_SAFE_INTEGER) fail('Conversation revision limit reached', 'COPILOT_LIMIT');
       fn(value); value.revision++; value.updatedAt = this.time(); return this.publish(value, false, reserve);
     });
@@ -229,7 +237,7 @@ class CopilotStore {
   detach(id, expected, attachmentId) { uuid(attachmentId); return this.mutate(id, expected, value => { if (!value.attachments.some(a => a.id === attachmentId)) fail('Attachment was not found'); value.attachments = value.attachments.filter(a => a.id !== attachmentId); }); }
   remove(id, expected) { uuid(id); revision(expected); return this.serialize(async () => {
     await this.ready(); const value = await this.recover(await this.read(id)); if (value.revision !== expected) fail('Conversation changed; reopen it before removing', 'COPILOT_CONFLICT');
-    if (value.turns.some(t => t.status === 'pending')) fail('Stop the request before removing this conversation', 'COPILOT_BUSY');
+    if (value.turns.some(t => t.status === 'pending') || value.actions.some(a => a.status === 'pending')) fail('Stop the request or reviewed action before removing this conversation', 'COPILOT_BUSY');
     await this.regular(this.file(id)); await this.io.unlink(this.file(id)); return { removed: id };
   }); }
   beginTurn(id, expected, input) {
@@ -246,6 +254,23 @@ class CopilotStore {
       if (!['complete', 'cancelled', 'failed'].includes(outcome.status)) fail('Invalid final turn state');
       Object.assign(turn, clone(outcome), { completedAt: this.time() }); validateTurn(turn); value.revision++; value.updatedAt = this.time();
       const result = await this.publish(value); this.activeTurns.delete(turnId); this.reservations.delete(id); return result;
+    });
+  }
+  beginAction(id, expected, input) {
+    validateAction(input); if (input.status !== 'pending') fail('A new reviewed action must be pending');
+    return this.mutate(id, expected, value => {
+      if (value.actions.length >= ACTION_LIMITS.actions) fail('Start a new conversation; this one reached its reviewed-action limit', 'COPILOT_LIMIT');
+      value.actions.push(clone(input));
+    }, { reserve: ACTION_LIMITS.outcomeReserve }).then(value => { this.activeActions.add(input.id); this.reservations.set(id, ACTION_LIMITS.outcomeReserve); return value; });
+  }
+  finishAction(id, actionId, outcome) {
+    uuid(id); uuid(actionId); object(outcome, ['status', 'result', 'error']);
+    return this.serialize(async () => {
+      await this.ready(); const value = await this.read(id), action = value.actions.find(a => a.id === actionId);
+      if (!action || action.status !== 'pending' || !this.activeActions.has(actionId)) fail('Pending reviewed action was not found', 'COPILOT_CONFLICT');
+      if (!['succeeded', 'failed', 'cancelled', 'unknown'].includes(outcome.status)) fail('Invalid final action state');
+      Object.assign(action, clone(outcome), { completedAt: this.time() }); validateAction(action); value.revision++; value.updatedAt = this.time();
+      const result = await this.publish(value); this.activeActions.delete(actionId); this.reservations.delete(id); return result;
     });
   }
   close() {

@@ -35,6 +35,9 @@ const { AIClient } = require('./ai');
 const { CopilotStore } = require('./copilot-store');
 const { CopilotService } = require('./copilot');
 const { registerCopilot } = require('./copilot-ipc');
+const { CopilotActions } = require('./copilot-actions');
+const { createActionDiagnostics } = require('./copilot-action-diagnostics');
+const { registerCopilotActions } = require('./copilot-actions-ipc');
 const { KnowledgeLibrary } = require('./knowledge');
 const { UpdateManager } = require('./updater');
 const { getInstallTarget, launchUpdate } = require('./update-install');
@@ -60,6 +63,7 @@ let npWatcher;
 let mist;
 let ai;
 let copilot;
+let copilotActions;
 let knowledge;
 let snapshots;
 let incidents;
@@ -75,8 +79,8 @@ let remoteReservations = 0;
 let toolsShuttingDown = false;
 let ownedConnectionQuitApproved = false;
 
-function ownedToolJobs() { return [...toolJobs.values()].filter(signal => ['remote-capture', 'runbook', 'events', 'copilot'].includes(signal.kind)); }
-function hasToolOwnership() { return remoteReservations > 0 || ownedToolJobs().length > 0 || !!remoteResults?.hasOpenHandles || !!remoteCapture.hasPendingCleanup || !!runbookStore?.hasOwnership || !!sites?.hasOwnership || !!events?.hasOwnership || !!changes?.hasOwnership || !!incidents?.hasOwnership || !!copilot?.hasOwnership; }
+function ownedToolJobs() { return [...toolJobs.values()].filter(signal => ['remote-capture', 'runbook', 'events', 'copilot', 'copilot-action'].includes(signal.kind)); }
+function hasToolOwnership() { return remoteReservations > 0 || ownedToolJobs().length > 0 || !!remoteResults?.hasOpenHandles || !!remoteCapture.hasPendingCleanup || !!runbookStore?.hasOwnership || !!sites?.hasOwnership || !!events?.hasOwnership || !!changes?.hasOwnership || !!incidents?.hasOwnership || !!copilot?.hasOwnership || !!copilotActions?.hasOwnership; }
 function hasSerialOwnership() { return !!connections?.hasSerialOwnership; }
 function hasPopoutOwnership() { return !!workspaceWindows?.hasOwnership; }
 function dialogOwner() { return workspaceWindows?.dialogOwner() || (win && !win.isDestroyed() ? win : undefined); }
@@ -223,8 +227,9 @@ function launchCaptureHelper(args) {
 function registerIpc() {
   const handle = (ch, fn) => ipcMain.handle(ch, (event, ...args) => {
     if (!isPrimaryFrame(event, win)) throw new Error('Only the primary KonX window may use application IPC.');
-    // Redocking acknowledges view cleanup even while an updater has frozen new work.
-    if (ch === 'app:popoutClose') return fn(...args);
+    // Completion acknowledgments release owned work even while an updater has
+    // frozen new starts. The primary-frame check above still applies.
+    if (['app:popoutClose', 'tools:copilotActionEditorAck', 'tools:copilotActionDiscard'].includes(ch)) return fn(...args);
     return updates ? updates.invoke(ch, () => fn(...args)) : fn(...args);
   });
   registerSiteWorkspaces(handle, { sites, dialog, dialogOwner, isClosing: () => toolsShuttingDown || updateShutdownPending });
@@ -232,6 +237,7 @@ function registerIpc() {
   registerEvents(handle, { events, isClosing: () => toolsShuttingDown || updateShutdownPending });
   registerChangeValidation(handle, { changes, dialog, dialogOwner, isClosing: () => toolsShuttingDown || updateShutdownPending });
   registerCopilot(handle, { copilot, isClosing: () => toolsShuttingDown || updateShutdownPending });
+  registerCopilotActions(handle, { actions: copilotActions, isClosing: () => toolsShuttingDown || updateShutdownPending });
   handle('app:popoutPrepare', () => {
     if (toolsShuttingDown || updateShutdownPending) throw new Error('KonX is closing. Wait before opening another window.');
     return workspaceWindows.prepare();
@@ -406,6 +412,7 @@ function registerIpc() {
     mist: (params, emit, signal) => mist.run(params, emit, signal),
     ai: (params, emit, signal) => ai.run(params, emit, signal),
     copilot: (params, emit, signal) => copilot.run(params, emit, signal),
+    'copilot-action': (params, emit, signal) => copilotActions.run(params, emit, signal),
     ping: nettools.pingMonitor,
     sweep: nettools.sweep,
     portscan: nettools.portScan,
@@ -417,7 +424,7 @@ function registerIpc() {
     if (requestedId !== undefined && (typeof requestedId !== 'string' || !requestedId || requestedId.length > 128)) throw new Error('Invalid tool job ID');
     const id = requestedId ?? ++jobSeq;
     if (jobs.has(id)) throw new Error('Tool job is already running');
-    if (['remote-capture', 'runbook', 'events', 'copilot'].includes(kind) && (toolsShuttingDown || updateShutdownPending)) throw new Error('KonX is closing. Wait before starting another tool.');
+    if (['remote-capture', 'runbook', 'events', 'copilot', 'copilot-action'].includes(kind) && (toolsShuttingDown || updateShutdownPending)) throw new Error('KonX is closing. Wait before starting another tool.');
     if (kind === 'remote-capture') {
       if (remoteCapture.hasPendingCleanup) throw new Error('Remote capture cleanup is pending. Quit KonX to retry cleanup before starting another capture.');
       remoteResults.assertCapacity(remoteReservations);
@@ -692,7 +699,12 @@ app.whenReady().then(() => {
   mist = new MistClient({ dir: app.getPath('userData'), crypt });
   knowledge = new KnowledgeLibrary({ dir: app.getPath('userData') });
   ai = new AIClient({ dir: app.getPath('userData'), crypt, knowledge });
-  copilot = new CopilotService({ store: new CopilotStore(app.getPath('userData')), ai });
+  const copilotStore = new CopilotStore(app.getPath('userData'));
+  copilot = new CopilotService({ store: copilotStore, ai });
+  copilotActions = new CopilotActions({ store: copilotStore, knowledge, diagnostics: createActionDiagnostics(), requestEditor: request => {
+    if (toolsShuttingDown || updateShutdownPending || !win || win.isDestroyed() || win.webContents.isDestroyed()) return false;
+    win.webContents.send('copilot:editorAction', request); return true;
+  } });
   connections = new ConnectionManager({ emit: send, ask, store, defaultLogDir });
   sftp = new SftpManager({
     emit: send,
@@ -727,6 +739,7 @@ app.whenReady().then(() => {
       if (capture.sessions.size || capture.startRequests.size || capture.builtin.sessions.size || capture.builtin.startRequests.size) reasons.push('Stop packet capture before updating.');
       if (toolJobs.size) reasons.push('Stop running tools and AI requests before updating.');
       if (copilot.hasOwnership) reasons.push('Wait for Copilot to save its work or quit KonX to retry pending cleanup before updating.');
+      if (copilotActions.hasOwnership) reasons.push('Wait for reviewed Copilot actions to finish or quit KonX to retry saving their outcomes before updating.');
       if (remoteCapture.hasPendingCleanup) reasons.push('Quit KonX to retry pending remote capture file cleanup before updating.');
       if (remoteResults.hasPendingCleanup) reasons.push('Quit KonX to retry pending remote capture result cleanup before updating.');
       if (runbookStore.hasPendingCleanup) reasons.push('Quit KonX to retry pending runbook file cleanup before updating.');
@@ -786,7 +799,7 @@ app.on('before-quit', (event) => {
     const cleanupErrors = [];
     const popoutError = await popoutCleanup;
     if (popoutError) cleanupErrors.push(popoutError);
-    for (const cleanup of [() => remoteCapture.closePending(), () => remoteResults?.close(), () => runbookStore?.close(), () => sites?.close(), () => events?.close(), () => changes?.close(), () => incidents?.close(), () => copilot?.close(),
+    for (const cleanup of [() => remoteCapture.closePending(), () => remoteResults?.close(), () => runbookStore?.close(), () => sites?.close(), () => events?.close(), () => changes?.close(), () => incidents?.close(), () => copilotActions?.close(), () => copilot?.close(),
       () => hasSerialOwnership() ? connections.waitForSerialCleanup() : undefined]) {
       try { await cleanup(); } catch (error) { cleanupErrors.push(error.message); }
     }
@@ -796,6 +809,7 @@ app.on('before-quit', (event) => {
     if (incidents?.hasOwnership) cleanupErrors.push('Incident evidence resources still require cleanup.');
     if (sites?.hasOwnership) cleanupErrors.push('Saved workspace resources still require cleanup.');
     if (copilot?.hasOwnership) cleanupErrors.push('Copilot resources still require cleanup.');
+    if (copilotActions?.hasOwnership) cleanupErrors.push('Reviewed Copilot action outcomes still require cleanup.');
     if (hasSerialOwnership()) cleanupErrors.push('Serial port resources still require cleanup.');
     await updateCleanup;
     if (cleanupErrors.length) throw new Error(cleanupErrors.join('\n'));
