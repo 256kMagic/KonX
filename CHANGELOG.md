@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.19.0 — 2026-10-23
+
+- Add Saved Site Workspaces with grouped session references, notes, capture paths, incident links, and named panel arrangements.
+- Restore passive panels while retaining existing work; preserve terminal/SFTP mode and require explicit connection or file-open actions.
+- Add duplicate/import/export/delete, strict reference-only schemas, revision conflict checks, atomic saves, and owned file cleanup through shutdown.
+- Retain failed/cancelled drafts and protect unsaved workspace definitions during tab close and updating.
+
+See the [site workspace guide](docs/SITE_WORKSPACES.md) and [release notes](docs/releases/0.19.0.md).
+
 ## 0.18.1 — 2026-10-23
 
 - Add a local **Report a problem** preview and JSON export on Home and Settings → Support. Error logs are bounded and opt-in; nothing is uploaded automatically.

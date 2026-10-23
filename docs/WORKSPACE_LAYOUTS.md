@@ -24,6 +24,8 @@ From 0.18.1, pop-outs recover into an available display work area when displays 
 
 Saved geometry contains split ratios and the last floating rectangle only. Restarting does not recreate pop-outs, restore live connections, or automatically rerun tools. A terminal selection can clear when resizing changes its rows or wraps text, following the terminal's normal resize behavior; its scrollback remains available.
 
+From 0.19.0, [Saved Site Workspaces](SITE_WORKSPACES.md) can separately retain a named arrangement of supported panels and references. Opening a saved site restores passive panels; session connections and capture reads remain explicit actions.
+
 ## Choose a workspace
 
 | Layout | Structure | Useful for |

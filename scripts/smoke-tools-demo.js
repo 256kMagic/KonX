@@ -27,6 +27,7 @@
     if (serialAutoBaud) checks.serialAutoBaud = serialAutoBaud;
     if (workspaceWindows) checks.workspaceWindows = workspaceWindows;
     if (supportReport) checks.supportReport = supportReport;
+    if (siteWorkspaces) checks.siteWorkspaces = siteWorkspaces;
     // Portable launchers do not necessarily forward their app's stdout. Write
     // test evidence only to the parent-provided private artifact file.
     await api.invoke('np:write', options.resultPath, new TextEncoder().encode(JSON.stringify(checks, null, 2)));
@@ -73,6 +74,8 @@
   const supportsSerialAutoBaud = versionParts[0] > 0 || versionParts[1] >= 17;
   const supportsWorkspaceWindows = versionParts[0] > 0 || versionParts[1] >= 18;
   const supportsSupport = versionParts[0] > 0 || versionParts[1] > 18 || (versionParts[1] === 18 && versionParts[2] >= 1);
+  const supportsSites = versionParts[0] > 0 || versionParts[1] >= 19;
+  let siteWorkspaces = null;
   let supportReport = null;
   if (supportsSupport) {
     const { supportDialog } = await import('./js/support.js');
@@ -140,6 +143,30 @@
       assert(app.clearRecentSessions() && app.recentSessions().length === 0, 'Recent history did not clear');
       assert((await api.invoke('sessions:list')).sessions.some(item => item.id === saved.id && item.hasPassword), 'Clearing history removed a saved credential');
       sessionManagement = { usernameSaved: true, passwordPresencePrivate: true, historyCleared: true, savedSessionRetained: true };
+    }
+    if (supportsSites) {
+      const sites = app.openTool('sites'); await sites.ready;
+      assert(sites.workspaces.length === 0 && !sites.isDirty(), 'Fresh site library is not empty and idle');
+      const savedSession = app.sessions.data.sessions.find(s => s.name === sessionName);
+      const record = await api.invoke('tools:siteSave', { name: 'Synthetic package smoke site', notes: 'Retained site notes',
+        sessions: [{ id: savedSession.id, name: savedSession.name, group: 'Core' }],
+        layout: { preset: 'workbench', panels: [
+          { key: 'session', kind: 'session', referenceId: savedSession.id, sessionMode: 'sftp', slot: 'primary' },
+          { key: 'notes', kind: 'notes', slot: 'companion' }] } });
+      await sites.select(record.id);
+      const original = [...app.tabs], terminals = app.tabs.filter(t => ['terminal', 'sftp'].includes(t.kind)).length;
+      await sites.open();
+      const panels = app.tabs.filter(t => t.siteWorkspace?.workspaceId === record.id);
+      assert(panels.length === 2 && panels.find(t => t.siteWorkspace.panel.key === 'notes').el.innerText.includes('Retained site notes'), 'Saved reference panels did not restore');
+      assert(original.every(t => app.tabs.includes(t)) && app.jobs.size === 0 && app.tabs.filter(t => ['terminal', 'sftp'].includes(t.kind)).length === terminals, 'Opening a site closed work or connected automatically');
+      await sites.open(); assert(app.tabs.filter(t => t.siteWorkspace?.workspaceId === record.id).length === 2, 'Site reopen duplicated its panels');
+      const duplicate = await api.invoke('tools:siteDuplicate', record.id, {});
+      assert(duplicate.id !== record.id && duplicate.layout.panels[0].sessionMode === 'sftp', 'Duplicate lost identity or SFTP mode');
+      await api.invoke('tools:siteRemove', duplicate.id);
+      assert(!JSON.stringify(record).includes(options.token) && !Object.hasOwn(record.sessions[0], 'password'), 'Workspace copied credential data');
+      for (const panel of panels) await app.closeTab(panel);
+      await app.closeTab(sites);
+      siteWorkspaces = { referencePanelsRestored: true, existingTabsRetained: true, explicitConnectionsRequired: true, reopenReusesPanels: true, duplicateIndependent: true, credentialsExcluded: true };
     }
     if (supportsQuickLogin) {
       const fixture = options.quickLogin;
@@ -466,6 +493,16 @@
     assert(ai.documentContent.textContent.includes('cached evidence'), 'Packaged local article did not render');
     await complete({ phase: options.phase, version: info.version, tools: supportsComparison ? 11 : supportsRunbooks ? 10 : supportsRemoteCapture ? 9 : supportsIncidents ? 8 : supportsRtp ? 7 : supportsSnapshots ? 6 : supportsDeviceInspector ? 5 : 4, ...(deviceInspector ? { deviceInspector } : {}), ...(deviceSnapshots ? { deviceSnapshots } : {}), ...(rtpMedia ? { rtpMedia } : {}), ...(incidentWorkspace ? { incidentWorkspace } : {}), ...(remoteCapture ? { remoteCapture } : {}), ...(runbooks ? { runbooks } : {}), ...(captureComparison ? { captureComparison } : {}), assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
   } else if (options.phase === 'forget') {
+    if (supportsSites) {
+      const sites = app.openTool('sites'); await sites.ready;
+      const record = sites.workspaces.find(w => w.name === 'Synthetic package smoke site');
+      assert(record, 'Saved site did not survive packaged restart');
+      await sites.select(record.id);
+      assert(sites.saved.notes === 'Retained site notes' && sites.saved.sessions[0].group === 'Core' && sites.saved.layout.panels[0].sessionMode === 'sftp', 'Saved site notes/groups/SFTP mode changed');
+      assert(!app.tabs.some(t => t.siteWorkspace) && app.jobs.size === 0, 'Restart automatically restored or connected site panels');
+      await api.invoke('tools:siteRemove', record.id); await app.closeTab(sites);
+      siteWorkspaces = { persistedAcrossRestart: true, notesAndGroupsRetained: true, sftpModeRetained: true, noAutomaticRestore: true, syntheticSiteRemoved: true };
+    }
     if (supportsSerialAutoBaud) {
       assert(info.serial === true, 'Native serial support disappeared after restart');
       await app.sessions.load(); const saved = app.sessions.data.sessions.find(session => session.name === serialName);

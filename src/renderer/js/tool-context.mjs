@@ -4,7 +4,7 @@ const LIMIT = 23000;
 export function toolContext(tab) {
   const title = String(tab.title || tab.toolKind || 'KonX tool').slice(0, 200);
   let output;
-  if (['snapshots', 'incidents', 'capture-compare'].includes(tab.toolKind)) {
+  if (['snapshots', 'incidents', 'capture-compare', 'sites'].includes(tab.toolKind)) {
     // Evidence views may contain configuration, notes or captured application
     // observations. Only their explicit metadata/count summaries go to AI.
     output = JSON.stringify(tab.aiContext || { message: 'No evidence summary selected.' }, null, 2);

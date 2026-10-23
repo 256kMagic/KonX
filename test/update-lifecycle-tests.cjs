@@ -87,6 +87,7 @@ function fixture() {
     close: async () => { runbook.hasOwnership = false; runbook.hasPendingCleanup = false; },
   };
   const dialogs = { open: async () => ({ canceled: true, filePaths: [] }), save: async () => ({ canceled: true }) };
+  const sites = { hasOwnership: false, close: async () => { sites.hasOwnership = false; } };
   const handoff = {
     async commit() { calls.push('commit-helper'); },
     async cancel() { calls.push('cancel-helper'); },
@@ -100,6 +101,8 @@ function fixture() {
     './knowledge': { KnowledgeLibrary: class { constructor() { return knowledge; } } },
     './device-snapshots': { SnapshotStore: class {} },
     './incidents': { IncidentStore: class {} },
+    './site-workspaces': { SiteWorkspaceStore: class { constructor() { return sites; } } },
+    './site-workspace-ipc': load('./site-workspace-ipc'),
     './remote-capture': { run: (...args) => remote.run(...args), closePending: () => remote.closePending(), get hasPendingCleanup() { return remote.hasPendingCleanup; } },
     './remote-results': { RemoteCaptureResults: class {
       get hasOpenHandles() { return remote.hasOpenHandles; }
@@ -156,7 +159,7 @@ function fixture() {
   vm.runInContext(fs.readFileSync(filename, 'utf8'), context, { filename });
   ready();
   return {
-    app, calls, sent, manager, behavior, handoff, connections, remote, runbook, dialogs,
+    app, calls, sent, manager, behavior, handoff, connections, remote, runbook, sites, dialogs,
     get jobs() { return vm.runInContext('toolJobs', context); },
     get controller() { return vm.runInContext('updates', context); },
     get window() { return window; },
@@ -253,6 +256,26 @@ async function runUpdateLifecycleTests(test) {
     f.app.quit(); await tick();
     assert.equal(f.app.exited, true);
     assert.deepEqual(f.calls, ['cancel-download']);
+  });
+
+  await test('site lifecycle: pending workspace ownership blocks installation before helper launch', async () => {
+    const f = fixture(); f.sites.hasOwnership = true;
+    await assert.rejects(f.invoke('app:updateInstall'), /workspace/i);
+    assert.ok(!f.calls.includes('launch-helper'));
+  });
+  await test('site lifecycle: quit awaits workspace publication and rejects new workspace IPC', async () => {
+    const f = fixture(), pending = deferred(); f.sites.hasOwnership = true;
+    f.sites.close = async () => { await pending.promise; f.sites.hasOwnership = false; };
+    f.app.quit(); await tick(); assert.equal(f.app.exited, false);
+    await assert.rejects(async () => f.invoke('tools:siteSave', { name: 'Late save' }), /closing/i);
+    pending.resolve(); await tick(); assert.equal(f.app.exited, true);
+  });
+  await test('site lifecycle: failed workspace cleanup keeps app open and a later quit retries', async () => {
+    const f = fixture(); f.sites.hasOwnership = true;
+    f.sites.close = async () => { throw new Error('Synthetic workspace close failure'); };
+    f.app.quit(); await tick(); assert.equal(f.app.exited, false); assert.ok(f.calls.includes('shutdown-error'));
+    f.sites.close = async () => { f.sites.hasOwnership = false; };
+    f.app.quit(); await tick(); assert.equal(f.app.exited, true);
   });
 }
 
