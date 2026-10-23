@@ -15,8 +15,10 @@ import { CaptureComparisonTab } from './capture-compare.js';
 import { SiteWorkspacesTab } from './site-workspaces.js';
 import { TopologyTab } from './topology.js';
 import { EventsTab } from './events.js';
+import { ChangeValidationTab } from './change-validation.js';
 
 export const TOOLS = [
+  { kind: 'change-validation', label: 'Guided Change Validation', icon: 'route', desc: 'Plan a manual change, retain before and after evidence, and record reviewed outcomes' },
   { kind: 'sites', label: 'Saved Site Workspaces', icon: 'folder', desc: 'Save site session groups, notes, capture and incident references, and panel arrangements' },
   { kind: 'topology', label: 'Visual Topology', icon: 'link', desc: 'Explore observed device links, command evidence, and candidate endpoint paths' },
   { kind: 'events', label: 'Live Events', icon: 'activity', desc: 'Receive local syslog and SNMP traps, inspect events, and export selected evidence' },
@@ -1023,6 +1025,7 @@ export function createTool(app, kind, params = {}) {
   if (kind === 'sites') return new SiteWorkspacesTab(app, params);
   if (kind === 'topology') return new TopologyTab(app, params);
   if (kind === 'events') return new EventsTab(app, params);
+  if (kind === 'change-validation') return new ChangeValidationTab(app, params);
   if (kind === 'capture-compare') return new CaptureComparisonTab(app, params);
   if (kind === 'runbook') return new RunbookTab(app, params);
   if (kind === 'remote-capture') return new RemoteCaptureTab(app, params);

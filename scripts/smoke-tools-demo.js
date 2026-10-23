@@ -30,6 +30,7 @@
     if (siteWorkspaces) checks.siteWorkspaces = siteWorkspaces;
     if (visualTopology) checks.visualTopology = visualTopology;
     if (liveEvents) checks.liveEvents = liveEvents;
+    if (changeValidation) checks.changeValidation = changeValidation;
     // Portable launchers do not necessarily forward their app's stdout. Write
     // test evidence only to the parent-provided private artifact file.
     await api.invoke('np:write', options.resultPath, new TextEncoder().encode(JSON.stringify(checks, null, 2)));
@@ -80,7 +81,13 @@
   const supportsTopology = versionParts[0] > 0 || versionParts[1] >= 20;
   let visualTopology = null;
   const supportsEvents = versionParts[0] > 0 || versionParts[1] >= 21;
+  const supportsChangeValidation = versionParts[0] > 0 || versionParts[1] >= 22;
   let liveEvents = null;
+  let changeValidation = null;
+  const changeName = 'Synthetic package smoke change validation';
+  const changeScope = 'Owned offline branch fixture; no equipment touched.';
+  const changeMaintenance = 'Synthetic manual maintenance acknowledgment; no commands were sent.';
+  const changeRationale = 'Unknown: offline differences do not establish service health.';
   let siteWorkspaces = null;
   let supportReport = null;
   if (supportsSupport) {
@@ -330,6 +337,7 @@
     let remoteCapture = null;
     let runbooks = null;
     let captureComparison = null;
+    const changeEvidence = [];
     if (supportsComparison) {
       assert(TOOLS.some(tool => tool.kind === 'capture-compare'), 'Capture Comparison tool is missing');
       const comparison = app.openTool('capture-compare'); await comparison.ready; await comparison.loadDemo();
@@ -345,6 +353,7 @@
       await app.closeTab(evidence);
       captureComparison = { matchedServices: comparison.report.summary.matchedServices, changes: comparison.report.summary.changed,
         dnsTcpHttp: true, retainedSourceOpened: true, summaryOnlyAI: true, noNetworkCollection: app.jobs.size === 0 };
+      if (supportsChangeValidation) changeEvidence.push({ label: 'Reviewed offline capture comparison', report: structuredClone(comparison.report) });
       await app.closeTab(comparison); assert(!app.byId.has(comparison.id), 'Comparison tab failed to close');
     }
     if (supportsRunbooks) {
@@ -360,6 +369,7 @@
       await runbook.start(); await until(() => !runbook.jobId && runbook.report, 'packaged manual procedure');
       assert(runbook.report.complete && runbook.report.steps.length === 1 && runbook.report.steps[0].status === 'unknown', 'Manual procedure invented a passing observation');
       assert(runbook.updateBlockers().length === 0, 'Saved idle runbook still blocks updating');
+      if (supportsChangeValidation) changeEvidence.push({ label: 'Reviewed manual procedure result', report: structuredClone(runbook.report) });
       await app.closeTab(runbook); assert(!app.byId.has(runbook.id), 'Saved idle runbook failed to close');
       runbooks = { templates: 3, customDefinitionSaved: true, manualObservationUnknown: true, noNetworkCollection: true };
     }
@@ -468,6 +478,59 @@
       assert(incidents.aiContext.evidenceCount === 2 && !Object.hasOwn(incidents.aiContext, 'evidence'), 'Incident AI context must exclude raw evidence');
       incidentWorkspace = { savedEvidence: 2, unknownNoteTimePreserved: true, captureCopied: true, summaryOnlyAI: true, noNetworkCollection: app.jobs.size === 0 };
       await app.closeTab(incidents);
+    }
+    if (supportsChangeValidation) {
+      assert(TOOLS.some(tool => tool.kind === 'change-validation'), 'Guided Change Validation tool is missing');
+      const history = await api.invoke('tools:snapshotList'), library = await api.invoke('tools:incidentList');
+      const before = history.snapshots.find(item => item.label === 'Demo before change'), after = history.snapshots.find(item => item.label === 'Demo after change');
+      const incident = library.incidents.find(item => item.title === 'Synthetic package smoke incident');
+      assert(before && after && incident && changeEvidence.length === 2, 'Change validation needs its owned snapshot, incident and completed report fixtures');
+      const terminals = app.tabs.filter(tab => ['terminal', 'sftp'].includes(tab.kind)).length;
+      const validation = app.openTool('change-validation'); await validation.ready;
+      assert(validation.records.length === 0 && !validation.record && !validation.isDirty() && app.jobs.size === 0, 'Opening change validation started work or found unexpected records');
+      const input = (element, value, event = 'input') => { element.value = value; element.dispatchEvent(new Event(event, { bubbles: true })); };
+      input(validation.fields.name, changeName); input(validation.fields.scope, changeScope);
+      input(validation.fields.expectedOutcome, 'Review saved before/after observations without an automatic health verdict.');
+      input(validation.fields.rollbackPlan, 'Manual rollback remains outside this offline fixture.');
+      await validation.savePlan(); assert(validation.record?.phase === 'plan' && !validation.isDirty(), 'Packaged validation plan did not save cleanly');
+      await validation.advance(); assert(validation.record.phase === 'baseline', 'Baseline requires explicit advancement');
+      input(validation.before, before.id, 'change'); await validation.saveSources();
+      assert(validation.record.sources.beforeId === before.id && validation.record.sources.afterId === null, 'Baseline source was not retained independently');
+      await validation.advance(); assert(validation.record.phase === 'maintenance', 'Manual maintenance phase is missing');
+      input(validation.maintenanceText, changeMaintenance); validation.maintenanceCheck.click();
+      assert(validation.isDirty() && validation.updateBlockers().length > 0, 'Uncommitted acknowledgment is not protected');
+      await validation.advance(); assert(validation.record.phase === 'after' && validation.record.maintenance.reason === changeMaintenance && !validation.isDirty(), 'Explicit acknowledgment did not advance cleanly');
+      input(validation.after, after.id, 'change'); await validation.saveSources(); await validation.compare();
+      assert(validation.record.comparison?.report?.changes.length > 0 && validation.record.decisions.every(item => item.status === 'unknown' && !item.reviewedAt), 'Stored comparison invented a health decision');
+      for (const item of changeEvidence) {
+        validation.accept(await api.invoke('tools:changeAddEvidence', validation.record.id, validation.record.revision,
+          { label: item.label, phase: 'after', report: item.report, reviewed: true }));
+      }
+      assert(validation.record.evidence.length === 2 && changeEvidence.every((item, index) => JSON.stringify(validation.record.evidence[index].report) === JSON.stringify(item.report)), 'Reviewed tool reports were truncated or changed');
+      await validation.advance(); assert(validation.record.phase === 'review', 'Review was not reached explicitly');
+      for (const check of validation.plan.checks) {
+        input(validation.el.querySelector(`[aria-label="Decision for ${check.id}"]`), 'unknown', 'change');
+        input(validation.el.querySelector(`[aria-label="Rationale for ${check.id}"]`), changeRationale);
+        const refs = validation.el.querySelector(`[aria-label="Evidence for ${check.id}"]`);
+        for (const option of refs.options) option.selected = option.value === validation.record.comparison.id;
+        refs.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      await validation.saveDecisions();
+      assert(validation.record.decisions.every(item => item.status === 'unknown' && item.reviewedAt && item.rationale === changeRationale && item.sourceRefs[0] === validation.record.comparison.id), 'Explicit Unknown decisions and evidence references were not saved');
+      const preview = await api.invoke('tools:changePreview', validation.record.id, validation.record.revision), report = JSON.parse(preview.text);
+      assert(preview.revision === validation.record.revision && report.assessment === 'unknown' && JSON.stringify(report.workflow) === JSON.stringify(validation.record), 'Reviewed full report does not match the saved revision');
+      const copied = await api.invoke('tools:changeAddToIncident', validation.record.id, preview.revision, incident.id);
+      const copiedIncident = await api.invoke('tools:incidentGet', incident.id), retained = copiedIncident.evidence.find(item => item.kind === 'tool');
+      assert(copied.copied && copied.evidenceCount === 3 && retained?.integrity === 'verified' && retained.bytes === new TextEncoder().encode(preview.text).length, 'Complete report was not copied to the existing incident');
+      const { toolContext } = await import('./js/tool-context.mjs'); const context = toolContext(validation);
+      assert(context.includes('change-validation-summary') && context.includes('checkCount') && ![changeScope, changeMaintenance, changeRationale, before.id, after.id].some(text => context.includes(text)), 'Change validation AI context exposed source identities or notes');
+      app.activate(security); assert(!validation.el.classList.contains('active') && getComputedStyle(validation.el).display === 'none', 'Inactive validation overrides installed view visibility');
+      assert(!validation.isDirty() && validation.updateBlockers().length === 0 && app.jobs.size === 0 && app.tabs.filter(tab => ['terminal', 'sftp'].includes(tab.kind)).length === terminals, 'Passive workflow created work or retained a phantom draft');
+      const saved = validation.record; await app.closeTab(validation); assert(!app.byId.has(validation.id), 'Clean validation did not close');
+      incidentWorkspace.savedEvidence = 3;
+      changeValidation = { savedId: saved.id, revision: saved.revision, phase: saved.phase, evidenceCount: saved.evidence.length,
+        manualAcknowledgment: true, canonicalComparison: true, fullReviewedCopies: true, explicitUnknownDecisions: true,
+        previewMatchesRevision: true, incidentCopied: true, inactiveViewHidden: true, summaryOnlyAI: true, closedCleanly: true, noAutomaticJobs: true };
     }
     assert(!mist.config.hasToken && mist.testButton.disabled, 'Fresh profile must have no API token');
     app.activate(security);
@@ -636,6 +699,29 @@
     assert(note, 'Custom knowledge note did not survive restart');
     await api.invoke('tools:knowledgeRemove', note.id);
     assert(!(await api.invoke('tools:knowledgeGet', note.id)), 'Custom note remained after removal');
+    if (supportsChangeValidation) {
+      assert(!app.tabs.some(tab => tab.toolKind === 'change-validation'), 'Restart automatically restored a live validation view');
+      const library = await api.invoke('tools:changeList'), saved = library.records.find(item => item.name === changeName);
+      assert(library.records.length === 1 && library.issues.length === 0 && saved, 'Saved validation did not survive restart');
+      const terminals = app.tabs.filter(tab => ['terminal', 'sftp'].includes(tab.kind)).length;
+      const validation = app.openTool('change-validation'); await validation.ready; await validation.select(saved.id);
+      const record = validation.record;
+      assert(record.phase === 'review' && record.plan.scope === changeScope && record.maintenance.reason === changeMaintenance && !validation.isDirty(), 'Saved phase, plan notes or acknowledgment changed on reopen');
+      assert(record.evidence.length === 2 && record.evidence.some(item => item.report.kind === 'capture-comparison' && item.report.changes.length > 0) &&
+        record.evidence.some(item => item.report.kind === 'runbook' && item.report.name === 'Synthetic package smoke procedure' && item.report.steps[0].status === 'unknown'), 'Reviewed offline reports did not survive restart');
+      const compared = await api.invoke('tools:snapshotCompare', record.sources);
+      assert(JSON.stringify(compared) === JSON.stringify(record.comparison.report), 'Retained canonical comparison changed across restart');
+      assert(record.decisions.every(item => item.status === 'unknown' && item.reviewedAt && item.rationale === changeRationale && item.sourceRefs.length === 1 && item.sourceRefs[0] === record.comparison.id), 'Reviewed decisions or references changed across restart');
+      const preview = await api.invoke('tools:changePreview', record.id, record.revision);
+      assert(JSON.stringify(JSON.parse(preview.text).workflow) === JSON.stringify(record), 'Reopened complete report lost retained content');
+      assert(app.jobs.size === 0 && app.tabs.filter(tab => ['terminal', 'sftp'].includes(tab.kind)).length === terminals && validation.updateBlockers().length === 0, 'Reopening validation started work or fabricated an unsaved draft');
+      app.activate(security); assert(getComputedStyle(validation.el).display === 'none', 'Inactive restored validation is visible');
+      await api.invoke('tools:changeRemove', record.id, record.revision); await app.closeTab(validation);
+      assert((await api.invoke('tools:changeList')).records.length === 0 && !app.byId.has(validation.id), 'Synthetic validation remained after cleanup');
+      changeValidation = { savedId: record.id, revision: record.revision, persistedAcrossRestart: true, phaseAndNotesRetained: true,
+        comparisonRetained: true, reviewedEvidenceRetained: true, decisionsAndReferencesRetained: true, noAutomaticRestore: true,
+        inactiveViewHidden: true, removedBeforeSourceCleanup: true, noAutomaticJobs: true };
+    }
     let deviceSnapshots = null;
     if (supportsSnapshots) {
       const history = await api.invoke('tools:snapshotList');
@@ -656,7 +742,12 @@
       const saved = library.incidents.find(item => item.title === 'Synthetic package smoke incident');
       assert(saved, 'Synthetic incident identity missing after restart');
       const incident = await api.invoke('tools:incidentGet', saved.id);
-      assert(incident.evidence.length === 2 && incident.evidence.find(item => item.kind === 'note').integrity === 'verified', 'Restored text evidence failed verification');
+      assert(incident.evidence.length === (supportsChangeValidation ? 3 : 2) && incident.evidence.find(item => item.kind === 'note').integrity === 'verified', 'Restored text evidence failed verification');
+      if (supportsChangeValidation) {
+        const retained = incident.evidence.find(item => item.kind === 'tool');
+        assert(retained?.integrity === 'verified' && retained.textPreview.includes('konx-change-validation-report') && retained.textPreview.includes(changeScope), 'Independent validation report did not survive workflow removal');
+        changeValidation.incidentCopyRetained = true;
+      }
       const capture = incident.evidence.find(item => item.kind === 'capture');
       const bytes = await api.invoke('tools:incidentCapture', saved.id, capture.id);
       const { readCapture } = await import('./js/capture/pcapfile.mjs');

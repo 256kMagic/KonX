@@ -28,6 +28,8 @@ const { registerSiteWorkspaces } = require('./site-workspace-ipc');
 const { registerTopology } = require('./topology-ipc');
 const { EventConsole } = require('./events');
 const { registerEvents } = require('./events-ipc');
+const { ChangeValidationStore } = require('./change-validation');
+const { registerChangeValidation } = require('./change-validation-ipc');
 const { MistClient } = require('./mist');
 const { AIClient } = require('./ai');
 const { KnowledgeLibrary } = require('./knowledge');
@@ -61,6 +63,7 @@ let sites;
 let remoteResults;
 let runbookStore;
 let events;
+let changes;
 let updates;
 let workspaceWindows;
 const toolJobs = new Map();
@@ -69,7 +72,7 @@ let toolsShuttingDown = false;
 let ownedConnectionQuitApproved = false;
 
 function ownedToolJobs() { return [...toolJobs.values()].filter(signal => ['remote-capture', 'runbook', 'events'].includes(signal.kind)); }
-function hasToolOwnership() { return remoteReservations > 0 || ownedToolJobs().length > 0 || !!remoteResults?.hasOpenHandles || !!remoteCapture.hasPendingCleanup || !!runbookStore?.hasOwnership || !!sites?.hasOwnership || !!events?.hasOwnership; }
+function hasToolOwnership() { return remoteReservations > 0 || ownedToolJobs().length > 0 || !!remoteResults?.hasOpenHandles || !!remoteCapture.hasPendingCleanup || !!runbookStore?.hasOwnership || !!sites?.hasOwnership || !!events?.hasOwnership || !!changes?.hasOwnership; }
 function hasSerialOwnership() { return !!connections?.hasSerialOwnership; }
 function hasPopoutOwnership() { return !!workspaceWindows?.hasOwnership; }
 function dialogOwner() { return workspaceWindows?.dialogOwner() || (win && !win.isDestroyed() ? win : undefined); }
@@ -223,6 +226,7 @@ function registerIpc() {
   registerSiteWorkspaces(handle, { sites, dialog, dialogOwner, isClosing: () => toolsShuttingDown || updateShutdownPending });
   registerTopology(handle, { dialog, dialogOwner, isClosing: () => toolsShuttingDown || updateShutdownPending });
   registerEvents(handle, { events, isClosing: () => toolsShuttingDown || updateShutdownPending });
+  registerChangeValidation(handle, { changes, dialog, dialogOwner, isClosing: () => toolsShuttingDown || updateShutdownPending });
   handle('app:popoutPrepare', () => {
     if (toolsShuttingDown || updateShutdownPending) throw new Error('KonX is closing. Wait before opening another window.');
     return workspaceWindows.prepare();
@@ -669,6 +673,7 @@ app.whenReady().then(() => {
   incidents = new IncidentStore(app.getPath('userData'));
   sites = new SiteWorkspaceStore(app.getPath('userData'));
   events = new EventConsole();
+  changes = new ChangeValidationStore(app.getPath('userData'), { snapshots, incidents });
   remoteResults = new RemoteCaptureResults(app.getPath('userData'));
   runbookStore = new RunbookStore(app.getPath('userData'));
   mist = new MistClient({ dir: app.getPath('userData'), crypt });
@@ -711,6 +716,7 @@ app.whenReady().then(() => {
       if (remoteResults.hasPendingCleanup) reasons.push('Quit KonX to retry pending remote capture result cleanup before updating.');
       if (runbookStore.hasPendingCleanup) reasons.push('Quit KonX to retry pending runbook file cleanup before updating.');
       if (events.hasOwnership) reasons.push('Stop event listeners and retry pending socket cleanup before updating.');
+      if (changes.hasOwnership) reasons.push('Wait for change validation operations or quit KonX to retry pending file cleanup before updating.');
       if (sites.hasOwnership) reasons.push('Wait for saved workspace operations or quit KonX to retry pending file cleanup before updating.');
       if (pendingPrompts.size) reasons.push('Finish the open connection prompts before updating.');
       if (knowledge.busy) reasons.push('Wait for the knowledge library to finish its current operation.');
@@ -724,7 +730,7 @@ app.whenReady().then(() => {
   createWindow();
 });
 
-// Let downloads, capture and runbook owners finish before Electron exits. A
+// Let downloads and owned tools finish before Electron exits. A
 // committed installer retains its payload, but still waits for owned resources.
 let updateShutdownPending = false;
 let updateShutdownComplete = false;
@@ -764,12 +770,13 @@ app.on('before-quit', (event) => {
     const cleanupErrors = [];
     const popoutError = await popoutCleanup;
     if (popoutError) cleanupErrors.push(popoutError);
-    for (const cleanup of [() => remoteCapture.closePending(), () => remoteResults?.close(), () => runbookStore?.close(), () => sites?.close(), () => events?.close(),
+    for (const cleanup of [() => remoteCapture.closePending(), () => remoteResults?.close(), () => runbookStore?.close(), () => sites?.close(), () => events?.close(), () => changes?.close(),
       () => hasSerialOwnership() ? connections.waitForSerialCleanup() : undefined]) {
       try { await cleanup(); } catch (error) { cleanupErrors.push(error.message); }
     }
     if (remoteResults?.hasOpenHandles || remoteCapture.hasPendingCleanup || runbookStore?.hasOwnership) cleanupErrors.push('Capture or runbook resources still require cleanup.');
     if (events?.hasOwnership) cleanupErrors.push('Event listener sockets still require cleanup.');
+    if (changes?.hasOwnership) cleanupErrors.push('Change validation resources still require cleanup.');
     if (sites?.hasOwnership) cleanupErrors.push('Saved workspace resources still require cleanup.');
     if (hasSerialOwnership()) cleanupErrors.push('Serial port resources still require cleanup.');
     await updateCleanup;

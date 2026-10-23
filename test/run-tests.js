@@ -539,6 +539,9 @@ const fakeCrypt = {
   await require('./events-tests.cjs').runEventsTests(test);
   await require('./events-ui-tests.cjs').runEventsUiTests(test);
   await require('./events-ipc-tests.cjs').runEventsIpcTests(test);
+  await require('./change-validation-tests.cjs').runChangeValidationTests(test);
+  await require('./change-validation-ui-tests.cjs').runChangeValidationUiTests(test);
+  await require('./change-validation-ipc-tests.cjs').runChangeValidationIpcTests(test);
 
   const failed = results.filter((r) => !r[0]);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

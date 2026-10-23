@@ -29,6 +29,7 @@ async function main() {
     ['docs/SITE_WORKSPACES.md', 'SITE_WORKSPACES.md'],
     ['docs/TOPOLOGY.md', 'TOPOLOGY.md'],
     ['docs/EVENTS.md', 'EVENTS.md'],
+    ['docs/CHANGE_VALIDATION.md', 'CHANGE_VALIDATION.md'],
     ['CHANGELOG.md', 'CHANGELOG.md'], [`docs/releases/${version}.md`, 'RELEASE_NOTES.md'],
   ];
   for (const file of [...binaries.map((name) => `dist/${name}`), ...documents.map(([source]) => source)]) {

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.22.0 — 2026-10-23
+
+- Add saved Guided Change Validation workflows from plan and baseline through manual maintenance, after evidence, and explicit review.
+- Reuse snapshot comparison and reviewed Runbook/Capture Comparison reports with retained source references and uncertainty.
+- Record user decisions with rationale and evidence references; changing inputs invalidates assessments without inferring a health verdict.
+- Add complete JSON/HTML exports and independent incident copies guarded by reviewed revisions, plus draft, file-boundary, and shutdown protection.
+
+See the [validation guide](docs/CHANGE_VALIDATION.md) and [release notes](docs/releases/0.22.0.md).
+
 ## 0.21.0 — 2026-10-23
 
 - Add Live Events with explicitly started IPv4/IPv6 UDP syslog and SNMPv1/v2c trap receivers.

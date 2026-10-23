@@ -258,6 +258,15 @@ async function main() {
       result.sessionCiphertextStored = true;
     }
     result.phases.push(await launch(executable, root, run, profile, version, 'forget', null, quickLogin?.options, result.workspaceWindows?.geometry));
+    if (major > 0 || minor >= 22) {
+      const saved = result.phases[0].checks.changeValidation;
+      const restored = result.phases[1].checks.changeValidation;
+      assert(saved?.savedId && restored?.savedId === saved.savedId && restored.revision === saved.revision &&
+        restored.persistedAcrossRestart && restored.phaseAndNotesRetained && restored.comparisonRetained &&
+        restored.reviewedEvidenceRetained && restored.decisionsAndReferencesRetained && restored.incidentCopyRetained,
+        'Packaged change validation did not preserve the same saved revision and evidence across restart');
+      result.changeValidation = { savedId: saved.savedId, revision: saved.revision, persistedAcrossRestart: true, incidentCopyRetained: true };
+    }
     if (supportsWorkspaceWindows) {
       const checks = result.phases[1].checks.workspaceWindows;
       assert(checks?.persistedAcrossRestart && checks?.geometryApplied && checks?.docked && checks?.originalNodeRetained &&

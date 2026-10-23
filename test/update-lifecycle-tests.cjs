@@ -89,6 +89,10 @@ function fixture() {
   const dialogs = { open: async () => ({ canceled: true, filePaths: [] }), save: async () => ({ canceled: true }) };
   const sites = { hasOwnership: false, close: async () => { sites.hasOwnership = false; } };
   const events = { hasOwnership: false, run: async () => {}, list: () => ({ listeners: [] }), close: async () => { events.hasOwnership = false; } };
+  const changes = { hasOwnership: false, hasPendingCleanup: false,
+    list: async () => ({ records: [], issues: [] }),
+    close: async () => { changes.hasOwnership = false; changes.hasPendingCleanup = false; },
+  };
   const handoff = {
     async commit() { calls.push('commit-helper'); },
     async cancel() { calls.push('cancel-helper'); },
@@ -107,6 +111,8 @@ function fixture() {
     './topology-ipc': load('./topology-ipc'),
     './events-ipc': load('./events-ipc'),
     './events': { EventConsole: class { constructor() { return events; } } },
+    './change-validation-ipc': load('./change-validation-ipc'),
+    './change-validation': { ChangeValidationStore: class { constructor(profile, dependencies) { changes.profile = profile; changes.dependencies = dependencies; return changes; } } },
     './remote-capture': { run: (...args) => remote.run(...args), closePending: () => remote.closePending(), get hasPendingCleanup() { return remote.hasPendingCleanup; } },
     './remote-results': { RemoteCaptureResults: class {
       get hasOpenHandles() { return remote.hasOpenHandles; }
@@ -163,7 +169,7 @@ function fixture() {
   vm.runInContext(fs.readFileSync(filename, 'utf8'), context, { filename });
   ready();
   return {
-    app, calls, sent, manager, behavior, handoff, connections, remote, runbook, sites, events, dialogs,
+    app, calls, sent, manager, behavior, handoff, connections, remote, runbook, sites, events, changes, dialogs,
     get jobs() { return vm.runInContext('toolJobs', context); },
     get controller() { return vm.runInContext('updates', context); },
     get window() { return window; },
@@ -181,6 +187,37 @@ function fixture() {
 }
 
 async function runUpdateLifecycleTests(test) {
+  await test('change validation lifecycle: active operations and retained cleanup block the updater', async () => {
+    for (const pendingCleanup of [false, true]) {
+      const f = fixture(); f.changes.hasOwnership = true; f.changes.hasPendingCleanup = pendingCleanup;
+      assert.equal(f.changes.profile, f.app.getPath('userData'));
+      assert.ok(f.changes.dependencies.snapshots && f.changes.dependencies.incidents, 'Canonical snapshot and incident owners are injected');
+      await assert.rejects(f.invoke('app:updateInstall'), /change validation operations/);
+      assert.ok(!f.calls.includes('launch-helper'));
+    }
+  });
+  await test('change validation lifecycle: quit awaits the pending save and rejects later workflow IPC', async () => {
+    const f = fixture(), saving = deferred(); let creates = 0;
+    f.changes.create = async () => { creates++; f.changes.hasOwnership = true; await saving.promise; return { id: 'saved-fixture' }; };
+    f.changes.close = async () => { f.calls.push('close-changes'); await saving.promise; f.changes.hasOwnership = false; };
+    const operation = f.invoke('tools:changeCreate', { name: 'Owned pending save' }); await tick();
+    f.app.quit(); await tick(); assert.equal(f.app.exited, false); assert.ok(f.calls.includes('close-changes'));
+    await assert.rejects(f.invoke('tools:changeCreate', { name: 'Too late' }), /closing/);
+    await assert.rejects(f.invoke('tools:changeList'), /closing/); assert.equal(creates, 1);
+    saving.resolve(); assert.deepEqual(await operation, { id: 'saved-fixture' });
+    await tick(); await tick(); assert.equal(f.app.exited, true); assert.equal(f.changes.hasOwnership, false);
+  });
+  await test('change validation lifecycle: failed or incomplete cleanup keeps the app open and can retry', async () => {
+    for (const rejects of [false, true]) {
+      const f = fixture(); f.changes.hasOwnership = true; f.changes.hasPendingCleanup = true;
+      f.changes.close = async () => { if (rejects) throw new Error('Synthetic workflow close failure'); };
+      f.app.quit(); await tick(); assert.equal(f.app.exited, false); assert.ok(f.calls.includes('shutdown-error'));
+      assert.equal(f.changes.hasOwnership, true);
+      assert.deepEqual(await f.invoke('tools:changeList'), { records: [], issues: [] }, 'Shutdown gate releases after failed cleanup');
+      f.changes.close = async () => { f.changes.hasOwnership = false; f.changes.hasPendingCleanup = false; };
+      f.app.quit(); await tick(); assert.equal(f.app.exited, true);
+    }
+  });
   await test('event lifecycle: quit waits for a running listener and rejects late listener start', async () => {
     const f = fixture(), closed = deferred();
     f.events.run = async (_params, _emit, signal) => { f.events.hasOwnership = true; signal.onStop = () => f.calls.push('stop-events'); await closed.promise; f.events.hasOwnership = false; };
