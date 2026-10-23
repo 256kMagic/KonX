@@ -1,6 +1,7 @@
 // Session manager: sidebar tree of saved sessions and the session editor dialog.
 import { h, icon, api, contextMenu, confirmDialog, promptText, modal, buildFields, toast, errMsg } from './ui.js';
 import { SCHEMES } from './themes.js';
+import { captureSessionContext } from './copilot-workspace.mjs';
 
 const PROTO_TAG = { ssh: 'SSH', telnet: 'TEL', raw: 'RAW', serial: 'COM' };
 const LS_KEY = 'konx.expanded';
@@ -198,6 +199,10 @@ export class SessionTree {
       s.protocol === 'ssh' || !s.protocol ? { label: 'Connect SFTP', icon: 'file-transfer', action: () => this.app.openSftp({ sessionId: s.id }, { name: s.name || s.host }) } : null,
       '-',
       { label: 'Edit…', icon: 'edit', shortcut: 'F2', action: () => this.app.editSession(s) },
+      { label: 'Ask Copilot about saved settings', icon: 'insight', action: () => {
+        try { return this.app.openCopilot(null, { snapshot: captureSessionContext(s), question: 'Explain these saved connection settings and their unknowns. Suggest checks without connecting or changing anything.' }); }
+        catch (error) { toast(errMsg(error), 'err'); }
+      } },
       { label: 'Duplicate', icon: 'copy', action: () => this.duplicate(s) },
       s.host ? { label: 'Ping host', icon: 'activity', action: () => this.app.openTool('ping', { hosts: s.host }) } : null,
       s.host ? { label: 'Port scan host', icon: 'target', action: () => this.app.openTool('portscan', { targets: s.host }) } : null,

@@ -1,4 +1,5 @@
 import { h, icon, api, modal, toast, errMsg } from './ui.js';
+import { captureCopilotContext, copilotContextSupport } from './copilot-context.mjs';
 
 const text = value => typeof value === 'string' ? value : '';
 const when = value => { const date = new Date(value); return Number.isFinite(date.getTime()) ? date.toLocaleString() : 'Unknown time'; };
@@ -103,11 +104,14 @@ export class CopilotController {
   focusedTabChanged(tab) { if (tab && tab !== this.panel) this.focusedTab = tab; this.changed(); }
   sourceChanged(tab) {
     if (!tab) return;
+    let changed = false;
     for (const item of this.conversation?.attachments || []) {
       const source = item.snapshot?.source;
-      if (source?.tabId === tab.id && (source.revision !== tab.copilot?.revision || source.runId !== tab.copilot?.runId)) this.changedSources.add(item.id);
+      if (!this.changedSources.has(item.id) && source?.tabId === tab.id && (source.revision !== tab.copilot?.revision || source.runId !== tab.copilot?.runId)) {
+        this.changedSources.add(item.id); changed = true;
+      }
     }
-    this.changed();
+    if (changed) this.changed();
   }
   applyConversation(value, { retainDraft = false } = {}) {
     this.conversation = value;
@@ -176,6 +180,26 @@ export class CopilotController {
       for (const item of value.attachments) if (!previous.has(item.id) && this.attachmentIds.size < 8) this.attachmentIds.add(item.id);
       await this.refreshList(); this.message = 'Evidence saved locally. Select it below and prepare a request when ready.'; this.changed(); return value;
     });
+  }
+  async attachCurrentView(source = this.focusedTab) {
+    if (this.busy || this.jobId || this.prompting || this.disposed || !source || source.disposed) return;
+    try {
+      const support = copilotContextSupport(source);
+      if (!support.supported) throw new Error(support.reason);
+      let options;
+      if (source.copilotContextChoices) {
+        const choices = source.copilotContextChoices();
+        const available = choices.filter(item => !item.disabled);
+        if (!available.length) throw new Error('Select evidence in the source view first.');
+        const select = h('select.input', { 'aria-label': 'Evidence to attach' }, ...choices.map(item => h('option', { value: item.choice, disabled: !!item.disabled }, item.label)));
+        select.value = available[0].choice;
+        const confirmed = await this.dialog({ title: `Attach from ${source.title}`, body: h('label.field', h('span', 'Choose evidence from this view'), select),
+          buttons: [{ label: 'Cancel', value: null }, { label: 'Attach evidence', value: true, primary: true }] });
+        if (!confirmed || this.disposed || source.disposed) return;
+        options = { choice: select.value };
+      }
+      await this.attach(captureCopilotContext(source, options));
+    } catch (error) { this.message = errMsg(error); toast(this.message, 'err'); this.changed(); }
   }
   async detach(id) {
     if (!this.conversation || this.busy || this.jobId || this.prompting || this.disposed) return; this.invalidate();
@@ -293,6 +317,7 @@ export class CopilotPanel {
     this.testButton = h('button.btn.sm', { onclick: () => controller.prepare(true) }, 'Review a connection test');
     this.connectionDetails = h('details', h('summary', 'Connection options'), h('label.field', h('span', 'Response transport'), this.transportSelect), this.transportHint, this.testButton);
     this.focusStatus = h('p.hint.copilot-focus'); this.issues = h('div.copilot-issues', { role: 'status' });
+    this.attachButton = h('button.btn.sm', { onclick: () => controller.attachCurrentView() }, icon('plus'), 'Attach from current view');
     this.evidence = h('div.copilot-evidence');
     this.evidenceDetails = h('details', h('summary', 'Attached evidence'), h('p.hint', 'Saved snapshots only. Select what to include in the next request.'), this.evidence);
     this.savedTurns = h('div.copilot-saved-turns'); this.pendingTurn = h('article.copilot-turn.copilot-pending.hidden');
@@ -314,7 +339,7 @@ export class CopilotPanel {
       this.reviewLimitations, this.requestBody, h('div.copilot-actions', this.sendButton, this.discardButton));
     this.el = h('div.view.copilot-view', h('div.copilot-header', h('div.copilot-heading', icon('insight'), h('h2', 'Copilot')), this.settingsButton),
       h('div.copilot-scroll', h('div.copilot-conversations', this.conversationSelect, this.newButton, this.renameButton, this.deleteButton),
-        this.providerStatus, this.connectionDetails, this.focusStatus, this.issues, this.evidenceDetails, this.historyDetails,
+        this.providerStatus, this.connectionDetails, this.focusStatus, this.attachButton, this.issues, this.evidenceDetails, this.historyDetails,
         h('section.copilot-compose', h('label.field', h('span', 'Your question'), this.question), h('label.copilot-check', this.knowledge, 'Include local knowledge references'),
           h('p.hint', 'Review first, then send. Copilot does not run commands or change devices.'), h('div.copilot-actions', this.prepareButton, this.cancelButton), this.status, this.cleanupButton), this.review, this.turns));
   }
@@ -335,6 +360,7 @@ export class CopilotPanel {
     if (c.provider?.lastTest) this.providerStatus.textContent += ` · Last test: ${c.provider.lastTest.ok ? 'succeeded' : 'failed'} (${when(c.provider.lastTest.checkedAt)})${c.provider.lastTest.providerRevision !== config?.revision ? ' — previous settings' : ''}`;
     this.testButton.disabled = locked || !config?.hasKey; this.prepareButton.disabled = locked || !config?.hasKey || !conversation || !c.question.trim();
     this.settingsButton.disabled = c.prompting;
+    this.attachButton.disabled = locked || !c.focusedTab || c.focusedTab.disposed || !copilotContextSupport(c.focusedTab).supported;
     this.focusStatus.textContent = `Workspace view: ${c.focusedTab?.title || 'None'}. Evidence is selected separately. Copilot does not target a terminal.`;
     this.issues.replaceChildren(...c.issues.map(issue => h('p.hint', text(issue.message))));
     this.renderEvidence(locked); this.renderHistory(locked); this.renderTurns();
@@ -368,7 +394,7 @@ export class CopilotPanel {
         h('p.hint', `${snapshot.kind} · ${when(snapshot.capturedAt)} · ${snapshot.coverage?.complete ? 'Complete observed scope' : 'Partial or unknown coverage'}`),
         ...(snapshot.omissions || []).map(item => h('p.hint', item)), stale, source, body);
       }));
-      if (!attachments.length) this.evidence.append(h('p.hint', 'No evidence attached. Use “Explain with AI” on a supported tool result to add an explicit snapshot.'));
+      if (!attachments.length) this.evidence.append(h('p.hint', 'No evidence attached. Use “Ask Copilot” in a tool or “Attach from current view” to choose evidence.'));
     }
     for (const [id, controls] of this.attachmentControls || []) {
       const checked = c.attachmentIds.has(id); controls.checkbox.checked = checked;

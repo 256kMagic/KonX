@@ -30,7 +30,12 @@ async function runWidgetHostUiTests(test) {
         child.once('error', error => { clearTimeout(timer); reject(error); });
         child.once('exit', code => { clearTimeout(timer); resolve(code); });
       });
-      assert.equal(code, 0, output); assert.match(output, /WIDGET_HOST_PASS/);
+      if (code !== 0) {
+        const evidence = path.join(__dirname, '../review/widget-host'); fs.mkdirSync(evidence, { recursive: true });
+        fs.writeFileSync(path.join(evidence, 'last-failure.log'), output);
+        assert.fail('Widget host fixture failed: ' + output.trim().split(/\r?\n/).slice(-12).join('\n'));
+      }
+      assert.match(output, /WIDGET_HOST_PASS/);
     } finally {
       if (child && child.exitCode === null && child.signalCode === null) {
         child.kill(); await new Promise(resolve => child.once('exit', resolve));
@@ -101,7 +106,11 @@ async function fixture() {
       const protocolDrag = async win => {
         const start = input.length;
         await nativeDrag(win, await coordinates());
-        await until(() => input.slice(start).includes('m'), 'SGR mouse release');
+        try { await until(() => input.slice(start).includes('m'), 'SGR mouse release'); }
+        catch (error) {
+          console.error('Mouse diagnostic', JSON.stringify(await run(`(()=>{const t=window.__term.term,e=t.element.querySelector('.xterm-screen'),r=e.getBoundingClientRect(),w=e.ownerDocument.defaultView,row=Math.max(0,window.__targetLine-t.buffer.active.viewportY),x=r.x+2,y=r.y+(row+0.5)*r.height/t.rows;return {rect:r.toJSON(),viewport:[w.innerWidth,w.innerHeight],viewportY:t.buffer.active.viewportY,targetLine:window.__targetLine,rows:t.rows,point:[x,y],hit:e.ownerDocument.elementFromPoint(x,y)?.className,host:window.__term.hostWindow===w,mouse:t.modes.mouseTrackingMode}})()`)), JSON.stringify(input.slice(start)));
+          throw error;
+        }
         const reports = [...input.slice(start).matchAll(/\x1b\[<(\d+);(\d+);(\d+)([Mm])/g)].map(m => ({ button: Number(m[1]), end: m[4] }));
         assert.deepEqual(reports, [{ button: 0, end: 'M' }, { button: 32, end: 'M' }, { button: 0, end: 'm' }], 'one down, drag and release, without duplicate host listeners');
       };
@@ -174,6 +183,10 @@ async function fixture() {
         assert.deepEqual([...input.slice(cancellationStart).matchAll(/\x1b\[<(\d+);\d+;\d+([Mm])/g)].map(m => [Number(m[1]), m[2]]), [[2, 'M'], [34, 'M'], [2, 'm']]);
         popup.webContents.sendInputEvent({ type: 'mouseUp', button: 'right', clickCount: 1, ...end });
         await pause(30);
+        // The right-button release legitimately opens the terminal menu. This
+        // fixture moves DOM without the pop-out UI host registration; dismiss
+        // that menu explicitly before testing an unobscured terminal after dock.
+        await run(`import('./js/ui.js').then(ui => { ui.closeMenu(); return true; })`);
         popup.close(); await until(() => run('window.__term.el.ownerDocument===document&&window.__child.closed'), 'terminal dock');
         await protocolDrag(main);
         await run('window.__move(window.__term)'); await pause(100); await protocolDrag(popup);

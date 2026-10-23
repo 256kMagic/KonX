@@ -2,6 +2,7 @@
 // invokes IPC, retrieves files, or starts a tool. Full strings reach main's
 // redaction boundary; resource limits omit entire values, never secret prefixes.
 export const BASIC_COPILOT_KINDS = Object.freeze(['ping', 'sweep', 'portscan', 'traceroute', 'dns', 'whois', 'subnet', 'wol', 'netinfo']);
+export const WORKSPACE_COPILOT_KINDS = Object.freeze(['terminal', 'connection', 'sftp', 'notepad']);
 export const COPILOT_SNAPSHOT_BYTES = 64 * 1024;
 const MAX_ROWS = 200, MAX_NODES = 3500;
 const bytes = value => new TextEncoder().encode(value).length;
@@ -9,7 +10,7 @@ const frozen = value => { if (value && typeof value === 'object') { for (const c
 
 export function copilotContextSupport(tab) {
   const kind = tab?.toolKind || tab?.kind || 'unknown';
-  const supported = BASIC_COPILOT_KINDS.includes(kind) && typeof tab?.captureCopilotContext === 'function';
+  const supported = [...BASIC_COPILOT_KINDS, ...WORKSPACE_COPILOT_KINDS].includes(kind) && typeof tab?.captureCopilotContext === 'function';
   return { supported, kind, reason: supported ? '' : 'Typed evidence for this view is not available yet. Ask a general question without attaching its data.' };
 }
 
@@ -73,9 +74,9 @@ function boundedCopy(input, budget, notices) {
 }
 
 /** One owner per tool tab. Tokens prevent late one-shot replies replacing a new run. */
-export class BasicToolContext {
+export class EvidenceContext {
   constructor(kind, tabId, title, { now = () => new Date().toISOString(), onChange = () => {} } = {}) {
-    if (!BASIC_COPILOT_KINDS.includes(kind)) throw new Error('Unsupported basic tool context');
+    if (![...BASIC_COPILOT_KINDS, ...WORKSPACE_COPILOT_KINDS].includes(kind)) throw new Error('Unsupported evidence context');
     this.kind = kind; this.tabId = tabId; this.title = title; this.now = now; this.onChange = onChange;
     this.revision = 0; this.sequence = 0; this.runId = null; this.state = 'idle'; this.inputs = {};
     this.startedAt = null; this.updatedAt = null; this.completedAt = null; this.error = null; this.inputOmissions = [];
@@ -126,5 +127,13 @@ export class BasicToolContext {
     // A programmer/schema error is explicit, never repaired by raw truncation.
     if (out.omissions.length > 32 || bytes(JSON.stringify(out)) > COPILOT_SNAPSHOT_BYTES) throw new Error('Copilot snapshot exceeds its bounded evidence envelope');
     return frozen(out);
+  }
+}
+
+// Existing basic producers retain their narrower boundary.
+export class BasicToolContext extends EvidenceContext {
+  constructor(kind, ...args) {
+    if (!BASIC_COPILOT_KINDS.includes(kind)) throw new Error('Unsupported basic tool context');
+    super(kind, ...args);
   }
 }

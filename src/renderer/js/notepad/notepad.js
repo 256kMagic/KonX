@@ -6,6 +6,7 @@ import { loadMonaco } from './monaco.js';
 import * as T from './textops.mjs';
 import { toolsMenu, findInFilesDialog, sendToTerminalDialog, hashDialog } from './notepad-tools.js';
 import { editorTheme, mountThemeOutput } from '../theme-effects.js';
+import { createWorkspaceEvidence, captureNotepadContext, workspaceCopilotItems, workspaceContextChoices } from '../copilot-workspace.mjs';
 
 let seq = 0;
 const newId = () => `d${Date.now().toString(36)}${(seq++).toString(36)}`;
@@ -26,6 +27,7 @@ export class NotepadTab {
     this.docs = [];
     this.current = null;
     this.closed = [];
+    this.copilot = createWorkspaceEvidence(this, 'Notepad text');
     this.opts = { wordWrap: false, minimap: true, whitespace: false, fontSize: null, sendDelay: 150, ...(app.settings.notepad || {}) };
     this.build();
     this.hostWindow = this.el.ownerDocument.defaultView;
@@ -48,6 +50,7 @@ export class NotepadTab {
       menu('Encoding', () => this.encodingMenu()),
       menu('Language', () => this.languageMenu()),
       menu('Tools', () => toolsMenu(this)),
+      menu('Ask Copilot', () => workspaceCopilotItems(this)),
       h('div.np-sep'),
       this.iconBtn('file-plus', 'New (Ctrl+N)', () => this.newDoc()),
       this.iconBtn('folder-open', 'Open (Ctrl+O)', () => this.open()),
@@ -131,7 +134,7 @@ export class NotepadTab {
     });
     mountThemeOutput(this.host);
     this.bindKeys();
-    this.editor.onDidChangeCursorSelection(() => this.updateStatus());
+    this.editor.onDidChangeCursorSelection(() => { this.updateStatus(); this.copilot.touch(); });
     this.editor.onDidChangeModelContent(() => this.onContentChange());
     this.saveSessionSoon = debounce(() => this.saveSession(), 400);
     this.backupSoon = debounce(() => this.backupDirty(), 800);
@@ -231,6 +234,8 @@ export class NotepadTab {
     if (this.diffEditor) this.closeCompare();
     if (this.current && this.current !== doc) this.current.viewState = this.editor.saveViewState();
     this.current = doc;
+    this.copilot.begin({ documentId: doc.id, source: 'current editor model' }, `${this.id}:${doc.id}`);
+    this.copilot.finish();
     this.editor.setModel(doc.model);
     this.editor.updateOptions({ readOnly: !!doc.readOnly });
     if (doc.viewState) this.editor.restoreViewState(doc.viewState);
@@ -732,13 +737,19 @@ export class NotepadTab {
   // ------------------------------------------------------------ tabs + status
 
   changed() {
+    this.copilot.touch();
     this.renderTabs();
     this.updateStatus();
     this.saveSessionSoon && this.saveSessionSoon();
     api.invoke('np:watch', this.docs.filter((d) => d.path).map((d) => ({ path: d.path, mtime: d.mtime })));
   }
 
+  copilotContextChoices() { return workspaceContextChoices(this); }
+
+  captureCopilotContext(options) { return captureNotepadContext(this, options); }
+
   onContentChange() {
+    this.copilot.touch();
     const d = this.current;
     if (!d) return;
     const dirty = this.isDirty(d);
@@ -1133,6 +1144,7 @@ export class NotepadTab {
     // Closing the Notepad keeps the session (and unsaved work) for next time, like Notepad++.
     this.flush();
     this.disposed = true;
+    this.copilot.finish('stopped');
     this.active = false;
     this.visibilityGeneration++;
     clearTimeout(this.statusTimer);

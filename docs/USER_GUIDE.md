@@ -1,6 +1,8 @@
 # KonX User Guide
 
-This guide covers KonX 0.23.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one application. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
+This guide covers KonX 0.24.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one application. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
+
+Version 0.24.0 adds explicit terminal text, connection diagnostics, SFTP metadata, and editor selections to [Copilot](COPILOT.md#workspace-evidence). See [release validation](releases/0.24.0.md).
 
 Version 0.23.0 adds [Copilot](COPILOT.md): local conversations beside your work, immutable evidence, exact request review, explicit provider testing, and basic network tool context. See [release validation](releases/0.23.0.md).
 

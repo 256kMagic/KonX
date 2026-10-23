@@ -810,6 +810,11 @@ class App {
   async explainTool(tab) {
     if (tab.disposed) return;
     try {
+      if (copilotContextSupport(tab).supported && tab.copilotContextChoices) {
+        const panel = await this.openCopilot(tab);
+        if (panel) await this.copilot.attachCurrentView(tab);
+        return panel;
+      }
       if (copilotContextSupport(tab).supported) return this.openCopilot(tab, { snapshot: captureCopilotContext(tab),
         question: `Explain these ${tab.title} results. Distinguish observed facts, unknowns, and possible causes, then suggest the next diagnostic check.` });
       const preview = await api.invoke('tools:aiPreview', { context: toolContext(tab) });

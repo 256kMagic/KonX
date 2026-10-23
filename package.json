@@ -1,7 +1,7 @@
 {
   "name": "konx",
   "productName": "KonX",
-  "version": "0.23.0",
+  "version": "0.24.0",
   "description": "Windows terminal, SFTP, packet analysis, security, wireless and AI troubleshooting workspace",
   "main": "src/main/boot.js",
   "author": "KonX",
@@ -28,7 +28,7 @@
   "build": {
     "appId": "com.konx.app",
     "productName": "KonX",
-    "copyright": "Copyright © 2026",
+    "copyright": "Copyright \u00c2\u00a9 2026",
     "directories": {
       "output": "dist",
       "buildResources": "assets"

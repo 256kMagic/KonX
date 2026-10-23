@@ -7,6 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+let evidenceContext, workspaceEvidence;
 
 function deferred() {
   let resolve, reject;
@@ -23,6 +24,7 @@ function harness() {
     on(channel, fn) { listeners.set(channel, fn); return () => listeners.delete(channel); },
   };
   const globals = {
+    requestedConnectionMetadata: (...args) => workspaceEvidence.requestedConnectionMetadata(...args),
     api, requestAnimationFrame: (fn) => frames.push(fn),
     setTimeout: (fn) => { timers.push(fn); return fn; },
     clearTimeout: (fn) => { const i = timers.indexOf(fn); if (i >= 0) timers.splice(i, 1); },
@@ -47,7 +49,8 @@ function harness() {
     let disposed = false;
     const live = () => assert.equal(disposed, false, 'disposed terminal accessed');
     Object.assign(tab, {
-      app, id: 'terminal', spec: {}, state: 'idle', active: false,
+      app, id: 'terminal', kind: 'terminal', spec: {}, state: 'idle', active: false,
+      copilot: new evidenceContext.EvidenceContext('terminal', 'terminal', 'Terminal fixture'),
       disposed: false, visibilityGeneration: 0,
       term: {
         cols: 80, rows: 24,
@@ -78,7 +81,8 @@ function harness() {
     };
     const doc = { id: 'draft', title: 'draft', model, savedVersion: 1, untitled: true };
     Object.assign(tab, {
-      app: { active: null, settings: {}, setTabTitle() {} }, opts: {},
+      app: { active: null, settings: {}, setTabTitle() {} }, opts: {}, id: 'notepad', kind: 'notepad',
+      copilot: new evidenceContext.EvidenceContext('notepad', 'notepad', 'Editor fixture'),
       active: false, disposed: false, visibilityGeneration: 0,
       monaco: {}, current: doc, docs: [doc],
       editor: {
@@ -98,6 +102,11 @@ function harness() {
 }
 
 async function runLayoutFocusTests(test) {
+  evidenceContext = await import('../src/renderer/js/copilot-context.mjs');
+  const source = fs.readFileSync(path.join(__dirname, '../src/renderer/js/copilot-workspace.mjs'), 'utf8').replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');
+  const module = { exports: {} };
+  vm.runInNewContext(source + '\nmodule.exports = { requestedConnectionMetadata };', { module, ...evidenceContext });
+  workspaceEvidence = module.exports;
   console.log('workspace layouts: tab focus and late callbacks');
 
   await test('visible terminal panes refit independently without selecting a command target', async () => {

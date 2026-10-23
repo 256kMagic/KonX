@@ -658,6 +658,23 @@
       assert(app.byId.has(panel.id) && controller.prepared === preparation, 'Cancelled close discarded the reviewed request');
       const discard = app.closeTab(panel); await until(() => !!document.querySelector('.modal'), 'Copilot explicit discard'); serialFooter('Discard draft'); await discard;
       assert(!app.byId.has(panel.id) && app.jobs.size === 0, 'Copilot close retained a tab or started work');
+      if (versionParts[1] >= 24) {
+        const editor = await app.openNotepad();
+        const doc = editor.newDoc({ title: 'Copilot fixture', text: 'Selected synthetic editor evidence\nDo not collect this second line' });
+        editor.editor.setSelection({ startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 35 });
+        await app.openCopilot(editor);
+        const before = doc.model.getValue(), count = controller.conversation.attachments.length;
+        assert(!panel.attachButton.disabled, 'Current editor attachment button is unavailable');
+        const attach = controller.attachCurrentView();
+        await until(() => document.querySelector('[aria-label="Evidence to attach"]'), 'explicit workspace evidence picker');
+        document.querySelector('[aria-label="Evidence to attach"]').value = 'selection'; serialFooter('Attach evidence'); await attach;
+        const added = controller.conversation.attachments.at(-1);
+        assert(controller.conversation.attachments.length === count + 1 && added.snapshot.kind === 'notepad' && JSON.stringify(added).includes('Selected synthetic editor evidence') && !JSON.stringify(added).includes('Do not collect this second line'), 'Explicit editor selection was not isolated');
+        assert(doc.model.getValue() === before && app.jobs.size === 0, 'Attaching editor evidence changed content or started a request');
+        const closingWorkspace = app.closeTab(panel); await until(() => document.querySelector('.modal'), 'discard workspace attachment selection'); serialFooter('Discard draft'); await closingWorkspace;
+        for (const item of editor.docs) item.dirty = false;
+        await app.closeTab(editor);
+      }
       await app.closeTab(source); await app.saveSettings({ uiLayout: priorLayout }); app.activate(ai);
       copilotChecks = { typedSource: true, companionPreservesSource: true, exactRequestReview: true, immutableStaleSnapshot: true, fiveLayouts: true, nativePopoutAndDock: true,
         canonicalViewRetained: true, draftGuard: true, conversationSaved: true, noProviderRequests: true };
@@ -671,7 +688,7 @@
       const list = await api.invoke('tools:copilotList'), record = list.conversations.find(item => item.name === 'Synthetic package Copilot');
       assert(record && list.issues.length === 0 && !app.copilot && app.jobs.size === 0, 'Copilot conversation was lost or automatically opened/sent after restart');
       const conversation = await api.invoke('tools:copilotGet', record.id);
-      assert(conversation.attachments.length === 1 && conversation.attachments[0].snapshot.scope.inputs.address === '192.0.2.37/26' && conversation.turns.length === 0, 'Immutable source evidence changed after restart');
+      assert(conversation.attachments.length === (versionParts[1] >= 24 ? 2 : 1) && conversation.attachments[0].snapshot.scope.inputs.address === '192.0.2.37/26' && conversation.turns.length === 0, 'Immutable source evidence changed after restart');
       const panel = await app.openCopilot(); await app.copilot.selectConversation(record.id);
       assert(app.copilot.conversation.id === record.id && app.jobs.size === 0 && !app.copilot.prepared, 'Opening a saved conversation started work');
       await api.invoke('tools:copilotRemove', record.id, conversation.revision); app.copilot.applyConversation(null); await app.closeTab(panel);

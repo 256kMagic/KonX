@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.24.0 — 2026-10-23
+
+- Add explicit terminal selection/viewport and connection diagnostics, including serial detection, logging and configured forwards.
+- Add saved-session context, SFTP listing/selection/transfer metadata, and current editor selections or documents.
+- Add the current-view evidence picker; attachments remain local, bounded and immutable, with no automatic commands, transfers or provider requests.
+
+See the [Copilot guide](docs/COPILOT.md) and [release notes](docs/releases/0.24.0.md).
+
 ## 0.23.0 â€” 2026-10-23
 
 - Add a contextual Copilot using existing companion panes, floating panels, and native pop-outs.

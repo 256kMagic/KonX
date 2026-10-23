@@ -54,7 +54,7 @@ async function fixture() {
   dialog.showErrorBox = (title, body) => { throw new Error(`${title}: ${body}`); };
   await app.whenReady();
   fs.mkdirSync(path.join(temp, 'profile'), { recursive: true }); fs.mkdirSync(path.join(temp, 'js'));
-  for (const file of ['ui.js', 'workspace-layout.js', 'workspace-layouts.mjs', 'workspace-panels-model.mjs']) fs.copyFileSync(path.join(REPO, 'src/renderer/js', file), path.join(temp, 'js', file));
+  for (const file of ['ui.js', 'copilot-context.mjs', 'workspace-layout.js', 'workspace-layouts.mjs', 'workspace-panels-model.mjs']) fs.copyFileSync(path.join(REPO, 'src/renderer/js', file), path.join(temp, 'js', file));
   fs.copyFileSync(path.join(UI, 'js/copilot.js'), path.join(temp, 'js/copilot.js'));
   for (const file of ['styles.css', 'workspace-layout.css', 'workspace-popouts.css']) fs.copyFileSync(path.join(REPO, 'src/renderer', file), path.join(temp, file));
   fs.copyFileSync(path.join(UI, 'copilot.css'), path.join(temp, 'copilot.css'));

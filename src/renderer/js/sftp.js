@@ -1,6 +1,8 @@
 // SFTP tab: local and remote file panes side by side plus a transfer queue.
 import { h, icon, api, DataTable, contextMenu, confirmDialog, promptText, modal, toast, errMsg, fmtBytes, fmtDate, debounce } from './ui.js';
 
+import { createWorkspaceEvidence, requestedConnectionMetadata, captureSftpContext, workspaceCopilotItems, workspaceContextChoices, recordListingRequest } from './copilot-workspace.mjs';
+
 let seq = 0;
 const IS_WIN = api.platform === 'win32';
 
@@ -26,6 +28,10 @@ class FilePane {
     this.side = side;
     this.cwd = '';
     this.entries = [];
+    this.navigationGeneration = 0;
+    this.listingObservedAt = null;
+    this.listingRunId = null;
+    this.listingRequest = null;
     this.showHidden = tab.app.settings.sftpShowHidden;
     this.ready = side === 'local';
 
@@ -110,15 +116,23 @@ class FilePane {
   }
 
   async navigate(dir) {
-    if (!this.ready) return;
+    if (!this.ready || this.tab.disposed) return;
+    const generation = ++this.navigationGeneration;
+    recordListingRequest(this, dir, 'running');
     try {
       const entries = await this.list(dir);
+      if (this.tab.disposed || generation !== this.navigationGeneration) return;
+      this.listingObservedAt = new Date().toISOString();
+      this.listingRunId = this.tab.copilot.runId;
       this.cwd = dir;
       this.entries = entries;
       this.pathInput.value = dir;
       this.render();
       this.table.el.scrollTop = 0;
+      recordListingRequest(this, dir, 'complete');
     } catch (e) {
+      if (this.tab.disposed || generation !== this.navigationGeneration) return;
+      recordListingRequest(this, dir, 'error', errMsg(e));
       toast(`Cannot open ${dir}: ${errMsg(e)}`, 'err');
       this.pathInput.value = this.cwd;
     }
@@ -149,6 +163,7 @@ class FilePane {
     this.showHidden = !this.showHidden;
     this.hiddenBtn.classList.toggle('on', this.showHidden);
     this.render();
+    this.tab.copilot.touch();
   }
 
   setMessage(content) {
@@ -372,6 +387,8 @@ class FilePane {
       local && one && { label: 'Show in Explorer', action: () => api.invoke('app:showItem', this.join(one.name)) },
       { label: 'New Folder', icon: 'folder', action: () => this.newFolder() },
       { label: 'Refresh', icon: 'refresh', shortcut: 'F5', action: () => this.refresh() },
+      '-',
+      ...workspaceCopilotItems(this.tab).filter(item => item.choice.startsWith(this.side + '-')),
     ].filter((x) => x !== 0 && x !== undefined && x !== null && x !== ''));
   }
 }
@@ -444,7 +461,9 @@ class TransferPanel {
   }
 
   update(j) {
+    if (this.tab.disposed) return;
     this.jobs.set(j.id, j);
+    this.tab.copilot.touch();
     this.renderSoon();
   }
 
@@ -468,6 +487,7 @@ class TransferPanel {
     for (const [k, j] of this.jobs) if (j.status !== 'running' && j.status !== 'queued') this.jobs.delete(k);
     api.invoke('xfer:clear');
     this.render();
+    this.tab.copilot.touch();
   }
 }
 
@@ -483,22 +503,33 @@ export class SftpTab {
     this.title = meta.name + ' (SFTP)';
     this.icon = 'file-transfer';
     this.state = 'connecting';
+    this.disposed = false;
+    this.connectionGeneration = 0;
+    this.copilot = createWorkspaceEvidence(this, 'SFTP metadata');
     this.local = new FilePane(this, 'local');
     this.remote = new FilePane(this, 'remote');
     this.xfers = new TransferPanel(this);
-    this.el = h('div.view', h('div.sftp', h('div.sftp-panes', this.local.el, this.remote.el), this.xfers.el));
+    this.copilotButton = h('button.btn.sm', { type: 'button', 'aria-label': 'Choose SFTP evidence for Copilot', onclick: e => { const r = e.currentTarget.getBoundingClientRect(); contextMenu(r.left, r.bottom, workspaceCopilotItems(this)); } }, icon('insight'), 'Ask Copilot');
+    this.el = h('div.view', h('div.tool-summary', this.copilotButton), h('div.sftp', h('div.sftp-panes', this.local.el, this.remote.el), this.xfers.el));
     this.refreshLocalSoon = debounce(() => this.local.refresh(), 300);
     this.refreshRemoteSoon = debounce(() => this.remote.refresh(), 300);
   }
 
   async connect() {
+    if (this.disposed) return;
+    const generation = ++this.connectionGeneration;
+    this.copilot.begin(requestedConnectionMetadata(this), `${this.id}:connection:${generation}`);
+    this.info = null;
+    this.remote.navigationGeneration++;
     this.state = 'connecting';
     this.app.tabStateChanged(this);
     this.remote.ready = false;
     this.remote.setMessage([h('div', 'Connecting to ', h('b', this.meta.name), '…')]);
     if (!this.local.cwd) this.local.navigate(this.app.settings.sftpLocalDir || (await api.invoke('local:home')));
+    if (this.disposed || generation !== this.connectionGeneration) return;
     try {
       const r = await api.invoke('sftp:open', this.sftpId, this.spec);
+      if (this.disposed || generation !== this.connectionGeneration) return;
       this.home = r.home;
       this.remote.ready = true;
       this.remote.label.textContent = r.title;
@@ -507,13 +538,23 @@ export class SftpTab {
       this.info = r;
       await this.remote.navigate(this.remote.cwd || r.home);
     } catch (e) {
+      if (this.disposed || generation !== this.connectionGeneration) return;
       this.onClosed(errMsg(e));
       return;
     }
     this.app.tabStateChanged(this);
   }
 
+  copilotContextChoices() { return workspaceContextChoices(this); }
+
+  captureCopilotContext(options) { return captureSftpContext(this, options); }
+
   onClosed(reason = 'Connection closed') {
+    if (this.disposed) return;
+    this.connectionGeneration++;
+    this.remote.navigationGeneration++;
+    if (this.remote.listingRequest?.state === 'running') recordListingRequest(this.remote, this.remote.listingRequest.path, 'stopped', reason);
+    this.copilot.finish('stopped', reason);
     this.state = 'disconnected';
     this.remote.ready = false;
     this.remote.setMessage([
@@ -552,6 +593,10 @@ export class SftpTab {
   }
 
   dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.connectionGeneration++; this.local.navigationGeneration++; this.remote.navigationGeneration++;
+    this.copilot.finish('stopped');
     api.invoke('sftp:close', this.sftpId);
   }
 }

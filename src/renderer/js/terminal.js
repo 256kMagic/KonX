@@ -5,6 +5,7 @@ import { scheme, terminalTheme, usesThemeEffects } from './themes.js';
 import { mountThemeOutput } from './theme-effects.js';
 import { CiscoOutputHighlighter } from './cisco-highlighting.mjs';
 import { bridgeTerminalMouse } from './terminal-mouse-host.mjs';
+import { createWorkspaceEvidence, requestedConnectionMetadata, captureTerminalContext, workspaceCopilotItems, workspaceContextChoices } from './copilot-workspace.mjs';
 
 let seq = 0;
 
@@ -34,6 +35,8 @@ export class TerminalTab {
     this.lastLogPath = '';
     this.logError = '';
     this.highlightOverride = null;
+    this.copilot = createWorkspaceEvidence(this, 'Terminal text');
+    this.baudDetection = null;
 
     const s = app.settings;
     this.term = new Terminal({
@@ -77,7 +80,8 @@ export class TerminalTab {
       type: 'button', role: 'switch', 'aria-label': 'Highlight Cisco output',
       'aria-checked': 'false', onclick: () => this.toggleCiscoHighlighting(),
     }, h('span.term-log-track', { 'aria-hidden': 'true' }), 'Cisco colors', this.ciscoState);
-    this.logbar = h('div.term-logbar', this.logSwitch, this.ciscoSwitch, this.logPath, this.logReveal, this.logErrorEl);
+    this.copilotButton = h('button.btn.sm.ghost', { type: 'button', 'aria-label': 'Choose terminal evidence for Copilot', onclick: e => { const r = e.currentTarget.getBoundingClientRect(); contextMenu(r.left, r.bottom, workspaceCopilotItems(this)); } }, icon('insight'), 'Ask Copilot');
+    this.logbar = h('div.term-logbar', this.logSwitch, this.ciscoSwitch, this.copilotButton, this.logPath, this.logReveal, this.logErrorEl);
     this.el = h('div.view', this.logbar, this.wrap);
     this._renderLogging();
     this.term.open(this.wrap);
@@ -89,7 +93,10 @@ export class TerminalTab {
 
     this.term.onData((d) => this._input(d, false));
     this.term.onBinary((d) => this._input(d, true));
+    this.term.onWriteParsed(() => { if (!this.disposed) this.copilot.touch(); });
+    this.term.onScroll(() => { if (!this.disposed) this.copilot.touch(); });
     this.term.onResize(({ cols, rows }) => {
+      this.copilot.touch();
       api.send('conn:resize', this.id, cols, rows);
       this.app.updateStatus(this);
     });
@@ -102,6 +109,7 @@ export class TerminalTab {
       if (sel && this.app.settings.copyOnSelect) api.invoke('clipboard:write', sel);
     }, 120);
     this.term.onSelectionChange(copySel);
+    this.term.onSelectionChange(() => { if (!this.disposed) this.copilot.touch(); });
     this.term.attachCustomKeyEventHandler((e) => this._key(e));
 
     this.wrap.addEventListener('contextmenu', (e) => {
@@ -126,6 +134,8 @@ export class TerminalTab {
   async connect() {
     if (this.disposed) return;
     const generation = ++this.connectionGeneration;
+    this.copilot.begin(requestedConnectionMetadata(this), `${this.id}:connection:${generation}`);
+    this.info = null; this.baudDetection = null;
     this._hideOverlay();
     this.state = 'connecting';
     this.statusMessage = 'Connecting…';
@@ -154,6 +164,7 @@ export class TerminalTab {
     this.state = st.state;
     this.statusMessage = st.message || '';
     if (st.info) this.info = st.info;
+    if (st.baudDetect) this.baudDetection = { phase: st.baudDetect.phase, baudRate: st.baudDetect.baudRate, index: st.baudDetect.index, total: st.baudDetect.total, message: st.baudDetect.message };
     if (this.info?.logging) this.lastLogPath = this.info.logging;
     if (st.state === 'connected') {
       this._hideOverlay();
@@ -166,8 +177,14 @@ export class TerminalTab {
       this._showOverlay(st.message || 'Disconnected');
     }
     this._renderLogging();
+    if (st.state === 'disconnected') this.copilot.finish('stopped');
+    else this.copilot.touch();
     this.app.tabStateChanged(this);
   }
+
+  copilotContextChoices() { return workspaceContextChoices(this); }
+
+  captureCopilotContext(options) { return captureTerminalContext(this, options); }
 
   reconnect() {
     if (this.disposed) return;
@@ -472,6 +489,7 @@ export class TerminalTab {
     const request = {};
     this.logRequest = request;
     this.logError = '';
+    this.copilot.touch();
     this._renderLogging();
     try {
       if (this.info && this.info.logging) await api.invoke('conn:stopLog', this.id);
@@ -482,6 +500,7 @@ export class TerminalTab {
       if (!this.disposed && this.logRequest === request) {
         this.logRequest = null;
         this._renderLogging();
+        this.copilot.touch();
       }
     }
   }
@@ -508,8 +527,9 @@ export class TerminalTab {
       { label: 'Copy', icon: 'copy', shortcut: 'Ctrl+Shift+C', disabled: !sel, action: () => this.copy() },
       { label: 'Paste', icon: 'file', shortcut: 'Ctrl+Shift+V', disabled: !connected, action: () => this.pasteClipboard() },
       { label: 'Select All', action: () => this.term.selectAll() },
+      ...workspaceCopilotItems(this),
       { label: 'Find…', icon: 'search', shortcut: 'Ctrl+Shift+F', action: () => this.openFind() },
-      { label: 'Clear Scrollback', action: () => { this.term.clear(); this.ciscoHighlighter.refresh(); } },
+      { label: 'Clear Scrollback', action: () => { this.term.clear(); this.ciscoHighlighter.refresh(); this.copilot.touch(); } },
       { label: 'Open scrollback in Notepad', icon: 'edit', action: () => this.openScrollback() },
       '-',
       this.protocol === 'ssh' && { label: 'Open SFTP Tab', icon: 'file-transfer', disabled: !connected, action: () => this.app.openSftpFromTerminal(this) },
@@ -528,6 +548,7 @@ export class TerminalTab {
     if (this.disposed) return;
     ++this.connectionGeneration;
     this.disposed = true;
+    this.copilot.finish('stopped');
     this.hide();
     this.ro.disconnect();
     this.mouseHostCleanup?.();

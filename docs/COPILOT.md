@@ -17,9 +17,23 @@ The reviewed request includes instructions, question, selected history, evidence
 
 Version 0.23.0 supports typed evidence from Ping Monitor, IP Sweep, Port Scanner, Traceroute, DNS, Whois, Subnet Calculator, Wake-on-LAN, and Network Interfaces. Selection uses the tool's selected result rows when available. Snapshots include the original run inputs and times, status, retained facts, coverage, and omissions. Editing the tool's form does not relabel an earlier result.
 
-Attachments are immutable copies. A changed or closed source does not alter an earlier request. Use **Open source view** to revisit an open source; attach again to use newer facts. Opening Copilot or changing focus does not collect or attach data automatically. Other tools retain their existing AI & Knowledge explanation until their contextual integration ships.
+Attachments are immutable copies. A changed or closed source does not alter an earlier request. Use **Open source view** to revisit an open source; attach again to use newer facts. Opening Copilot or changing focus does not collect or attach data automatically. Use **Attach from current view** for supported views. When several types of evidence are available, choose one in the review dialog.
 
 Choose a saved conversation to continue it. Only selected completed turns enter the next request; cancelled, failed, and interrupted turns do not. Past source excerpts and exact requests remain attached to their original turn even if current evidence is detached. Replies are model suggestions, not verified diagnoses.
+
+## Workspace evidence
+
+Version 0.24.0 adds explicit choices from the current view:
+
+| View | Evidence you can choose |
+| --- | --- |
+| Terminal | Selected text, visible terminal text, or connection diagnostics |
+| SSH/Telnet/serial connection | Requested and observed settings, serial detection, logging state, configured forwarding rules; unobserved runtime state stays unknown |
+| Saved session | Selected session configuration from its context menu; passwords, key paths, login commands and other sessions are excluded |
+| SFTP | Selected or displayed local/remote file metadata, or retained transfer status and errors |
+| Notepad | Selected text or the current document; other open documents are excluded |
+
+Use the view's context menu or open Copilot and choose **Attach from current view**. Capture is explicit and stays local until you prepare and send a request. SFTP attachments never fetch file contents. Terminal attachments do not execute commands or read log files. Wrapped lines cut by the viewport and oversized text are omitted as whole values, with notices; choose a smaller selection when needed. Retained directory entries keep the last successful path and observation time even when a later navigation fails.
 
 ## Requests and storage
 
