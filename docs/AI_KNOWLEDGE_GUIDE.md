@@ -30,6 +30,8 @@ Nyquest personal API keys carry the account's privileges, as described in its [P
 
 Recognized credentials and saved AI keys are redacted from previews, requests, reference excerpts, and answers. Redaction is best effort. Provider responses and library articles are displayed as text. Instructions embedded in reports or reference notes are treated as evidence rather than instructions to run commands. AI recommendations still need review against the actual device model, software version, permissions, and evidence.
 
+From 0.18.1, recognized credentials are removed before articles are split for indexing. AI references are selected from sanitized full articles around matching query terms, so a relevant passage beyond the first 900 characters remains eligible. Answer redaction also runs before the display-length limit. Existing custom notes retain their original text; upgrading rebuilds the derived search index.
+
 **Cancel** stops the current request; closing its tab or quitting KonX cancels its work. Changing AI settings cancels older AI jobs, and stale tabs must refresh their settings. Requests have a 60-second deadline and a 2 MiB response limit. KonX does not automatically retry a failed or interrupted generation. Responses may be incomplete if the provider reaches its output limit. Each question is independent; previous answers are not automatically sent as chat history.
 
 ## Use the offline library

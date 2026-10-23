@@ -187,6 +187,77 @@ async function runSecurityNetworkTests(test) {
     });
   });
 
+  await test('HTTPS HSTS assessment parses quoted values, extensions and malformed directives through real headers', async () => {
+    const cases = [
+      ['max-age=31536000', 'pass'],
+      ['max-age="31536000"', 'pass'],
+      [String.raw`max-age="31\536000"`, 'pass'],
+      ['; \t includeSubDomains ; MAX-AGE = "0001"; ;', 'pass'],
+      [String.raw`max-age=1; extension="semi;quote\"value"; preload`, 'pass'],
+      ['max-age=999999999999999999999999999999999999999999', 'pass'],
+      ['max-age=0', 'warning'],
+      ['max-age="0000"', 'warning'],
+      ['includeSubDomains', 'warning'],
+      ['max-age=31536000; max-age=0', 'warning'],
+      ['max-age=1; MAX-AGE=1', 'warning'],
+      ['max-age=1; includeSubDomains; INCLUDESUBDOMAINS', 'warning'],
+      ['max-age=1; extension=one; EXTENSION=two', 'warning'],
+      ['max-age=1; includeSubDomains=true', 'warning'],
+      ['max-age=1; extension=', 'warning'],
+      ['max-age=1; invalid directive', 'warning'],
+      ['max-age="31536000', 'warning'],
+      [String.raw`max-age="31536000\"`, 'warning'],
+      ['max-age="1"trailing', 'warning'],
+      ['max-age=+1', 'warning'],
+      ['max-age=-1', 'warning'],
+      ['max-age=1.5', 'warning'],
+      ['max-age=" 1 "', 'warning'],
+      ['max-age=1, includeSubDomains', 'warning'],
+      ['max-age=\u00a031536000', 'warning'],
+      ['max-age=1;\u00a0includeSubDomains', 'warning'],
+    ];
+    const originalConnect = tls.connect, requests = [];
+    tls.connect = function (options, ...args) { return originalConnect.call(this, { ...options, ca: TEST_CERT }, ...args); };
+    try {
+      await withServer(https.createServer({ key: TEST_KEY, cert: TEST_CERT }, (request, response) => {
+        const index = Number(request.url.slice(1)); requests.push([request.method, index]);
+        response.writeHead(200, { 'Strict-Transport-Security': cases[index][0] }); response.end();
+      }), async (port) => {
+        for (let index = 0; index < cases.length; index++) {
+          const report = await scanWeb({ url: `https://127.0.0.1:${port}/${index}` });
+          assert.equal(check(report, 'web-tls-trust-0').status, 'pass');
+          assert.equal(check(report, 'web-tls-identity-0').status, 'pass');
+          assert.equal(check(report, 'web-hsts').status, cases[index][1], JSON.stringify(cases[index][0]));
+        }
+      });
+      assert.deepEqual(requests, cases.map((_, index) => ['HEAD', index]));
+    } finally { tls.connect = originalConnect; }
+  });
+
+  await test('HTTPS HSTS assessment uses only the first repeated raw header field', async () => {
+    const cases = [
+      [['max-age=0', 'max-age=31536000'], 'warning'],
+      [['max-age=31536000', 'max-age=0'], 'pass'],
+      [['max-age=1; max-age=0', 'max-age=31536000'], 'warning'],
+      [['max-age="31536000"', 'invalid'], 'pass'],
+      [['', 'max-age=31536000'], 'warning'],
+    ];
+    const originalConnect = tls.connect;
+    tls.connect = function (options, ...args) { return originalConnect.call(this, { ...options, ca: TEST_CERT }, ...args); };
+    try {
+      await withServer(https.createServer({ key: TEST_KEY, cert: TEST_CERT }, (request, response) => {
+        const [values] = cases[Number(request.url.slice(1))];
+        response.writeHead(200, ['sTrIcT-TrAnSpOrT-SeCuRiTy', values[0], 'Strict-Transport-Security', values[1]]); response.end();
+      }), async (port) => {
+        for (let index = 0; index < cases.length; index++) {
+          const report = await scanWeb({ url: `https://127.0.0.1:${port}/${index}` });
+          assert.equal(check(report, 'web-tls-trust-0').status, 'pass');
+          assert.equal(check(report, 'web-hsts').status, cases[index][1], JSON.stringify(cases[index][0]));
+        }
+      });
+    } finally { tls.connect = originalConnect; }
+  });
+
   await test('Web audit does not follow cross-host redirects, credentialed redirects or HTTPS downgrades', async () => {
     let hits = 0;
     await withServer(http.createServer((request, response) => {

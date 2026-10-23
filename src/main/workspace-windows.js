@@ -8,12 +8,13 @@ function isPrimaryFrame(event, primary) {
 
 /** Native popouts present views whose objects and IPC remain owned by the opener. */
 class WorkspaceWindows {
-  constructor({ primary, BrowserWindow, emit, openExternal, now = Date.now }) {
+  constructor({ primary, BrowserWindow, emit, openExternal, now = Date.now, screen = require('electron').screen }) {
     this.primary = primary;
     this.BrowserWindow = BrowserWindow;
     this.emit = emit;
     this.openExternal = openExternal;
     this.now = now;
+    this.screen = screen;
     this.permits = new Map();
     this.opening = new Map();
     this.windows = new Map();
@@ -24,6 +25,14 @@ class WorkspaceWindows {
     primary.webContents.setWindowOpenHandler(details => this._allow(details));
     primary.webContents.on('did-create-window', (child, details) => this._created(child, details));
     primary.once('closed', () => this.dispose());
+    this.recoverDisplays = () => {
+      for (const { child } of this.windows.values()) this._keepVisible(child);
+    };
+    this.metricsChanged = (_event, _display, metrics) => {
+      if (!metrics || metrics.some(metric => ['bounds', 'workArea', 'scaleFactor'].includes(metric))) this.recoverDisplays();
+    };
+    screen?.on('display-removed', this.recoverDisplays);
+    screen?.on('display-metrics-changed', this.metricsChanged);
   }
 
   _expire() {
@@ -64,6 +73,7 @@ class WorkspaceWindows {
     if (this.disposed || url !== 'about:blank' || !permit || permit.expires <= this.now()) { child.destroy(); this._changed(); return; }
     const record = { ...permit, child, approved: false, requested: false };
     this.windows.set(record.id, record);
+    this._keepVisible(child);
     this.primary.webContents.setBackgroundThrottling(false);
     // about:blank can inherit its opener's preferences; enforce live rendering
     // after native creation as well, including while the primary is minimized.
@@ -71,6 +81,7 @@ class WorkspaceWindows {
     const denyNavigation = event => event.preventDefault();
     for (const event of ['will-navigate', 'will-frame-navigate', 'will-redirect']) child.webContents.on(event, denyNavigation);
     child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    for (const event of ['restore', 'unmaximize', 'leave-full-screen']) child.on(event, () => this._keepVisible(child));
     child.on('close', event => {
       if (record.approved || this.disposed) return;
       event.preventDefault();
@@ -88,6 +99,20 @@ class WorkspaceWindows {
     if (record.requested || record.child.isDestroyed()) return;
     record.requested = true;
     this.emit('app:popoutDock', { id: record.id });
+  }
+
+  _keepVisible(child) {
+    if (this.disposed || !this.screen || child.isDestroyed() || child.isMinimized() || child.isMaximized() || child.isFullScreen()) return;
+    const bounds = child.getBounds();
+    const display = this.screen.getDisplayMatching(bounds), area = display?.workArea;
+    if (!area || ![area.x, area.y, area.width, area.height].every(Number.isFinite) || area.width <= 0 || area.height <= 0) return;
+    // Electron screen/window rectangles share device-independent coordinates.
+    // Keep the native title bar and KonX's docking controls reachable after a
+    // monitor disappears, its scale changes, or its usable work area shrinks.
+    const width = Math.min(bounds.width, area.width), height = Math.min(bounds.height, area.height);
+    const x = Math.max(area.x, Math.min(bounds.x, area.x + area.width - width));
+    const y = Math.max(area.y, Math.min(bounds.y, area.y + area.height - height));
+    if (x !== bounds.x || y !== bounds.y || width !== bounds.width || height !== bounds.height) child.setBounds({ x, y, width, height });
   }
 
   close(id) {
@@ -142,6 +167,8 @@ class WorkspaceWindows {
   dispose() {
     if (this.disposed) return;
     this.disposed = true; this.permits.clear(); this.opening.clear();
+    this.screen?.removeListener('display-removed', this.recoverDisplays);
+    this.screen?.removeListener('display-metrics-changed', this.metricsChanged);
     for (const record of this.windows.values()) record.child.destroy();
     this.windows.clear(); this._changed();
   }

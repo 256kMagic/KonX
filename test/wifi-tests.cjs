@@ -33,13 +33,18 @@ function availableFixture() {
   bytes.writeUInt32LE(7, 620); bytes.writeUInt32LE(4, 624);
   return bytes;
 }
-function rsnIe(akms = [2], cipher = 4) {
+function rsnIe(akms = [2], cipher = 4, groupCipher = cipher) {
   const body = Buffer.alloc(8 + 4 + 2 + akms.length * 4);
-  body.writeUInt16LE(1, 0); Buffer.from([0, 15, 172, cipher]).copy(body, 2);
+  body.writeUInt16LE(1, 0); Buffer.from([0, 15, 172, groupCipher]).copy(body, 2);
   body.writeUInt16LE(1, 6); Buffer.from([0, 15, 172, cipher]).copy(body, 8);
   body.writeUInt16LE(akms.length, 12);
   akms.forEach((akm, index) => Buffer.from([0, 15, 172, akm]).copy(body, 14 + index * 4));
   return Buffer.concat([Buffer.from([48, body.length]), body]);
+}
+function wpaIe(akms = [2], cipher = 2, groupCipher = cipher) {
+  const body = Buffer.from(rsnIe(akms, cipher, groupCipher).subarray(2));
+  for (const offset of [2, 8, ...akms.map((_, index) => 14 + index * 4)]) Buffer.from([0, 0x50, 0xf2]).copy(body, offset);
+  return Buffer.concat([Buffer.from([221, body.length + 4, 0, 0x50, 0xf2, 1]), body]);
 }
 function bssFixture({ ssid = 'Lab', freq = 5180000, privacy = true, ies = rsnIe(), bssid = 'aabbccddeeff' } = {}) {
   const bytes = Buffer.alloc(368 + ies.length); bytes.writeUInt32LE(bytes.length, 0); bytes.writeUInt32LE(1, 4);
@@ -116,6 +121,61 @@ async function runWifiTests(test) {
     assert.strictEqual(network.channel, 36); assert.strictEqual(network.band, '5 GHz');
     assert.strictEqual(network.authentication, 'WPA2-Personal / WPA3-Personal');
     assert.strictEqual(network.encryption, 'CCMP-128'); assert.strictEqual(network.securityEnabled, true);
+  });
+  await test('Wi-Fi mixed WPA and RSN advertisements retain all security options in either order', () => {
+    for (const ies of [Buffer.concat([rsnIe([2, 8]), wpaIe()]), Buffer.concat([wpaIe(), rsnIe([2, 8])])]) {
+      const report = wifi.buildReport({ adapters: [], networks: wifi.parseBssList(bssFixture({ ies }), 'adapter') });
+      const network = report.networks[0];
+      assert.deepStrictEqual(new Set(network.authentication.split(' / ')), new Set(['WPA2-Personal', 'WPA3-Personal', 'WPA-Personal']));
+      assert.deepStrictEqual(new Set(network.encryption.split(' / ')), new Set(['CCMP-128', 'TKIP']));
+      assert.deepStrictEqual(new Set(network.groupEncryption.split(' / ')), new Set(['CCMP-128', 'TKIP']));
+      assert.ok(report.findings.some((finding) => finding.id === 'wifi-legacy'));
+      assert.ok(!report.findings.some((finding) => finding.id === 'wifi-unknown'));
+    }
+  });
+  await test('Wi-Fi weak group ciphers remain visible when WPA2 pairwise encryption is modern', () => {
+    for (const [group, name] of [[2, 'TKIP'], [1, 'WEP-40']]) {
+      const report = wifi.buildReport({ adapters: [], networks: wifi.parseBssList(bssFixture({ ies: rsnIe([2], 4, group) }), 'adapter') });
+      assert.strictEqual(report.networks[0].authentication, 'WPA2-Personal');
+      assert.strictEqual(report.networks[0].encryption, 'CCMP-128');
+      assert.strictEqual(report.networks[0].groupEncryption, name);
+      assert.match(report.findings.find((finding) => finding.id === 'wifi-legacy').evidence, /1 BSSID/);
+    }
+  });
+  await test('Wi-Fi unknown and malformed security advertisements survive valid neighbors and OS defaults', () => {
+    const choices = wifi.parseAvailable(availableFixture());
+    for (const extra of [wpaIe([99], 99), Buffer.from([221, 6, 0, 0x50, 0xf2, 1, 1, 0]), Buffer.from([48, 200, 1])]) {
+      const report = wifi.buildReport({ adapters: [], networks: wifi.parseBssList(bssFixture({ ies: Buffer.concat([rsnIe(), extra]) }), 'adapter', choices) });
+      assert.strictEqual(report.networks[0].authentication, 'WPA2-Personal / Unknown');
+      assert.strictEqual(report.networks[0].encryption, 'CCMP-128 / Unknown');
+      assert.strictEqual(report.networks[0].groupEncryption, 'CCMP-128 / Unknown');
+      assert.ok(report.findings.some((finding) => finding.id === 'wifi-unknown'));
+    }
+    const unknown = wifi.parseBssList(bssFixture({ ies: rsnIe([99], 99) }), 'adapter', choices)[0];
+    assert.strictEqual(unknown.authentication, 'Unknown'); assert.strictEqual(unknown.encryption, 'Unknown');
+    const malformed = wifi.parseBssList(bssFixture({ ies: Buffer.from([48, 200, 1]) }), 'adapter', choices)[0];
+    assert.strictEqual(malformed.authentication, 'Unknown');
+  });
+  await test('Wi-Fi repeated RSN options and unsupported group selectors preserve partial evidence', () => {
+    const unknownGroup = rsnIe([2], 4); unknownGroup[4] = 99;
+    const report = wifi.buildReport({ adapters: [], networks: wifi.parseBssList(bssFixture({ ies: Buffer.concat([rsnIe([8]), unknownGroup]) }), 'adapter') });
+    assert.strictEqual(report.networks[0].authentication, 'WPA3-Personal / WPA2-Personal');
+    assert.strictEqual(report.networks[0].encryption, 'CCMP-128');
+    assert.strictEqual(report.networks[0].groupEncryption, 'CCMP-128 / Unknown');
+    assert.ok(report.findings.some((finding) => finding.id === 'wifi-unknown'));
+    const truncatedAkm = rsnIe().subarray(0, 14); truncatedAkm[1] = truncatedAkm.length - 2;
+    const partial = wifi.parseSecurityIe(truncatedAkm, true);
+    assert.strictEqual(partial.authentication, 'Unknown'); assert.strictEqual(partial.encryption, 'CCMP-128'); assert.strictEqual(partial.groupEncryption, 'CCMP-128');
+  });
+  await test('Wi-Fi report retains the complete supported authentication list and trailing unknown option', () => {
+    const ies = Buffer.concat([rsnIe([1, 2, 3, 4, 5, 6, 8, 9, 11, 12, 13, 18]), wpaIe([1, 2, 99])]);
+    const networks = wifi.parseBssList(bssFixture({ ies }), 'adapter');
+    assert.ok(networks[0].authentication.length > 200);
+    const report = wifi.buildReport({ adapters: [], networks });
+    assert.strictEqual(report.networks[0].authentication, networks[0].authentication);
+    assert.match(report.networks[0].authentication, /Unknown$/);
+    assert.ok(report.findings.some((finding) => finding.id === 'wifi-unknown'));
+    assert.ok(report.findings.some((finding) => finding.id === 'wifi-legacy'));
   });
   await test('Wi-Fi hidden SSIDs stay distinct by BSSID and Enhanced Open is not labeled unencrypted', () => {
     const facts = goodFacts();

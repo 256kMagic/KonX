@@ -3,6 +3,7 @@ import { h, api, modal, buildFields, DataTable, contextMenu, confirmDialog, fmtD
 import { SCHEMES, APP_THEMES } from './themes.js';
 import { createUpdatesPane } from './updates.js';
 import { APP_LAYOUTS, normalizeLayout } from './workspace-layouts.mjs';
+import { supportDialog } from './support.js';
 
 function workspaceLayoutPicker(value) {
   const selected = normalizeLayout(value);
@@ -93,6 +94,8 @@ export async function settingsDialog(app) {
     'File Transfer': h('div.mpane', h('div.grid2', transfer.els)),
     'Known Hosts': h('div.mpane', h('div.hint', 'SSH host keys you have accepted. Right-click to remove one.'), hosts.el),
     Updates: updates.el,
+    Support: h('div.mpane', h('h3', 'Report a problem'), h('p.hint', 'Preview and save local diagnostics for a bug report. Nothing is sent automatically.'),
+      h('button.btn', { onclick: () => supportDialog(app) }, 'Report a problem')),
   };
   const btns = Object.keys(panes).map((name, i) =>
     h('button', { type: 'button', class: i === 0 ? 'active' : '', onclick: (e) => {

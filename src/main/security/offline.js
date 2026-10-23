@@ -76,7 +76,7 @@ async function analyzeConfig(text, { family, signal } = {}) {
 
   let http, telnetFeature, sshVersion, sshFeature, aaa, loggingEnabled, ntpAuth;
   const users = new Map(), enables = new Map(), communities = new Map(), snmpHosts = new Map(), transports = new Map(), logHosts = new Map(), ntpHosts = new Map();
-  let context = '', contextKey = '', offset = 0, lineNo = 0, skipped = 0, incomplete = false;
+  let context = '', contextKey = '', offset = 0, lineNo = 0, skipped = 0, incomplete = false, macroBody = false;
   while (offset < text.length) {
     if (lineNo >= MAX_LINES) { incomplete = true; break; }
     let end = text.indexOf('\n', offset);
@@ -87,6 +87,10 @@ async function analyzeConfig(text, { family, signal } = {}) {
     if (!(lineNo % 256)) { await pause(); checkCancelled(signal); }
     if (raw.length > 65536) { skipped++; context = ''; continue; }
     const s = raw.trim();
+    // A macro definition is stored text, not active configuration. Cisco ends
+    // it with @ on its own line; command-like text inside has no effect here.
+    if (macroBody) { if (s === '@') macroBody = false; continue; }
+    if (/^macro\s+name\s+\S+/i.test(s)) { macroBody = true; context = ''; continue; }
     if (!s || s.startsWith('!')) { if (s.startsWith('!')) context = ''; continue; }
     if (/^banner\s+/i.test(s)) {
       // Banner contents can imitate commands. Skip the delimited body entirely.
@@ -164,6 +168,9 @@ async function analyzeConfig(text, { family, signal } = {}) {
   add('config-logging', 'Remote logging observation', loggingEnabled && !loggingEnabled.enabled ? 'warning' : logHosts.size ? 'info' : 'unknown', loggingEnabled && !loggingEnabled.enabled ? 'low' : 'info', loggingEnabled && !loggingEnabled.enabled ? `Line ${loggingEnabled.line}: logging explicitly disabled.` : logHosts.size ? `${refsText([...logHosts.values()])}: remote logging destination settings identified (destinations omitted).` : 'No remote logging destination setting identified.', 'Verify logging is enabled, reaches a trusted collector and records useful authentication and configuration events.');
   add('config-ntp', 'Time synchronization observation', ntpAuth && !ntpAuth.enabled ? 'warning' : ntpHosts.size ? 'info' : 'unknown', ntpAuth && !ntpAuth.enabled ? 'low' : 'info', ntpAuth && !ntpAuth.enabled ? `Line ${ntpAuth.line}: NTP authentication explicitly disabled.` : ntpHosts.size ? `${refsText([...ntpHosts.values()])}: NTP server/peer settings identified; authentication and reachability not verified.` : 'No NTP server/peer setting identified.', 'Use trusted time sources and supported authentication; verify synchronized time for certificate and audit-log accuracy.');
   add('config-ssh', 'SSH version observation', sshVersion?.version === 1 ? 'warning' : sshVersion ? 'info' : 'unknown', sshVersion?.version === 1 ? 'high' : 'info', sshVersion ? `Line ${sshVersion.line}: SSH version ${sshVersion.version} explicitly configured; algorithms and reachability not tested.` : sshFeature ? `Line ${sshFeature.line}: SSH feature explicitly ${sshFeature.enabled ? 'enabled' : 'disabled'}; protocol version not identified.` : 'No explicit SSH version setting identified; this does not establish that SSH is disabled or insecure.', 'Use SSHv2 with current cryptographic algorithms and restrict management access.');
+  if (macroBody) limitations.push(incomplete
+    ? 'A macro definition did not end within the analyzed prefix. Its commands were not treated as active settings; the remaining text was not examined.'
+    : 'An unterminated macro definition was skipped through the end of the supplied text. Its commands were not treated as active settings.');
   if (incomplete || skipped) {
     add('config-limits', 'Configuration review is incomplete', 'unknown', 'info', `${incomplete ? `Stopped at the ${MAX_LINES.toLocaleString('en-US')} line limit. ` : ''}${skipped} oversized lines omitted.`, 'Review the remaining configuration separately.');
     limitations.push('Only the bounded prefix and lines at most 64 KiB were analyzed. Later commands may override earlier observations.');

@@ -199,8 +199,9 @@ class IncidentStore {
     try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
     catch { const error = new Error('Text evidence is not valid UTF-8; the original bytes remain available'); error.code = 'INCIDENT_TEXT_ENCODING'; throw error; }
   }
-  async get(id) {
-    const manifest = await this.manifest(id), result = structuredClone(manifest);
+  async get(id) { return this.withPreviews(await this.manifest(id)); }
+  async withPreviews(manifest) {
+    const id = manifest.id, result = structuredClone(manifest);
     let budget = Math.max(0, LIMITS.responseBytes - jsonBytes(result) - 16384);
     for (const item of result.evidence) {
       item.integrity = 'not-checked';
@@ -249,7 +250,7 @@ class IncidentStore {
       sourceName, originalPath: content.sourcePath || null, sourceModifiedAt: sourceStat ? new Date(sourceStat.mtimeMs).toISOString() : null,
       relativePath: 'evidence/' + evidenceId + '.bin', bytes: size, sha256: null };
     const target = this.assetPath(id, item);
-    let destination, source, created = false;
+    let destination, source, savedManifest, created = false;
     try {
       destination = await this.io.open(target, 'wx', 0o600); created = true;
       const digest = crypto.createHash('sha256');
@@ -275,7 +276,7 @@ class IncidentStore {
           item.timelineCoverage = { ...parsed }; delete item.timelineCoverage.events;
           events = parsed.events.map(event => ({ id: evidenceId + ':' + event.line, evidenceId, ...event }));
         } catch (error) { item.analysisError = error.message; events = []; }
-      } else events = [{ id: evidenceId + ':item', evidenceId, observedAt, timeText: input.observedAt || null, timestampStatus: observedAt ? 'explicit' : 'unknown', message: label.slice(0, LIMITS.eventMessageChars), line: null }];
+      } else events = [{ id: evidenceId + ':item', evidenceId, observedAt, timeText: input.observedAt || null, timestampStatus: observedAt ? 'explicit' : 'unknown', message: label.slice(0, LIMITS.eventMessageChars), line: null, messageTruncated: false }];
       const remaining = Math.max(0, LIMITS.timeline - manifest.timeline.length), retained = events.slice(0, remaining);
       manifest.evidence.push(item); manifest.totalBytes += size; manifest.updatedAt = item.addedAt;
       manifest.timeline.push(...retained);
@@ -295,7 +296,8 @@ class IncidentStore {
         retained.length = low; manifest.timeline = previous.concat(retained);
       }
       if (item.timelineCoverage) { item.timelineCoverage.retainedEvents = retained.length; item.timelineCoverage.limited ||= retained.length < events.length; }
-      await this.atomicJson(this.dir(id), 'manifest.json', manifest); created = false;
+      savedManifest = this.validate(manifest, id);
+      await this.atomicJson(this.dir(id), 'manifest.json', savedManifest); created = false;
     } catch (error) {
       // Windows cannot unlink every open handle. Close our own handles before
       // rolling back an unpublished evidence asset.
@@ -304,7 +306,10 @@ class IncidentStore {
       if (created) { try { await this.io.unlink(target); } catch (cleanup) { error.message += '; unindexed evidence retained after cleanup failed: ' + evidenceId + ' (' + cleanup.message + ')'; } }
       throw error;
     } finally { if (source) await source.close().catch(() => {}); if (destination) await destination.close().catch(() => {}); }
-    return this.get(id);
+    // The append is committed. Reopening its manifest could fail independently
+    // and incorrectly invite a retry that saves the same note twice. Build the
+    // response from the committed record; preview failures remain item details.
+    return this.withPreviews(savedManifest);
   }
   async evidencePath(id, evidenceId) {
     const manifest = await this.manifest(id), item = manifest.evidence.find(e => e.id === idOf(evidenceId));

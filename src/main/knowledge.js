@@ -92,6 +92,9 @@ class KnowledgeLibrary {
   }
 
   search(query, options) { return this._rpc('search', [query, options]); }
+  // Only the main-process AI client supplies exact keys. Public search options
+  // never select this route; keys are not stored in SQLite or returned.
+  searchForAI(query, options, secrets) { return this._rpc('searchForAI', [query, options, secrets]); }
   get busy() { return this._state === 'indexing' || this._pending.size > 0; }
   list(options) { return this._rpc('list', [options]); }
   get(id) { return this._rpc('get', [id]); }

@@ -92,6 +92,61 @@ async function runSecurityOfflineTests(test) {
     assert.equal(check(report, 'config-telnet').status, 'warning');
     assert.match(check(report, 'config-telnet').evidence, /Lines 10:/);
   });
+  await test('config macro definitions cannot override active unsafe settings or introduce false unsafe settings', async () => {
+    const unsafe = await offline.analyzeConfig(HEADER + [
+      'ip http server', 'line vty 0 4', ' transport input telnet', '!',
+      'macro name staged-safe-commands', 'no ip http server', 'line vty 0 4', ' transport input ssh',
+      'ip ssh version 2', 'aaa new-model', '@',
+    ].join('\r\n'));
+    assert.equal(check(unsafe, 'config-http').status, 'warning');
+    assert.match(check(unsafe, 'config-http').evidence, /Line 5:/);
+    assert.equal(check(unsafe, 'config-telnet').status, 'warning');
+    assert.match(check(unsafe, 'config-telnet').evidence, /Lines 7:/);
+    assert.equal(check(unsafe, 'config-ssh').status, 'unknown');
+    assert.equal(check(unsafe, 'config-aaa').status, 'unknown');
+    const safe = await offline.analyzeConfig(HEADER + [
+      'no ip http server', 'macro name staged-unsafe-commands', 'ip http server',
+      'username MACRO_USER password 0 MACRO_PASSWORD', 'snmp-server community MACRO_COMMUNITY RO',
+      'line vty 0 4', ' transport input telnet', 'ip ssh version 1', 'no aaa new-model', '@',
+    ].join('\n'));
+    assert.equal(check(safe, 'config-http').status, 'info');
+    for (const id of ['config-telnet', 'config-user-cleartext', 'config-snmp', 'config-ssh', 'config-aaa']) assert.equal(check(safe, id).status, 'unknown', id);
+    assert.doesNotMatch(JSON.stringify(safe), /MACRO_USER|MACRO_PASSWORD|MACRO_COMMUNITY/);
+  });
+  await test('config resumes after the standalone macro terminator without carrying VTY state or executing macro applications', async () => {
+    const report = await offline.analyzeConfig(HEADER + [
+      'line vty 0 4', ' transport input ssh', 'macro\t name staged-commands',
+      'description embedded @ is not a terminator', 'ip http server', '! not a terminator',
+      'line vty 0 4', ' transport input telnet', ' \t@ \t',
+      ' transport input telnet', 'no macro name staged-commands', 'macro global apply staged-commands',
+      'no ip http server', 'ip ssh version 2', 'macro name second-definition', 'ip ssh version 1', '@',
+      'line vty 5 15', ' transport input telnet',
+    ].join('\n'));
+    assert.equal(check(report, 'config-http').status, 'info');
+    assert.match(check(report, 'config-http').evidence, /Line 17:/);
+    assert.equal(check(report, 'config-ssh').status, 'info');
+    assert.match(check(report, 'config-ssh').evidence, /Line 18:/);
+    assert.equal(check(report, 'config-telnet').status, 'warning');
+    assert.match(check(report, 'config-telnet').evidence, /Lines 23:/);
+    assert.equal(report.limitations.some(text => /unterminated macro/.test(text)), false);
+  });
+  await test('unterminated macro bodies stay inactive and obey line, oversized-line and cancellation bounds', async () => {
+    const open = await offline.analyzeConfig(HEADER + 'ip http server\nmacro name incomplete\nno ip http server\n');
+    assert.equal(check(open, 'config-http').status, 'warning');
+    assert.ok(open.limitations.some(text => /unterminated macro.*end of the supplied text/.test(text)));
+    const oversized = await offline.analyzeConfig(HEADER + 'macro name large\n' + 'x'.repeat(70000) + '\nip http server\n@\nno ip http server');
+    assert.equal(check(oversized, 'config-http').status, 'info');
+    assert.equal(check(oversized, 'config-limits').status, 'unknown');
+    const bounded = await offline.analyzeConfig(HEADER + 'macro name long\n' + '! macro text\n'.repeat(100000) + '@\nip http server');
+    assert.equal(check(bounded, 'config-http').status, 'unknown');
+    assert.equal(check(bounded, 'config-limits').status, 'unknown');
+    assert.ok(bounded.limitations.some(text => /macro definition.*analyzed prefix/.test(text)));
+    assert.equal(bounded.limitations.some(text => /macro definition.*end of the supplied text/.test(text)), false);
+    const signal = { stopped: false };
+    const pending = offline.analyzeConfig(HEADER + 'macro name cancelled\n' + '! macro text\n'.repeat(3000), { signal });
+    setImmediate(() => { signal.stopped = true; });
+    await assert.rejects(pending, /cancelled/);
+  });
   await test('unsupported config families and omissions never produce false all-pass reports', async () => {
     const report = await offline.analyzeConfig('set system host-name fixture\nset system services telnet');
     assert.equal(report.checks.length, 1);

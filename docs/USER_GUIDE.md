@@ -1,6 +1,6 @@
 # KonX User Guide
 
-This guide covers KonX 0.18.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one application. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
+This guide covers KonX 0.18.1 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one application. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
 
 Version 0.4.0 adds [AI & Knowledge](AI_KNOWLEDGE_GUIDE.md): provider API keys, explanations of selected tool output, and an offline reference library backed by a background SQLite vector index. Older 0.3.0 builds do not include this feature.
 
@@ -33,6 +33,8 @@ Version 0.16.1 replaces the generic updater filename with KonX and the target ve
 Version 0.17.0 adds [serial auto baud detection](SERIAL_AUTO_BAUD.md): a saved-session Auto detect choice, Quick Connect support, optional Enter probes, and visible progress. See the [release notes](releases/0.17.0.md).
 
 Version 0.18.0 adds draggable, resizable floating panels, adjustable split dividers, and separate pop-out windows. Right-click an open tab to **Float in workspace** or **Pop out to window**. Use **Dock back** to return it; closing a pop-out with its Windows X also docks it. See [Workspace layouts and windows](WORKSPACE_LAYOUTS.md) and the [release notes](releases/0.18.0.md).
+
+Version 0.18.1 adds **Report a problem** on Home and **Settings → Support**, with an editable local diagnostic report and opt-in error logs. See [Tester support](TESTER_SUPPORT.md) for the reporting workflow, incident-save behavior, and display recovery.
 
 For downloads, build instructions, and project information, see the [README](../README.md) and [GitHub releases](https://github.com/256kMagic/KonX/releases).
 
@@ -74,7 +76,7 @@ Examples use reserved documentation addresses such as `192.0.2.10`, `198.51.100.
 
 ## Install, run, and update
 
-Download a Windows x64 executable from the [0.18.0 release](https://github.com/256kMagic/KonX/releases/tag/v0.18.0).
+Download a Windows x64 executable from the [0.18.1 release](https://github.com/256kMagic/KonX/releases/tag/v0.18.1).
 
 | Download | Use it when | How to start |
 | --- | --- | --- |
@@ -83,7 +85,7 @@ Download a Windows x64 executable from the [0.18.0 release](https://github.com/2
 
 The portable executable still uses a Windows user profile for settings, saved sessions, and editor recovery. It does **not** automatically place all data beside the executable or make encrypted credentials transferable between computers. See [Application data and backups](#application-data-and-backups).
 
-**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.18.0.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
+**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.18.1.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
 
 For updates from **installed 0.6.2 or later**, or **portable 0.6.0 or later**:
 
@@ -96,7 +98,7 @@ From 0.16.1, staged update filenames include KonX and the version being installe
 
 Installed copies retain their installation folder and mode. Portable copies retain their filename and location; the containing folder must be writable. Both continue to use the existing Windows profile. No update is applied just because you close KonX, and no release checks run in the background. See [Updating KonX](UPDATING.md) for cancellation, failures, and release preparation.
 
-Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.18.0 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
+Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.18.1 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
 
 Npcap is optional for packet capture; SSH, SFTP, Notepad, and the other tools do not require it. Updating KonX does not install or update Npcap.
 

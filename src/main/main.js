@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, safeStorage, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, safeStorage, Menu, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { execFile, spawn } = require('child_process');
@@ -9,6 +9,7 @@ if (process.env.KONX_USERDATA) app.setPath('userData', process.env.KONX_USERDATA
 const { Store } = require('./store');
 const { ConnectionManager } = require('./connections');
 const { WorkspaceWindows, isPrimaryFrame } = require('./workspace-windows');
+const { collectSupportReport, validateSupportExport } = require('./support-report');
 const { SftpManager } = require('./sftp');
 const localfs = require('./localfs');
 const nettools = require('./nettools');
@@ -217,6 +218,22 @@ function registerIpc() {
     return workspaceWindows.prepare();
   });
   handle('app:popoutClose', id => workspaceWindows.close(id));
+  handle('app:supportPreview', (options = {}) => collectSupportReport({
+    info: { version: VERSION, platform: process.platform, arch: process.arch, electron: process.versions.electron, node: process.versions.node,
+      mode: app.isPackaged ? updates?.target?.mode || 'unknown' : 'development',
+      features: { serial: serial.serialAvailable(), encryption: safeStorage.isEncryptionAvailable() } },
+    screens: screen.getAllDisplays(), counts: { tabs: options?.tabs, connections: connections.conns.size, jobs: toolJobs.size },
+    includeLogs: options?.includeLogs === true, logDir: path.join(app.getPath('userData'), 'diagnostics'),
+    redactPaths: [app.getPath('home'), app.getPath('userData')],
+  }));
+  handle('app:supportExport', async text => {
+    const content = validateSupportExport(text);
+    const result = await dialog.showSaveDialog(dialogOwner(), { title: 'Save reviewed diagnostic report',
+      defaultPath: `KonX-${VERSION}-support.json`, filters: [{ name: 'JSON report', extensions: ['json'] }] });
+    if (result.canceled || !result.filePath) return null;
+    await fs.promises.writeFile(result.filePath, content, { encoding: 'utf8', mode: 0o600 });
+    return result.filePath;
+  });
 
   // app
   handle('app:info', () => ({

@@ -14,19 +14,26 @@ class Window extends EventEmitter {
     this.webContents.getBackgroundThrottling = () => this.throttling;
     this.webContents.setBackgroundThrottling = value => { this.throttling = value; };
     this.throttling = true;
+    this.bounds = { x: 100, y: 100, width: 1000, height: 700 }; this.boundsWrites = [];
   }
   isDestroyed() { return this.destroyed; }
+  getBounds() { return { ...this.bounds }; }
+  setBounds(bounds) { this.bounds = { ...bounds }; this.boundsWrites.push({ ...bounds }); }
+  isMinimized() { return !!this.minimized; }
+  isMaximized() { return !!this.maximized; }
+  isFullScreen() { return !!this.fullScreen; }
   close() { const e = event(); this.emit('close', e); if (!e.defaultPrevented) this.destroy(); return e; }
   destroy() { if (this.destroyed) return; this.destroyed = true; this.emit('closed'); }
   static getFocusedWindow() { return Window.focused || null; }
 }
-function harness() {
+function harness(screen) {
   const primary = new Window(), events = [], external = []; let now = 100;
-  const owner = new WorkspaceWindows({ primary, BrowserWindow: Window, emit: (...args) => events.push(args), openExternal: url => external.push(url), now: () => now });
-  const open = () => {
+  const owner = new WorkspaceWindows({ primary, BrowserWindow: Window, emit: (...args) => events.push(args), openExternal: url => external.push(url), now: () => now, screen });
+  const open = bounds => {
     const permit = owner.prepare(), details = { url: 'about:blank', frameName: permit.frameName };
     assert.equal(primary.openWindow(details).action, 'allow');
-    const child = new Window(); primary.webContents.emit('did-create-window', child, details);
+    const child = new Window(); if (bounds) child.bounds = bounds;
+    primary.webContents.emit('did-create-window', child, details);
     return { ...permit, child };
   };
   return { primary, owner, events, external, open, advance: ms => { now += ms; } };
@@ -39,6 +46,53 @@ function nativePopup(f) {
 }
 
 async function runWorkspaceWindowTests(test) {
+  await test('Workspace native bounds recover from removed displays and smaller work areas using DIP coordinates', () => {
+    const screen = new EventEmitter();
+    let area = { x: -1280, y: -200, width: 1280, height: 984 };
+    screen.getDisplayMatching = () => ({ workArea: area, scaleFactor: 1.5 });
+    const h = harness(screen);
+    try {
+      const popup = h.open({ x: -1200, y: -100, width: 900, height: 600 });
+      assert.deepEqual(popup.child.boundsWrites, [], 'already visible negative-coordinate monitor placement stays unchanged');
+      area = { x: 0, y: 0, width: 1000, height: 720 };
+      screen.emit('display-removed', {}, {});
+      assert.deepEqual(popup.child.getBounds(), { x: 0, y: 0, width: 900, height: 600 });
+      popup.child.bounds = { x: 900, y: 600, width: 1200, height: 900 };
+      area = { x: 10, y: 30, width: 800, height: 620 };
+      screen.emit('display-metrics-changed', {}, {}, ['scaleFactor', 'workArea']);
+      assert.deepEqual(popup.child.getBounds(), { x: 10, y: 30, width: 800, height: 620 });
+      const writes = popup.child.boundsWrites.length;
+      screen.emit('display-metrics-changed', {}, {}, ['rotation']);
+      screen.emit('display-metrics-changed', {}, {}, ['workArea']);
+      assert.equal(popup.child.boundsWrites.length, writes, 'unaffected and already-clamped events do not churn bounds');
+      assert.equal(h.owner.windows.get(popup.id).child, popup.child);
+      assert.deepEqual(h.events, [], 'bounds recovery does not dock or replace the live window');
+    } finally { h.owner.dispose(); }
+    assert.equal(screen.listenerCount('display-removed'), 0);
+    assert.equal(screen.listenerCount('display-metrics-changed'), 0);
+  });
+
+  await test('Workspace display recovery waits for restore and ignores malformed work areas', () => {
+    const screen = new EventEmitter(); let area = { x: 0, y: 0, width: 900, height: 650 };
+    screen.getDisplayMatching = () => ({ workArea: area });
+    const h = harness(screen);
+    try {
+      const popup = h.open({ x: 4000, y: 3000, width: 800, height: 600 });
+      assert.deepEqual(popup.child.getBounds(), { x: 100, y: 50, width: 800, height: 600 }, 'new offscreen windows recover before use');
+      for (const [state, event] of [['minimized', 'restore'], ['maximized', 'unmaximize'], ['fullScreen', 'leave-full-screen']]) {
+        popup.child[state] = true; popup.child.bounds = { x: 4000, y: 3000, width: 800, height: 600 };
+        screen.emit('display-removed', {}, {});
+        assert.equal(popup.child.getBounds().x, 4000, state + ' preserves native state');
+        popup.child[state] = false; popup.child.emit(event);
+        assert.deepEqual(popup.child.getBounds(), { x: 100, y: 50, width: 800, height: 600 });
+      }
+      area = { x: 0, y: NaN, width: 900, height: 650 };
+      const writes = popup.child.boundsWrites.length;
+      screen.emit('display-metrics-changed', {}, {}, ['bounds']);
+      assert.equal(popup.child.boundsWrites.length, writes);
+    } finally { h.owner.dispose(); }
+  });
+
   await test('Workspace windows require exact single-use permits and retain secure web preferences', () => {
     const h = harness();
     try {

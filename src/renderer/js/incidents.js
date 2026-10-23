@@ -64,13 +64,16 @@ export class IncidentTab {
     for (const button of this.list.querySelectorAll('button')) button.disabled = this.busy;
     this.timelineButton.classList.toggle('primary', this.mode === 'timeline'); this.evidenceButton.classList.toggle('primary', this.mode === 'evidence');
   }
-  async request(action, apply, label) {
+  async request(action, apply, label, failureLabel = 'Incident operation failed') {
     if (this.busy || this.disposed) return null;
-    const seq = ++this.seq; this.busy = true; this.updateButtons(); if (label) this.status.textContent = label;
+    const seq = ++this.seq; this.busy = true; this.updateButtons(); this.status.setAttribute('role', 'status'); if (label) this.status.textContent = label;
     try {
       const result = await action(); if (this.disposed || seq !== this.seq) return null;
       if (apply) await apply(result); return result;
-    } catch (error) { if (!this.disposed && seq === this.seq) this.status.textContent = errMsg(error); return null; }
+    } catch (error) {
+      if (!this.disposed && seq === this.seq) { this.status.setAttribute('role', 'alert'); this.status.textContent = `${failureLabel}: ${errMsg(error)}`; }
+      return null;
+    }
     finally { if (!this.disposed && seq === this.seq) { this.busy = false; this.updateButtons(); this.app.updateStatus(this); } }
   }
   async refresh(id = this.report?.id) {
@@ -151,9 +154,11 @@ export class IncidentTab {
       (report) => { if (report) this.acceptIncident(report); }, 'Choose a file to copy into this incident…');
   }
   async addText() {
-    const id = this.report?.id; if (!id || !this.noteText.value.trim()) return;
-    await this.request(() => api.invoke('tools:incidentAddText', id, { kind: this.noteKind.value, text: this.noteText.value, label: this.noteLabel.value || undefined, observedAt: this.noteTime.value || undefined }),
-      (report) => { this.noteText.value = ''; this.noteLabel.value = ''; this.noteTime.value = ''; this.acceptIncident(report); }, 'Saving evidence copy…');
+    const id = this.report?.id; if (!id || !this.noteText.value.trim()) return false;
+    const saved = await this.request(() => api.invoke('tools:incidentAddText', id, { kind: this.noteKind.value, text: this.noteText.value, label: this.noteLabel.value || undefined, observedAt: this.noteTime.value || undefined }),
+      (report) => { this.acceptIncident(report); this.noteText.value = ''; this.noteLabel.value = ''; this.noteTime.value = '';
+        this.status.textContent = 'Saved note / pasted evidence in this local incident.'; }, 'Saving evidence copy…', 'Note was not saved; your draft has been kept');
+    return !!saved;
   }
   async addPending() {
     const id = this.report?.id, pending = this.pending; if (!id || !pending) return;

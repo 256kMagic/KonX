@@ -26,21 +26,7 @@ const bounded = (value, max) => typeof value === 'string' ? value.slice(0, max) 
 class PublicError extends Error {}
 const fail = (message) => { throw new PublicError(message); };
 
-function redactText(value, secrets = []) {
-  let out = typeof value === 'string' ? value : '';
-  for (const secret of (Array.isArray(secrets) ? secrets : [secrets])) {
-    if (typeof secret === 'string' && secret) out = out.split(secret).join('[Redacted]');
-  }
-  return out
-    .replace(/-----BEGIN (?:[A-Z ]*PRIVATE KEY|OPENSSH PRIVATE KEY)-----[\s\S]*?(?:-----END (?:[A-Z ]*PRIVATE KEY|OPENSSH PRIVATE KEY)-----|$)/g, '[Private key redacted]')
-    .replace(/\b(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{12,}|nq-v1-[A-Za-z0-9_-]{15,}|AIza[A-Za-z0-9_-]{20,}|github_pat_[A-Za-z0-9_]{15,}|gh[pousr]_[A-Za-z0-9]{15,}|AKIA[A-Z0-9]{16})\b/g, '[Redacted]')
-    .replace(/\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\b/g, '[Redacted]')
-    .replace(/(\b(?:Authorization|Proxy-Authorization)\s*[=:]\s*)(?:["']?)(?:Bearer|Basic|Token)\s+[^\s"',;}]+/gi, '$1[Redacted]')
-    .replace(/((?:["']?)(?:authorization|proxy-authorization|api[_-]?key|x-api-key|x-goog-api-key|access[_-]?token|refresh[_-]?token|token|password|passwd|passphrase|secret|client[_-]?secret|psk|community|cookie|set-cookie)(?:["']?)\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}]+)/gi, '$1[Redacted]')
-    .replace(/(^|\n)(\s*(?:authorization|proxy-authorization|cookie|set-cookie)\s*:\s*)[^\r\n]*/gi, '$1$2[Redacted]')
-    .replace(/(^|\n)(\s*(?:enable (?:secret|password)|username\s+\S+\s+(?:secret|password)|snmp-server community|(?:wpa-)?psk(?:-ascii)?|password|passphrase)\s+)[^\r\n]+/gi, '$1$2[Redacted]')
-    .replace(/(https?:\/\/)[^\s/@:]+:[^\s/@]+@/gi, '$1[Redacted]@');
-}
+const { redactText } = require('./ai-redaction');
 
 function model(value, provider, allowEmpty = false) {
   if (allowEmpty && value === '') return '';
@@ -134,7 +120,7 @@ function parseAnswer(provider, value) {
   }
   const answer = pieces.join('\n\n').trim();
   if (!answer) fail('AI returned no usable answer. Try a narrower question or a different model');
-  return { answer: answer.slice(0, MAX_ANSWER), incomplete: incomplete || answer.length > MAX_ANSWER, usage: usage(provider === 'gemini' ? value.usageMetadata : value.usage, provider) };
+  return { answer, incomplete: incomplete || answer.length > MAX_ANSWER, usage: usage(provider === 'gemini' ? value.usageMetadata : value.usage, provider) };
 }
 
 class AIClient {
@@ -275,7 +261,7 @@ class AIClient {
       this._assertRevision(params.revision);
       let matches;
       const retrievalQuery = context ? `${question.slice(0, 2999)}\n${context.slice(0, 1000)}` : question.slice(0, 4000);
-      try { matches = await this._retrieve(retrievalQuery, signal, deadline); }
+      try { matches = await this._retrieve(retrievalQuery, signal, deadline, secrets); }
       catch (error) {
         if (error instanceof PublicError) throw error;
         fail('The local knowledge library could not be searched. Rebuild the library and retry');
@@ -288,7 +274,7 @@ class AIClient {
         const citation = `K${sources.length + 1}`;
         let sourceUrl = '';
         try {
-          const url = new URL(bounded(item.sourceUrl, 2000));
+          const url = new URL(bounded(redactText(item.sourceUrl, secrets), 2000));
           if (url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash) sourceUrl = redactText(url.href, secrets);
         } catch { /* A citation without a valid public URL remains local. */ }
         const source = { id: bounded(redactText(item.id, secrets), 150), citation, title: bounded(redactText(item.title, secrets), 240), vendor: bounded(redactText(item.vendor, secrets), 100), sourceUrl };
@@ -324,7 +310,7 @@ class AIClient {
     }
   }
 
-  _retrieve(question, signal, deadline) {
+  _retrieve(question, signal, deadline, secrets) {
     return new Promise((resolve, reject) => {
       let settled = false, timer;
       let detach = () => {};
@@ -340,7 +326,9 @@ class AIClient {
       timer = setTimeout(() => finish(new PublicError('AI request timed out after 60 seconds')), Math.max(1, deadline - Date.now()));
       Promise.resolve().then(() => {
         if (settled) return;
-        return this.knowledge.search(question, { limit: 5 });
+        return typeof this.knowledge.searchForAI === 'function'
+          ? this.knowledge.searchForAI(question, { limit: 5 }, secrets)
+          : this.knowledge.search(question, { limit: 5 });
       }).then((value) => finish(null, value), (error) => finish(error));
     });
   }

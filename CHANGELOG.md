@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.18.1 — 2026-10-23
+
+- Add a local **Report a problem** preview and JSON export on Home and Settings → Support. Error logs are bounded and opt-in; nothing is uploaded automatically.
+- Return incident evidence from the committed manifest instead of rereading it after a successful save. Preserve failed drafts and show explicit save results.
+- Recover pop-out windows into available display work areas and expand fractional-scale checks.
+- Fix inherited AI reference redaction/excerpt, Wi-Fi security-advertisement, HSTS directive, and stored Cisco macro assessment defects.
+
+See [Tester support](docs/TESTER_SUPPORT.md) and [release notes](docs/releases/0.18.1.md) for validation and remaining coverage.
+
 ## 0.18.0 — 2026-10-22
 
 - Float open tabs inside KonX, drag their headers, resize all edges/corners, and maximize, restore, or dock them.

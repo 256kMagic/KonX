@@ -73,33 +73,45 @@ function parseAvailable(bytes) {
 }
 
 function parseSecurityIe(bytes, privacy) {
-  let rsn = null; let wpa = null; let malformed = false;
+  const advertisements = []; let malformed = false;
   for (let offset = 0; offset < bytes.length;) {
     if (offset + 2 > bytes.length || offset + 2 + bytes[offset + 1] > bytes.length) { malformed = true; break; }
     const body = bytes.subarray(offset + 2, offset + 2 + bytes[offset + 1]);
-    if (bytes[offset] === 48) rsn = body;
-    if (bytes[offset] === 221 && body.subarray(0, 4).equals(Buffer.from([0x00, 0x50, 0xf2, 0x01]))) wpa = body.subarray(4);
+    if (bytes[offset] === 48) advertisements.push({ body, legacy: false });
+    if (bytes[offset] === 221 && body.subarray(0, 4).equals(Buffer.from([0x00, 0x50, 0xf2, 0x01]))) advertisements.push({ body: body.subarray(4), legacy: true });
     offset += 2 + bytes[offset + 1];
   }
   function decode(body, legacy) {
-    if (!body || body.length < 8 || body.readUInt16LE(0) !== 1) return null;
+    const result = { authentication: ['Unknown'], encryption: ['Unknown'], groupEncryption: ['Unknown'] };
+    if (body.length < 6 || body.readUInt16LE(0) !== 1) return result;
     const oui = legacy ? '0050f2' : '000fac';
+    const cipherAt = (offset) => body.subarray(offset, offset + 3).toString('hex') === oui ? CIPHER[body[offset + 3]] || 'Unknown' : 'Unknown';
+    result.groupEncryption = [cipherAt(2)];
+    if (body.length < 8) return result;
     let offset = 6;
     const pairCount = body.readUInt16LE(offset); offset += 2;
-    if (pairCount < 1 || pairCount > 32 || offset + pairCount * 4 + 2 > body.length) return null;
+    if (pairCount < 1 || pairCount > 32 || offset + pairCount * 4 > body.length) return result;
     const ciphers = [];
-    for (let i = 0; i < pairCount; i++, offset += 4) ciphers.push(body.subarray(offset, offset + 3).toString('hex') === oui ? CIPHER[body[offset + 3]] || 'Unknown' : 'Unknown');
+    for (let i = 0; i < pairCount; i++, offset += 4) ciphers.push(cipherAt(offset));
+    result.encryption = ciphers;
+    if (offset + 2 > body.length) return result;
     const akmCount = body.readUInt16LE(offset); offset += 2;
-    if (akmCount < 1 || akmCount > 32 || offset + akmCount * 4 > body.length) return null;
+    if (akmCount < 1 || akmCount > 32 || offset + akmCount * 4 > body.length) return result;
     const auths = [];
     const akm = legacy ? { 1: 'WPA-Enterprise', 2: 'WPA-Personal' } : { 1: 'WPA2-Enterprise', 2: 'WPA2-Personal', 3: 'WPA2-Enterprise (FT)', 4: 'WPA2-Personal (FT)', 5: 'WPA2-Enterprise (SHA256)', 6: 'WPA2-Personal (SHA256)', 8: 'WPA3-Personal', 9: 'WPA3-Personal (FT)', 11: 'WPA3-Enterprise', 12: 'WPA3-Enterprise 192-bit', 13: 'WPA3-Enterprise 192-bit (FT)', 18: 'Enhanced Open (OWE)' };
     for (let i = 0; i < akmCount; i++, offset += 4) auths.push(body.subarray(offset, offset + 3).toString('hex') === oui ? akm[body[offset + 3]] || 'Unknown' : 'Unknown');
-    return { authentication: [...new Set(auths)].join(' / '), encryption: [...new Set(ciphers)].join(' / '), securityEnabled: true };
+    result.authentication = auths;
+    return result;
   }
-  const security = decode(rsn, false) || decode(wpa, true);
-  if (security) return security;
-  if (!privacy && !rsn && !wpa && !malformed) return { authentication: 'Open', encryption: 'None', securityEnabled: false };
-  return { authentication: 'Unknown', encryption: 'Unknown', securityEnabled: privacy ? true : null };
+  const decoded = advertisements.map(({ body, legacy }) => decode(body, legacy));
+  if (malformed) decoded.push({ authentication: ['Unknown'], encryption: ['Unknown'], groupEncryption: ['Unknown'] });
+  const securityIeStatus = malformed ? 'malformed' : advertisements.length ? 'present' : 'absent';
+  if (decoded.length) {
+    const security = Object.fromEntries(['authentication', 'encryption', 'groupEncryption'].map((field) => [field, [...new Set(decoded.flatMap((item) => item[field]))].join(' / ')]));
+    return { ...security, securityEnabled: privacy || decoded.some((item) => item.authentication.some((auth) => auth !== 'Unknown')) ? true : null, securityIeStatus };
+  }
+  if (!privacy) return { authentication: 'Open', encryption: 'None', groupEncryption: 'None', securityEnabled: false, securityIeStatus };
+  return { authentication: 'Unknown', encryption: 'Unknown', groupEncryption: 'Unknown', securityEnabled: true, securityIeStatus };
 }
 
 function parseBssList(bytes, adapterId, available = []) {
@@ -111,15 +123,16 @@ function parseBssList(bytes, adapterId, available = []) {
     const ssid = ssidAt(bytes, offset);
     const privacy = Boolean(bytes.readUInt16LE(offset + 88) & 0x10);
     const ieOffset = bytes.readUInt32LE(offset + 352); const ieSize = bytes.readUInt32LE(offset + 356);
-    let security = { authentication: 'Unknown', encryption: 'Unknown', securityEnabled: privacy ? true : null };
+    let security = { authentication: 'Unknown', encryption: 'Unknown', groupEncryption: 'Unknown', securityEnabled: privacy ? true : null, securityIeStatus: 'malformed' };
     if (ieSize === 0 || (ieSize <= 2324 && ieOffset >= 360 && offset + ieOffset >= 8 + count * 360 && offset + ieOffset + ieSize <= size)) security = parseSecurityIe(bytes.subarray(offset + ieOffset, offset + ieOffset + ieSize), privacy);
-    // A unique OS network default can fill in unavailable beacon fields. An SSID
-    // with several security variants remains unknown rather than borrowing one.
-    if (security.authentication === 'Unknown' && privacy) {
+    // Only absent security advertisements can use an OS network default. Never
+    // replace malformed or unsupported advertised options with an SSID default.
+    if (security.securityIeStatus === 'absent' && privacy) {
       const candidates = available.filter((item) => item.ssidHex === ssid.ssidHex && item.securityEnabled === privacy && item.bssType === bytes.readUInt32LE(offset + 48));
       const variants = new Map(candidates.map((item) => [`${item.authentication}|${item.encryption}`, item]));
-      if (variants.size === 1) { const candidate = [...variants.values()][0]; security = { authentication: candidate.authentication, encryption: candidate.encryption, securityEnabled: candidate.securityEnabled }; }
+      if (variants.size === 1) { const candidate = [...variants.values()][0]; security = { ...security, authentication: candidate.authentication, encryption: candidate.encryption, securityEnabled: candidate.securityEnabled }; }
     }
+    delete security.securityIeStatus;
     // ullHostTimestamp is a Windows FILETIME from the last received beacon.
     const filetime = bytes.readBigUInt64LE(offset + 80);
     const hostMs = Number(filetime / 10000n - 11644473600000n);
@@ -136,7 +149,7 @@ function buildReport(facts, now = new Date().toISOString()) {
     if (!item || typeof item !== 'object' || !/^(?:[\da-f]{2}:){5}[\da-f]{2}$/i.test(item.bssid)) continue;
     const adapterId = text(item.adapterId, 64); const bssid = item.bssid.toLowerCase();
     const freq = channelFromFrequency(typeof item.frequencyMHz === 'number' ? item.frequencyMHz * 1000 : null, item.channel);
-    const normalized = { adapterId, ssid: item.hidden ? '(hidden)' : text(item.ssid, 128), hidden: item.hidden === true, bssid, ...freq, signalPercent: number(item.signalPercent, 0, 100), rssiDbm: number(item.rssiDbm, -127, 0), authentication: text(item.authentication || 'Unknown', 200), encryption: text(item.encryption || 'Unknown', 150), securityEnabled: typeof item.securityEnabled === 'boolean' ? item.securityEnabled : null, connected: adapters.some((adapter) => adapter.id === adapterId && adapter.connection?.bssid.toLowerCase() === bssid), observedAt: typeof item.observedAt === 'string' && Number.isFinite(Date.parse(item.observedAt)) ? new Date(item.observedAt).toISOString() : null };
+    const normalized = { adapterId, ssid: item.hidden ? '(hidden)' : text(item.ssid, 128), hidden: item.hidden === true, bssid, ...freq, signalPercent: number(item.signalPercent, 0, 100), rssiDbm: number(item.rssiDbm, -127, 0), authentication: text(item.authentication || 'Unknown', 1024), encryption: text(item.encryption || 'Unknown', 150), groupEncryption: text(item.groupEncryption || 'Unknown', 150), securityEnabled: typeof item.securityEnabled === 'boolean' ? item.securityEnabled : null, connected: adapters.some((adapter) => adapter.id === adapterId && adapter.connection?.bssid.toLowerCase() === bssid), observedAt: typeof item.observedAt === 'string' && Number.isFinite(Date.parse(item.observedAt)) ? new Date(item.observedAt).toISOString() : null };
     const key = `${adapterId}|${bssid}|${freq.frequencyMHz}`;
     const previous = networksByAdapter.get(key);
     if (!previous || (normalized.rssiDbm ?? -999) > (previous.rssiDbm ?? -999)) networksByAdapter.set(key, normalized);
@@ -158,13 +171,13 @@ function buildReport(facts, now = new Date().toISOString()) {
   if (failures.length) add('wifi-unavailable', 'Some Wi-Fi evidence is unavailable', 'unknown', 'info', [...new Set(failures)].join(' ').slice(0, 4000));
   const open = new Set(networks.filter((network) => network.securityEnabled === false).map((network) => network.bssid));
   if (open.size) add('wifi-open', 'Unencrypted Wi-Fi networks observed', 'warning', 'medium', `${open.size} BSSID(s) advertise open authentication without link encryption. A captive portal does not establish Wi-Fi link encryption.`, 'Prefer WPA2/WPA3 or Enhanced Open where appropriate; verify the access point configuration before connecting.');
-  const legacy = new Set(networks.filter((network) => /WEP|TKIP/.test(network.encryption) || /\bWPA-(?:Personal|Enterprise|None)/.test(network.authentication)).map((network) => network.bssid));
+  const legacy = new Set(networks.filter((network) => /WEP|TKIP/.test(network.encryption) || /WEP|TKIP/.test(network.groupEncryption) || /\bWPA-(?:Personal|Enterprise|None)/.test(network.authentication)).map((network) => network.bssid));
   if (legacy.size) add('wifi-legacy', 'Legacy Wi-Fi security advertised', 'warning', 'high', `${legacy.size} BSSID(s) advertise WEP, TKIP, or original WPA. Advertised options do not prove a client used them.`, 'Review compatibility and configure approved WPA2/WPA3 authentication with modern ciphers.');
   const weak = adapters.filter((adapter) => adapter.connection?.signalPercent !== null && adapter.connection?.signalPercent < 40);
   if (weak.length) add('wifi-low-signal', 'Low current connection signal', 'warning', 'low', `${weak.length} connected adapter(s) report signal quality below KonX's 40% review threshold. This is a snapshot, not a throughput test.`, 'Compare signal while moving near the access point; review placement, band selection, and roaming behavior.');
   const shared = channels.filter((channel) => channel.bssidCount >= 4);
   if (shared.length) add('wifi-shared-channels', 'Several BSSIDs share a primary channel', 'info', 'low', `${shared.length} primary channel(s) have at least four observed BSSIDs. Counts do not measure airtime utilization, interference, channel width, or client load.`, 'Compare channel use with a controller or spectrum analysis before changing radio settings.');
-  const unknown = networks.filter((network) => network.authentication === 'Unknown' || network.encryption === 'Unknown' || network.band === 'Unknown').length;
+  const unknown = networks.filter((network) => [network.authentication, network.encryption, network.groupEncryption, network.band].some((value) => value.split(' / ').includes('Unknown'))).length;
   if (unknown) add('wifi-unknown', 'Some advertised attributes are unknown', 'unknown', 'info', `${unknown} network observation(s) have unknown security or radio attributes. Unknown values do not mean secure.`);
   if (!networks.length) add('wifi-no-networks', 'No cached nearby networks returned', 'unknown', 'info', 'An empty cache does not establish that no access points are present. Check the adapter, radio state, location permission, and Windows WLAN service.');
   return { schemaVersion: 1, kind: 'wifi', collectedAt: now, adapters, networks, channels, findings, limitations: ['This is a read-only snapshot of the Windows WLAN cache. KonX does not request an active radio scan; collection time does not establish when each access point was last seen.', 'Channel counts include unique observed BSSIDs, not airtime, spectrum interference, non-Wi-Fi devices, or guaranteed access-point counts. One access point can advertise several BSSIDs.', 'Security is inferred from beacon information or Windows network defaults. No credentials, saved profile keys, association attempts, throughput tests, or configuration changes are performed.', 'SSID/BSSID information can identify nearby networks. Reports stay local unless you choose to export or share them.'] };

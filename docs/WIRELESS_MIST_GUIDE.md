@@ -14,6 +14,8 @@ Click **Refresh Wi-Fi snapshot** to retrieve local Windows WLAN information. Ope
 
 The survey uses Windows' native WLAN API, independent of the Windows display language. It reads the existing WLAN cache without requesting an active radio scan. The collection time is when KonX retrieved the cache; access-point observations can be older. Hidden or unavailable SSIDs and unsupported attributes remain identified explicitly.
 
+From 0.18.1, mixed WPA/RSN advertisements retain both sets of advertised security options. The snapshot distinguishes pairwise encryption from group encryption, and legacy-cipher observations consider both. Malformed or unsupported advertised options remain unknown; a stronger option does not erase a weaker one.
+
 Channel counts do not measure airtime utilization, spectrum interference, or client load. A physical access point can advertise several BSSIDs, and overlapping channels can still compete. Transmit/receive link rates are connection metadata rather than measured throughput. Advertised security does not establish the access point's complete configuration or the security of connected clients.
 
 If Windows denies WLAN information, check **Settings > Privacy & security > Location** and your organization's policy. Check that the wireless radio and WLAN AutoConfig service are available. KonX reports unavailable evidence and does not change privacy settings, elevate, retrieve Wi-Fi passwords, associate to a network, or alter radio configuration. Inventory work runs in a separate bounded process and can be cancelled.

@@ -217,6 +217,39 @@ function defineIncidentTests(test) {
     assert.equal((await store.get(created.id)).evidence.length, 1);
   }));
 
+  test('a committed note returns its saved report without reopening the published manifest', withStore(async (store, directory) => {
+    const created = await store.create({ title: 'Committed note' });
+    let published = false, blockedReads = 0;
+    const guarded = new IncidentStore(directory, { fs: failingFs({
+      rename: async (from, to) => { await fs.rename(from, to); if (to === manifestFile(store, created.id)) published = true; },
+      open: async (file, ...options) => {
+        if (published && file === manifestFile(store, created.id)) {
+          blockedReads++; throw Object.assign(new Error('Injected post-commit manifest read failure'), { code: 'EACCES' });
+        }
+        return fs.open(file, ...options);
+      },
+    }) });
+    const result = await guarded.addText(created.id, { kind: 'note', text: 'Saved exactly once', label: 'Saved note' });
+    assert.equal(published, true); assert.equal(blockedReads, 0, 'Save confirmation must use the manifest it committed');
+    assert.equal(result.evidence.length, 1); assert.equal(result.evidence[0].textPreview, 'Saved exactly once');
+    const reopened = await new IncidentStore(directory).get(created.id);
+    assert.equal(reopened.evidence.length, 1); assert.equal(reopened.evidence[0].id, result.evidence[0].id);
+  }));
+
+  test('a saved note with a failed preview stays committed and exposes the preview failure', withStore(async (store, directory) => {
+    const created = await store.create({ title: 'Preview unavailable' });
+    const guarded = new IncidentStore(directory, { fs: failingFs({ open: async (file, ...options) => {
+      if (options[0] === 'r' && path.extname(file) === '.bin') throw Object.assign(new Error('Injected evidence preview read failure'), { code: 'EACCES' });
+      return fs.open(file, ...options);
+    } }) });
+    const result = await guarded.addText(created.id, { kind: 'note', text: 'Saved despite unavailable preview' });
+    assert.equal(result.evidence.length, 1); assert.match(result.evidence[0].previewError, /preview read failure/);
+    assert.equal(result.evidence[0].textPreview, undefined);
+    const reopened = await store.get(created.id);
+    assert.equal(reopened.evidence.length, 1); assert.equal(reopened.evidence[0].integrity, 'verified');
+    assert.equal(reopened.evidence[0].textPreview, 'Saved despite unavailable preview');
+  }));
+
   test('failed initial publication removes its incomplete owned workspace', withStore(async (store, directory) => {
     const failed = new IncidentStore(directory, { fs: failingFs({ link: async (from, to) => {
       if (path.basename(to) === 'manifest.json') throw new Error('Injected link failure'); return fs.link(from, to);

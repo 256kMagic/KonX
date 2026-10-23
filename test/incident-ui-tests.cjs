@@ -35,6 +35,21 @@ async function fixture() {
   const { app, BrowserWindow, dialog } = require('electron');
   const root = path.resolve(process.env.KONX_INCIDENT_UI_ROOT || '');
   assert.equal(path.dirname(root), fs.realpathSync(os.tmpdir())); assert.ok(path.basename(root).startsWith('konx-incident-ui-'));
+  const io = require('node:fs/promises'), originalRename = io.rename, originalOpen = io.open;
+  const incidentRoot = path.join(root, 'profile', 'incidents') + path.sep;
+  let failPublication = false, guardPublishedRead = false, publishedManifest = null, blockedReads = 0;
+  io.rename = async (from, to) => {
+    const isManifest = to.startsWith(incidentRoot) && path.basename(to) === 'manifest.json';
+    if (isManifest && failPublication) throw Object.assign(new Error('Synthetic incident save permission denied'), { code: 'EACCES' });
+    await originalRename(from, to);
+    if (isManifest && guardPublishedRead) publishedManifest = to;
+  };
+  io.open = async (file, ...options) => {
+    if (guardPublishedRead && publishedManifest === file) {
+      blockedReads++; throw Object.assign(new Error('Synthetic committed manifest read denied'), { code: 'EACCES' });
+    }
+    return originalOpen(file, ...options);
+  };
   const capturePath = path.join(root, 'source-capture.pcapng'), logPath = path.join(root, 'switch-log.txt');
   const { makeRtpDemo } = await import(pathToFileURL(path.join(repo, 'src/renderer/js/capture/sample-rtp.mjs')).href);
   fs.writeFileSync(capturePath, makeRtpDemo().bytes);
@@ -43,7 +58,8 @@ async function fixture() {
   dialog.showOpenDialog = async () => { const filePath = imports.shift(); if (!filePath) throw new Error('Unexpected import dialog'); return { canceled: false, filePaths: [filePath] }; };
   dialog.showSaveDialog = async (...args) => { const options = args.at(-1), extension = String(options.defaultPath || '').endsWith('.html') ? 'html' : 'json'; const filePath = path.join(root, 'incident-' + exports.length + '.' + extension); exports.push(filePath); return { canceled: false, filePath }; };
   dialog.showErrorBox = (title, message) => { throw new Error(title + ': ' + message); };
-  const finish = (code, error) => { if (finished) return; finished = true; if (error) console.error(error.stack || error); for (const win of BrowserWindow.getAllWindows()) win.destroy(); app.exit(code); };
+  const finish = (code, error) => { if (finished) return; finished = true; io.rename = originalRename; io.open = originalOpen;
+    if (error) console.error(error.stack || error); for (const win of BrowserWindow.getAllWindows()) win.destroy(); app.exit(code); };
   app.on('browser-window-created', (_event, win) => {
     win.setOpacity(0); win.setFocusable(false); win.setSkipTaskbar(true);
     win.webContents.once('did-finish-load', async () => {
@@ -74,8 +90,25 @@ async function fixture() {
         await field('noteText', sentinel); await field('noteLabel', 'Observed audio symptom');
         assert.ok(await run('window.__incident.updateBlockers().length>0'));
         assert.ok(await run('window.__updateBlockers(window.__app).some(reason=>reason.includes("unsaved note"))'), 'Aggregate updater must preserve incident drafts');
+        failPublication = true;
         await click('window.__incident.noteButton'); await ready();
+        assert.equal(await run('window.__incident.report.evidence.length'), 0);
+        assert.equal(await run('window.__incident.noteText.value'), sentinel, 'A failed save must keep the complete draft');
+        assert.equal(await run('window.__incident.noteLabel.value'), 'Observed audio symptom');
+        assert.equal(await run('window.__incident.status.getAttribute("role")'), 'alert');
+        assert.match(await run('window.__incident.status.textContent'), /Note was not saved; your draft has been kept.*Synthetic incident save permission denied/);
+        assert.equal(await run('window.__incident.noteButton.disabled'), false, 'Retry must remain available after a failed save');
+        assert.ok(await run('window.__updateBlockers(window.__app).some(reason=>reason.includes("unsaved note"))'));
+        assert.equal(JSON.parse(fs.readFileSync(path.join(incidentRoot, id, 'manifest.json'), 'utf8')).evidence.length, 0);
+        assert.deepEqual(fs.readdirSync(path.join(incidentRoot, id, 'evidence')), [], 'Failed publication must clean its staged evidence');
+        failPublication = false; guardPublishedRead = true;
+        await click('window.__incident.noteButton'); await ready();
+        guardPublishedRead = false;
+        assert.ok(publishedManifest); assert.equal(blockedReads, 0, 'A committed save must not become a false failure by rereading its manifest');
         assert.equal(await run('window.__incident.report.evidence.length'), 1); assert.equal(await run('window.__incident.noteText.value'), '');
+        assert.equal(await run('window.__incident.status.getAttribute("role")'), 'status');
+        assert.match(await run('window.__incident.status.textContent'), /^Saved note/);
+        assert.equal(JSON.parse(fs.readFileSync(path.join(incidentRoot, id, 'manifest.json'), 'utf8')).evidence.length, 1, 'Retry must save the note exactly once');
         assert.equal(await run('window.__updateBlockers(window.__app).length'), 0, 'Saved notes release the updater blocker');
         assert.equal(await run('window.__incident.report.timeline[0].observedAt'), null, 'Untimed notes must not inherit import time');
         await field('importKind', 'syslog'); await click('window.__incident.importButton'); await ready();
@@ -129,7 +162,7 @@ async function fixture() {
         await click('document.querySelector(".modal footer .danger")'); await until(() => run('!window.__incident.busy&&window.__incident.incidents.length===0'), 'confirmed incident deletion');
         assert.equal(fs.readFileSync(capturePath, 'utf8'), 'Original source changed after import'); assert.ok(fs.existsSync(logPath));
         assert.equal(await run('window.__app.jobs.size'), 0);
-        console.log('INCIDENT_UI_PASS: real local IPC, explicit creation/import/pending evidence, unknown timestamps, XSS, source preview, original-file independence, verified retained capture, escaped exports, summary-only AI, close safeguards and deletion; no external network collection.'); finish(0);
+        console.log('INCIDENT_UI_PASS: real local IPC, failed publication/draft retention/retry, committed save confirmation, explicit creation/import/pending evidence, unknown timestamps, XSS, source preview, original-file independence, verified retained capture, escaped exports, summary-only AI, close safeguards and deletion; no external network collection.'); finish(0);
       } catch (error) { finish(1, error); }
     });
   });

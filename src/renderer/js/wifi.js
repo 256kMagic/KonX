@@ -111,7 +111,7 @@ export class WifiTab {
     this.detail.replaceChildren(h('h3', networkName(row)), h('dl.wireless-facts',
       [['BSSID', row.bssid], ['Adapter', this.report?.adapters.find((adapter) => adapter.id === row.adapterId)?.name || row.adapterId],
         ['Frequency', shown(row.frequencyMHz, ' MHz')], ['RSSI', shown(row.rssiDbm, ' dBm')], ['Signal quality', shown(row.signalPercent, '%')],
-        ['Authentication', shown(row.authentication)], ['Encryption', shown(row.encryption)],
+        ['Authentication', shown(row.authentication)], ['Pairwise encryption', shown(row.encryption)], ['Group encryption', shown(row.groupEncryption)],
         ['Security enabled', row.securityEnabled == null ? 'Unknown' : row.securityEnabled ? 'Yes' : 'No'],
         ['Radio observation timestamp', row.observedAt || row.hostTimestamp ? new Date(row.observedAt || row.hostTimestamp).toLocaleString() : 'Unavailable; snapshot may be cached']]
         .map(([label, value]) => [h('dt', label), h('dd', value)])));

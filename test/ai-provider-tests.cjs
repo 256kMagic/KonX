@@ -250,6 +250,44 @@ async function runAIProviderTests(input) {
     }, mock);
   });
 
+  await test('AI real knowledge retrieval redacts complete source before chunk and excerpt boundaries', async () => {
+    const opaqueKey = 'OpaqueSavedKeyBoundary'.repeat(24);
+    const privateValue = 'SYNTHETIC_PRIVATE_KEY_BODY';
+    const mock = transport(({ body, respond }) => {
+      const envelope = JSON.parse(body.input[0].content[0].text), serialized = JSON.stringify(envelope);
+      assert.ok(envelope.references.some(item => item.excerpt.includes('Boundaryneedlelink explains the verified symptom')));
+      assert.ok(envelope.references.some(item => item.excerpt.includes('Boundaryneedlecert explains certificate validation')));
+      for (const fragment of [opaqueKey, opaqueKey.slice(100, 200), privateValue]) assert.equal(serialized.includes(fragment), false, fragment);
+      assert.ok(envelope.references.every(item => item.excerpt.length <= 900));
+      respond(200, OPENAI);
+    });
+    await fixture(async ({ client, dir }) => {
+      const { KnowledgeLibrary } = require('../src/main/knowledge');
+      const library = new KnowledgeLibrary({ dir }); client.knowledge = library;
+      try {
+        const original = 'ordinary context '.repeat(72) + opaqueKey + '\nBoundaryneedlelink explains the verified symptom.';
+        const saved = await library.save({ title: 'Opaque credential fixture', content: original });
+        await library.save({ title: 'Private block fixture', content: '-----BEGIN RSA PRIVATE KEY-----\n' +
+          (privateValue + '\n').repeat(90) + '-----END RSA PRIVATE KEY-----\nBoundaryneedlecert explains certificate validation.' });
+        client.configure({ key: opaqueKey });
+        const { report } = await ask(client, { question: 'Boundaryneedlelink Boundaryneedlecert' });
+        assert.equal(mock.calls.length, 1); assert.equal(report.sources.length, 2);
+        assert.equal((await library.get(saved.id)).content, original, 'Retrieval must not rewrite the saved note');
+      } finally { await library.close(); }
+    }, mock);
+  });
+
+  await test('AI answer redaction sees a complete saved key before the display limit cuts its prefix', async () => {
+    const opaqueKey = 'OpaqueSavedKeyBoundary'.repeat(24);
+    const mock = transport(({ respond }) => respond(200, { ...OPENAI,
+      output: [{ type: 'message', content: [{ type: 'output_text', text: 'A'.repeat(49990) + opaqueKey + ' ending' }] }] }));
+    await fixture(async ({ client }) => {
+      client.configure({ key: opaqueKey }); const { report } = await ask(client);
+      assert.ok(report.answer.length <= 50000); assert.equal(report.answer.includes('Opaque'), false);
+      assert.ok(report.limitations.some(value => value.includes('limited or stopped early')));
+    }, mock);
+  });
+
   await test('AI Claude messages use fixed endpoint, API version, system and token bound', async () => {
     const mock = transport(({ options, body, respond }) => {
       assert.equal(options.hostname, 'api.anthropic.com');

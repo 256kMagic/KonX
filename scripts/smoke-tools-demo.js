@@ -26,6 +26,7 @@
     if (ciscoHighlighting) checks.ciscoHighlighting = ciscoHighlighting;
     if (serialAutoBaud) checks.serialAutoBaud = serialAutoBaud;
     if (workspaceWindows) checks.workspaceWindows = workspaceWindows;
+    if (supportReport) checks.supportReport = supportReport;
     // Portable launchers do not necessarily forward their app's stdout. Write
     // test evidence only to the parent-provided private artifact file.
     await api.invoke('np:write', options.resultPath, new TextEncoder().encode(JSON.stringify(checks, null, 2)));
@@ -71,6 +72,19 @@
   const supportsCiscoHighlighting = versionParts[0] > 0 || versionParts[1] >= 16;
   const supportsSerialAutoBaud = versionParts[0] > 0 || versionParts[1] >= 17;
   const supportsWorkspaceWindows = versionParts[0] > 0 || versionParts[1] >= 18;
+  const supportsSupport = versionParts[0] > 0 || versionParts[1] > 18 || (versionParts[1] === 18 && versionParts[2] >= 1);
+  let supportReport = null;
+  if (supportsSupport) {
+    const { supportDialog } = await import('./js/support.js');
+    const opened = supportDialog(app);
+    await until(() => document.querySelector('[aria-label="Diagnostic report preview"]')?.value, 'support preview');
+    const report = JSON.parse(document.querySelector('[aria-label="Diagnostic report preview"]').value);
+    assert(report.kind === 'konx-support-report' && report.runtime.version === info.version &&
+      report.logs.requested === false && report.logs.entries.length === 0 && report.privacy.uploaded === false, 'Support preview must be local and omit error logs by default');
+    assert(report.counts.jobs === 0 && Array.isArray(report.displays) && report.displays.length > 0, 'Support preview is missing display/activity diagnostics');
+    document.querySelector('.support-report').closest('.modal').querySelector('header .x').click(); await opened;
+    supportReport = { preview: true, localOnly: true, logsOptIn: true, runtimeAndDisplays: true };
+  }
   let sessionManagement = null;
   let logging = null;
   let quickLogin = null;

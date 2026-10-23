@@ -97,6 +97,42 @@ async function runKnowledgeTests(test) {
     });
   });
 
+  await test('knowledge: matching passages beyond the old excerpt cutoff are returned without altering original notes', async () => {
+    await fixture(async library => {
+      const content = 'Unrelated introductory material. '.repeat(36) + '\nLatepassageanchor explains the exact link failure and next verification step.';
+      const saved = await library.save({ title: 'Late passage fixture', content });
+      const found = (await library.search('Latepassageanchor'))[0];
+      assert.equal(found.id, saved.id); assert.match(found.content, /Latepassageanchor explains the exact link failure/);
+      assert.ok(found.content.length <= 900); assert.equal((await library.get(saved.id)).content, content);
+      const publicResult = await library.search('Latepassageanchor', { secrets: ['Latepassageanchor'] });
+      assert.match(publicResult[0].content, /Latepassageanchor/, 'Public options cannot invoke trusted AI redaction');
+    });
+  });
+
+  await test('knowledge: redaction precedes chunks and an old index rebuild preserves original private text', async () => {
+    const dir = temporary(); let library = new KnowledgeLibrary({ dir });
+    const secret = 'SYNTHETIC_PRIVATE_BLOCK_VALUE';
+    const original = 'Boundary fixture\n-----BEGIN RSA PRIVATE KEY-----\n' + (secret + '\n').repeat(80) +
+      '-----END RSA PRIVATE KEY-----\nSecretboundaryanchor is safe context after a private block.';
+    try {
+      const saved = await library.save({ title: 'Boundary fixture', content: original });
+      assert.equal((await library.get(saved.id)).content, original);
+      assert.equal(JSON.stringify(await library.search('Secretboundaryanchor')).includes(secret), false);
+      await library.close();
+      const db = openDatabase(dir);
+      try {
+        assert.equal(db.prepare('SELECT content FROM chunks WHERE document_id=?').all(saved.id).some(row => row.content.includes(secret)), false);
+        db.prepare('UPDATE chunks SET content=? WHERE document_id=?').run(secret, saved.id);
+        db.prepare('UPDATE metadata SET value=? WHERE key=?').run('tfidf-hash1024-v1', 'indexVersion');
+      } finally { db.close(); }
+      library = new KnowledgeLibrary({ dir });
+      const result = await library.search('Secretboundaryanchor');
+      assert.equal(result[0].id, saved.id); assert.match(result[0].content, /safe context after a private block/);
+      assert.equal(JSON.stringify(result).includes(secret), false); assert.equal((await library.get(saved.id)).content, original);
+      await assert.rejects(library.searchForAI('fixture', {}, Array(6).fill('secret')), /Invalid internal redaction/);
+    } finally { await library.close(); cleanup(dir); }
+  });
+
   await test('knowledge: reopening and rebuilding retain custom content and reconcile changed bundled explanations', async () => {
     const dir = temporary();
     let library = new KnowledgeLibrary({ dir });
@@ -266,7 +302,7 @@ async function runElectronAsarFixture() {
     const staging = path.join(dir, 'staging');
     fs.mkdirSync(path.join(staging, 'src/main'), { recursive: true });
     fs.mkdirSync(path.join(staging, 'src/knowledge'), { recursive: true });
-    for (const name of ['knowledge.js', 'knowledge-worker.js']) fs.copyFileSync(path.join(__dirname, '../src/main', name), path.join(staging, 'src/main', name));
+    for (const name of ['knowledge.js', 'knowledge-worker.js', 'ai-redaction.js']) fs.copyFileSync(path.join(__dirname, '../src/main', name), path.join(staging, 'src/main', name));
     fs.copyFileSync(path.join(__dirname, '../src/knowledge/articles.json'), path.join(staging, 'src/knowledge/articles.json'));
     const archive = path.join(dir, 'fixture.asar');
     await require('@electron/asar').createPackage(staging, archive);

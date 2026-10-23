@@ -20,6 +20,8 @@ From **KonX 0.18.0**, right-click any open tab and choose **Float in workspace**
 
 All application themes apply to pop-outs. Menus and dialogs follow the window being used. The main application remains the owner of the work, so exiting KonX closes the workspace and its child windows after the normal connection and cleanup checks. Up to 16 native pop-outs can be open at once.
 
+From 0.18.1, pop-outs recover into an available display work area when displays change. Minimized/maximized states are preserved, and console status follows its fitted size. Automated checks cover simulated 100%, 125%, 150%, and 200% scales; physical monitor changes still need tester coverage. Use [Report a problem](TESTER_SUPPORT.md) to save a reviewed diagnostic report.
+
 Saved geometry contains split ratios and the last floating rectangle only. Restarting does not recreate pop-outs, restore live connections, or automatically rerun tools. A terminal selection can clear when resizing changes its rows or wraps text, following the terminal's normal resize behavior; its scrollback remains available.
 
 ## Choose a workspace

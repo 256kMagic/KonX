@@ -35,6 +35,8 @@ Each row includes a result, severity, and confidence. Select it to read the evid
 
 Configuration defaults, inherited policies, ACLs, and incomplete snippets can change effective behavior. Unsupported configuration families are marked Unknown. Capture anomalies are evidence to investigate, not proof of an attack; encrypted traffic and missing packets limit visibility. Use frame numbers to inspect the original capture in Packet Capture.
 
+From 0.18.1, Cisco configuration review skips stored `macro name` bodies through the standalone `@` terminator. Unapplied macro commands do not count as active configuration; an incomplete definition is reported as a limitation. Web-header review interprets the first HSTS header with quoted values and directive uniqueness, so duplicate or malformed directives do not establish a valid policy.
+
 ## Baselines and exports
 
 1. Run an assessment and review its scope and limitations.

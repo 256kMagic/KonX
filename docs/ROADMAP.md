@@ -30,7 +30,21 @@ Version 0.17.0 adds serial baud-rate detection with explicit probing, visible pr
 
 Version 0.18.0 adds movable/resizable floating panels, split dividers, native pop-out windows, and dock-back controls while preserving live view ownership. See the [workspace guide](WORKSPACE_LAYOUTS.md) and [release validation](releases/0.18.0.md).
 
-## Scope
+## Site workflow phases
+
+The next approved sequence ships each phase with its own tested release, notes, and user guide:
+
+| Version | Deliverable | Status |
+| --- | --- | --- |
+| 0.18.1 | Tester diagnostics, incident-save reliability, display-scale and window recovery checks | Complete; 900 tests and packaged checks passed |
+| 0.19.0 | Saved site workspaces with session references, panel arrangements, notes, capture references, and explicit connection actions | Planned |
+| 0.20.0 | Interactive topology from observed device neighbors and forwarding evidence | Planned |
+| 0.21.0 | Explicitly started local syslog and SNMP trap event console | Planned |
+| 0.22.0 | Guided before/after change validation using existing snapshots, runbooks, comparisons, and incident reports | Planned |
+
+Saved workspaces must not connect, collect, or run commands merely by opening. Imports exclude credentials. Topology distinguishes observed, stale, and unresolved links. Event listeners start only on request and retain bounded history. Change validation coordinates reviewed checks around manual maintenance; it does not silently change device configuration.
+
+## Collection scope
 
 Device collection starts with connected Cisco IOS/IOS-XE SSH sessions and fixed read-only commands in a separate channel. Trace results show candidates and unresolved links when evidence is incomplete. Imported reports and a synthetic demo support offline use.
 

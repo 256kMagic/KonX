@@ -527,6 +527,9 @@ const fakeCrypt = {
   await require('./workspace-window-tests.cjs').runWorkspaceWindowTests(test);
   await require('./workspace-popout-ui-tests.cjs').runWorkspacePopoutUiTests(test);
   await require('./widget-host-ui-tests.cjs').runWidgetHostUiTests(test);
+  await require('./support-report-tests.cjs').runSupportReportTests(test);
+  await require('./support-ui-tests.cjs').runSupportUiTests(test);
+  await require('./workspace-dpi-ui-tests.cjs').runWorkspaceDpiUiTests(test);
 
   const failed = results.filter((r) => !r[0]);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

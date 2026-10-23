@@ -5,9 +5,10 @@ const { DatabaseSync } = require('node:sqlite');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { redactText } = require('./ai-redaction');
 
 const ALGORITHM = 'Local TF-IDF cosine vectors';
-const INDEX_VERSION = 'tfidf-hash1024-v1';
+const INDEX_VERSION = 'tfidf-hash1024-redacted-v2';
 const DIMENSIONS = 1024;
 const MAX_CUSTOM = 200;
 const MAX_CONTENT = 32000;
@@ -156,7 +157,9 @@ function buildIndex() {
   const documentFrequency = new Uint32Array(DIMENSIONS);
   for (const doc of docs) {
     const article = normalizeArticle(fromRow(doc), !!doc.builtin);
-    for (const [ordinal, content] of split(article.content).entries()) {
+    // Keep source documents intact. Derived chunks must never begin inside a
+    // credential value or private-key block whose label was in a prior chunk.
+    for (const [ordinal, content] of split(redactText(article.content)).entries()) {
       if (rows.length >= MAX_CHUNKS) throw new Error('Knowledge library exceeds the chunk limit');
       const frequencies = counts(`${article.title} ${article.title} ${article.vendor} ${article.tags.join(' ')} ${content}`);
       for (const index of frequencies.keys()) documentFrequency[index]++;
@@ -273,28 +276,59 @@ function rank(query) {
   return ranked.sort((a, b) => b.score - a.score || a.row.chunk_id.localeCompare(b.row.chunk_id));
 }
 
+function excerpt(content, query) {
+  const limit = 900;
+  if (content.length <= limit) return content;
+  const wanted = new Set(tokens(query));
+  const matches = [];
+  for (const match of content.matchAll(/[\p{L}\p{N}][\p{L}\p{N}.-]{0,63}/gu)) {
+    if (tokens(match[0]).some(token => wanted.has(token))) matches.push({ start: match.index, end: match.index + match[0].length });
+  }
+  // Center the strongest bounded cluster of query terms, preserving nearby
+  // context instead of returning an unrelated first 900 characters.
+  let best = 0, right = 0, count = 0;
+  for (let left = 0; left < matches.length; left++) {
+    const start = Math.max(0, Math.min(content.length - limit, matches[left].start - 180));
+    while (right < matches.length && matches[right].end <= start + limit) right++;
+    if (right - left > count) { count = right - left; best = start; }
+  }
+  if (best && /[\uDC00-\uDFFF]/.test(content[best])) best++;
+  let end = Math.min(content.length, best + limit);
+  if (end < content.length && /[\uDC00-\uDFFF]/.test(content[end])) end--;
+  return content.slice(best, end);
+}
+
+function search(query, options = {}, secrets = []) {
+  const value = text(query, 'Search query', 4000, true);
+  if (!value) return [];
+  object(options, 'search options');
+  const limit = options.limit === undefined ? 5 : options.limit;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 5) throw new Error('Search limit must be an integer from 1 to 5');
+  const ranked = rank(value), seen = new Set(), result = [];
+  const document = db.prepare('SELECT content FROM documents WHERE id=?');
+  for (const { row, score } of ranked) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    // Sanitize the complete bounded source before locating or cutting any
+    // excerpt, including exact configured keys that cross stored chunk edges.
+    const content = redactText(document.get(row.id).content, secrets);
+    result.push({ id: row.id, chunkId: row.chunk_id, title: row.title, vendor: row.vendor, content: excerpt(content, value), sourceUrl: row.source_url, score: Math.round(score * 1000000) / 1000000 });
+    if (result.length === limit) break;
+  }
+  return result;
+}
+
 const actions = {
   status() {
     const values = db.prepare('SELECT COUNT(*) AS documents,SUM(CASE WHEN builtin=0 THEN 1 ELSE 0 END) AS customDocuments FROM documents').get();
     return { state: 'ready', documents: values.documents, chunks: searchRows.length, customDocuments: values.customDocuments || 0, algorithm: ALGORITHM, updatedAt: meta('updatedAt') };
   },
   search(query, options = {}) {
-    const value = text(query, 'Search query', 4000, true);
-    if (!value) return [];
-    object(options, 'search options');
-    const limit = options.limit === undefined ? 5 : options.limit;
-    if (!Number.isInteger(limit) || limit < 1 || limit > 5) throw new Error('Search limit must be an integer from 1 to 5');
-    const ranked = rank(value);
-    // One excerpt per article keeps all five results useful and diverse.
-    const seen = new Set();
-    const result = [];
-    for (const { row, score } of ranked) {
-      if (seen.has(row.id)) continue;
-      seen.add(row.id);
-      result.push({ id: row.id, chunkId: row.chunk_id, title: row.title, vendor: row.vendor, content: row.content.slice(0, 900), sourceUrl: row.source_url, score: Math.round(score * 1000000) / 1000000 });
-      if (result.length === limit) break;
-    }
-    return result;
+    return search(query, options);
+  },
+  searchForAI(query, options, secrets) {
+    if (!Array.isArray(secrets) || secrets.length > 5 || secrets.some(secret => typeof secret !== 'string' || !secret.length || secret.length > 1024)) throw new Error('Invalid internal redaction values');
+    return search(query, options, secrets);
   },
   list(options = {}) {
     object(options, 'library filters');

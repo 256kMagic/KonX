@@ -25,6 +25,7 @@ async function main() {
     ['docs/SSH_COMPATIBILITY.md', 'SSH_COMPATIBILITY.md'],
     ['docs/CISCO_HIGHLIGHTING.md', 'CISCO_HIGHLIGHTING.md'],
     ['docs/SERIAL_AUTO_BAUD.md', 'SERIAL_AUTO_BAUD.md'],
+    ['docs/TESTER_SUPPORT.md', 'TESTER_SUPPORT.md'],
     ['CHANGELOG.md', 'CHANGELOG.md'], [`docs/releases/${version}.md`, 'RELEASE_NOTES.md'],
   ];
   for (const file of [...binaries.map((name) => `dist/${name}`), ...documents.map(([source]) => source)]) {

@@ -227,7 +227,12 @@ function requestHeaders(url, method, signal, budget) {
         let tlsChecks = [];
         try { if (url.protocol === 'https:') tlsChecks = certificateChecks(response.socket, hostValue(url.hostname), 'web-tls'); }
         catch (error) { tlsChecks = [unknown('web-tls', 'HTTPS certificate', error)]; }
-        const result = { status: response.statusCode, headers: response.headers, tlsChecks };
+        const headers = { ...response.headers };
+        // RFC 6797 section 8.1: only the first STS field is processed. Node's
+        // joined header map otherwise loses that field boundary.
+        const firstSts = response.rawHeaders.findIndex((name, index) => index % 2 === 0 && name.toLowerCase() === 'strict-transport-security');
+        if (firstSts >= 0) headers['strict-transport-security'] = response.rawHeaders[firstSts + 1];
+        const result = { status: response.statusCode, headers, tlsChecks };
         // No body buffering, browser rendering, scripts, or subresource requests.
         response.on('error', () => {});
         response.destroy();
@@ -240,15 +245,50 @@ function requestHeaders(url, method, signal, budget) {
   });
 }
 
+function positiveHsts(value) {
+  // RFC 6797 sections 6.1/6.1.1 permit quoted values and require every
+  // directive to occur only once. Split outside quoted extension values.
+  if (typeof value !== 'string' || /[\x00-\x08\x0a-\x1f\x7f]/.test(value)) return false;
+  const parts = []; let start = 0, quoted = false, escaped = false;
+  for (let i = 0; i < value.length; i++) {
+    const c = value[i];
+    if (escaped) { escaped = false; continue; }
+    if (quoted && c === '\\') { escaped = true; continue; }
+    if (c === '"') quoted = !quoted;
+    if (c === ';' && !quoted) { parts.push(value.slice(start, i)); start = i + 1; }
+  }
+  if (quoted || escaped) return false;
+  parts.push(value.slice(start));
+  const token = /^[!#$%&'*+\-.^_\x60|~0-9A-Za-z]+$/;
+  const trimLws = part => part.replace(/^[ \t]+|[ \t]+$/g, '');
+  const directives = new Map();
+  for (const part of parts) {
+    if (!trimLws(part)) continue;
+    const equals = part.indexOf('='), name = trimLws(equals < 0 ? part : part.slice(0, equals)).toLowerCase();
+    if (!token.test(name) || directives.has(name)) return false;
+    let v = equals < 0 ? null : trimLws(part.slice(equals + 1));
+    if (v !== null) {
+      if (v.startsWith('"')) {
+        if (!/^"(?:[^"\\]|\\[\x00-\x7f])*"$/.test(v)) return false;
+        v = v.slice(1, -1).replace(/\\([\x00-\x7f])/g, '$1');
+      } else if (!token.test(v)) return false;
+    }
+    directives.set(name, v);
+  }
+  if (directives.has('includesubdomains') && directives.get('includesubdomains') !== null) return false;
+  const age = directives.get('max-age');
+  return typeof age === 'string' && /^\d+$/.test(age) && /[1-9]/.test(age);
+}
+
 function webHeaderChecks(headers, url) {
   const checks = [];
   const contentType = String(headers['content-type'] || '');
   const html = /(?:text\/html|application\/xhtml\+xml)/i.test(contentType);
   const hsts = String(headers['strict-transport-security'] || '');
-  const maxAge = /(?:^|;)\s*max-age\s*=\s*(\d+)\s*(?:;|$)/i.exec(hsts);
+  const hasPositiveHsts = positiveHsts(hsts);
   checks.push(finding({ id: 'web-hsts', title: 'HTTP Strict Transport Security',
-    status: url.protocol !== 'https:' ? 'unknown' : maxAge && Number(maxAge[1]) > 0 ? 'pass' : 'warning', severity: 'medium',
-    evidence: url.protocol !== 'https:' ? 'HSTS only protects responses received over trusted HTTPS.' : maxAge && Number(maxAge[1]) > 0 ? 'A positive HSTS max-age is present.' : 'No effective positive HSTS max-age was observed.',
+    status: url.protocol !== 'https:' ? 'unknown' : hasPositiveHsts ? 'pass' : 'warning', severity: 'medium',
+    evidence: url.protocol !== 'https:' ? 'HSTS only protects responses received over trusted HTTPS.' : hasPositiveHsts ? 'A valid positive HSTS max-age is present in the first header field.' : 'No valid positive HSTS max-age was observed in the first header field.',
     remediation: 'After validating HTTPS deployment and affected subdomains, configure an appropriate HSTS policy.', reference: WEB_REF }));
   const nosniff = String(headers['x-content-type-options'] || '').toLowerCase() === 'nosniff';
   checks.push(finding({ id: 'web-nosniff', title: 'MIME type sniffing protection', status: nosniff ? 'pass' : 'warning', severity: 'low',
