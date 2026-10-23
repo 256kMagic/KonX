@@ -61,7 +61,7 @@ async function electronFixture() {
   const key = 'SyntheticFixtureAiKey_Only_For_Isolated_Offline_Test';
   const malicious = '<img src=x onerror="window.__aiInjected=true">';
   const requests = [], pending = new Set(), openedSources = [];
-  let delay = false, cancelled = 0, instance, finished = false;
+  let delay = false, failNext = false, cancelled = 0, instance, finished = false;
   const aiModule = require('../src/main/ai'), RealClient = aiModule.AIClient;
   // Replace only the provider's HTTPS transport. The real encrypted config,
   // validation, request construction, retrieval, parser and IPC remain in use.
@@ -75,7 +75,7 @@ async function electronFixture() {
       if (delay) { pending.add(req); return; }
       queueMicrotask(() => {
         if (destroyed) return;
-        const res = new EventEmitter(); res.statusCode = 200; res.headers = { 'content-type': 'application/json' }; res.destroy = () => {};
+        const res = new EventEmitter(); res.statusCode = failNext ? 503 : 200; failNext = false; res.headers = { 'content-type': 'application/json' }; res.destroy = () => {};
         onResponse(res);
         const answer = `${malicious}\nRSSI needs context and corroboration. [K1]`;
         const value = options.hostname === 'api.openai.com' ? { output: [{ type: 'message', content: [{ type: 'output_text', text: answer }] }] } :
@@ -100,6 +100,8 @@ async function electronFixture() {
     for (const win of BrowserWindow.getAllWindows()) win.destroy();
     app.exit(code);
   };
+  process.on('uncaughtException', (error) => finish(1, error));
+  process.on('unhandledRejection', (error) => finish(1, error));
   app.on('browser-window-created', (_event, win) => {
     win.setOpacity(0); win.setFocusable(false); win.setSkipTaskbar(true);
     win.webContents.once('did-finish-load', async () => {
@@ -116,6 +118,16 @@ async function electronFixture() {
           win.webContents.sendInputEvent({ type: 'mouseUp', button: 'left', clickCount: 1, ...point }); await pause(25);
         };
         const input = (expression, value, event = 'input') => run(`${expression}.value=${JSON.stringify(value)};${expression}.dispatchEvent(new Event(${JSON.stringify(event)},{bubbles:true}));void 0;`);
+        const choose = async (label) => {
+          const expression = `Array.from(document.querySelectorAll('.modal footer button')).find(el=>el.textContent===${JSON.stringify(label)})`;
+          await until(() => run(`Boolean(${expression})`), 'AI dialog option ' + label); await click(expression);
+        };
+        const close = async (tab, choice) => {
+          await run(`window.__closeAttempt=window.__app.closeTab(window.${tab});void 0;`);
+          if (choice) await choose(choice);
+          await run('window.__closeAttempt');
+        };
+        const blockers = (tab = '__ai') => run(`import('./js/updates.js').then(m=>m.updateBlockers({tabs:[window.${tab}]}))`);
         const ready = (tab = '__ai') => until(() => run(`Boolean(window.${tab}?.config && !window.${tab}.configBusy)`), 'AI settings ' + tab);
         const idle = (tab = '__ai') => until(() => run(`!window.${tab}.jobId`), 'AI completion ' + tab);
         const ask = async () => {
@@ -126,12 +138,15 @@ async function electronFixture() {
         await until(() => run('Boolean(window.__app)'), 'application initialization');
         assert.equal(safeStorage.isEncryptionAvailable(), true, 'Windows secure storage must be available for this integration test');
         await run('window.__ai=window.__app.openTool("ai");void 0;'); await ready();
+        const previewSources = [], realPreview = instance.preview.bind(instance);
+        instance.preview = (context) => { previewSources.push(context); return realPreview(context); };
         await until(() => run('window.__ai.libraryList.querySelectorAll("button").length>0'), 'built-in offline references');
         assert.equal(requests.length, 0); assert.equal(await run('window.__app.jobs.size'), 0);
         assert.deepEqual(await run('[...window.__ai.provider.options].map(item=>item.value)'), ['openai', 'anthropic', 'gemini', 'nyquest', 'custom']);
         assert.equal(await run('window.__ai.key.type'), 'password'); assert.equal(await run('window.__ai.askButton.disabled'), true);
         assert.match(await run('window.__ai.libraryStatus.textContent'), /TF-IDF/);
         const baselineStatus = await instance.knowledge.status(); assert.ok(baselineStatus.documents >= 10); assert.ok(baselineStatus.chunks > 0);
+        assert.deepEqual(await blockers(), [], 'blank AI view has no draft blocker');
 
         // A failed save clears the password field too; use real validation failure.
         await input('window.__ai.key', 'not a valid key'); await click('window.__ai.saveButton'); await ready();
@@ -148,6 +163,8 @@ async function electronFixture() {
         await input('window.__ai.context', `Private fixture context\npassword=SECRET_FIXTURE_PASSWORD\nkey=${key}\nrssi=-67`);
         assert.equal(await run('window.__ai.shareContext.checked'), false); assert.equal(await run('window.__ai.shareContext.disabled'), true);
         await ask(); assert.equal(Object.hasOwn(requests.at(-1).envelope, 'toolContext'), false);
+        assert.equal(await run('window.__ai.assistantDirty()'), true, 'successful unshared request preserves local context draft');
+        assert.match((await blockers()).join(' '), /unsent AI/);
         assert.equal(await run('Boolean(window.__aiInjected)'), false); assert.equal(await run('window.__ai.answer.querySelector("img")'), null);
         assert.ok((await run('window.__ai.answer.textContent')).includes(malicious));
         assert.ok(requests.at(-1).envelope.references.length > 0); assert.ok(await run('window.__ai.sourceList.querySelectorAll("button").length>0'));
@@ -156,7 +173,11 @@ async function electronFixture() {
         await until(() => run('Boolean(window.__ai.currentDocument)'), 'citation article');
         assert.ok(await run('window.__ai.documentContent.textContent.length>50'));
         await click('window.__ai.documentSourceButton'); assert.equal(openedSources.length, 1); assert.match(openedSources[0], /^https:\/\//);
-        await click('window.__ai.documentAskButton');
+        const beforeArticle = await run('[window.__ai.question.value,window.__ai.context.value]');
+        await click('window.__ai.documentAskButton'); await choose('Cancel');
+        assert.deepEqual(await run('[window.__ai.question.value,window.__ai.context.value]'), beforeArticle);
+        await click('window.__ai.documentAskButton'); await choose('Replace draft');
+        await until(() => run('!window.__ai.previewBusy && window.__ai.previewValue!==null'), 'article preview');
         assert.equal(await run('window.__ai.shareContext.checked'), false); assert.equal(requests.length, 1);
 
         await input('window.__ai.context', `password=SECRET_FIXTURE_PASSWORD\nkey=${key}\nrssi=-67`);
@@ -167,6 +188,8 @@ async function electronFixture() {
         assert.equal(await run(`window.__ai.preview.textContent.includes(${JSON.stringify(key)})`), false);
         await click('window.__ai.shareContext'); await ask();
         assert.match(requests.at(-1).envelope.toolContext, /\[Redacted\]/); assert.ok(!requests.at(-1).envelope.toolContext.includes(key));
+        assert.equal(await run('window.__ai.assistantDirty()'), false, 'successful shared request establishes exact draft baseline');
+        assert.deepEqual(await blockers(), []);
         await input('window.__ai.context', 'changed context rssi=-71');
         assert.equal(await run('window.__ai.shareContext.checked'), false); assert.equal(await run('window.__ai.shareContext.disabled'), true);
 
@@ -190,17 +213,37 @@ async function electronFixture() {
         // Real note CRUD updates SQLite and vectors; renderer handles HTML as text.
         const requestCount = requests.length;
         await click('window.__ai.newDocumentButton');
+        assert.equal(await run('window.__ai.noteDirty()'), false, 'empty new editor is not a draft');
+        assert.equal((await blockers()).some(reason => /note/i.test(reason)), false);
+        await input('window.__ai.noteTitle', 'Failed note stays here');
+        await input('window.__ai.noteSource', 'not-an-https-url'); await input('window.__ai.noteContent', 'Uncommitted local fixture content');
+        assert.equal(await run('window.__ai.noteDirty()'), true); assert.match((await blockers()).join(' '), /unsaved knowledge note/);
+        await click('window.__ai.noteSaveButton'); await until(() => run('!window.__ai.libraryBusy'), 'rejected note save');
+        assert.equal(await run('window.__ai.noteContent.value'), 'Uncommitted local fixture content');
+        assert.equal(await run('window.__ai.noteDirty()'), true);
+        assert.equal((await instance.knowledge.status()).documents, baselineStatus.documents, 'failed note was not persisted');
+        await click('window.__ai.noteCancelButton'); await choose('Cancel');
+        assert.equal(await run('window.__ai.noteDirty()'), true);
+        await click('window.__ai.newDocumentButton'); await choose('Cancel');
+        assert.equal(await run('window.__ai.noteTitle.value'), 'Failed note stays here', 'opening another note cannot silently replace a draft');
+        await click('window.__ai.noteCancelButton'); await choose('Discard changes');
+        assert.equal(await run('window.__ai.noteDirty()'), false);
+        await click('window.__ai.newDocumentButton');
         await input('window.__ai.noteTitle', 'Fixture operational explanation'); await input('window.__ai.noteVendor', 'Fixture vendor');
         await input('window.__ai.noteSource', 'https://example.invalid/documentation');
         await input('window.__ai.noteContent', `Fixture RSSI reference. ${malicious}`); await click('window.__ai.noteSaveButton');
         await until(() => run('!window.__ai.libraryBusy && window.__ai.currentDocument?.builtin===false'), 'saved custom note');
         const noteId = await run('window.__ai.currentDocument.id');
+        assert.equal(await run('window.__ai.noteDirty()'), false, 'successful note save clears its draft baseline');
         assert.equal((await instance.knowledge.get(noteId)).title, 'Fixture operational explanation');
         assert.equal(await run('window.__ai.documentContent.querySelector("img")'), null);
         await input('window.__ai.librarySearch', 'Fixture');
         try { await until(() => run('window.__ai.libraryList.querySelectorAll("button").length===1'), 'offline note filtering'); }
         catch (error) { throw new Error(error.message + '\n' + JSON.stringify(await run('({query:window.__ai.librarySearch.value,status:window.__ai.libraryStatus.textContent,list:window.__ai.libraryList.textContent,title:window.__ai.currentDocument?.title})'))); }
-        await click('window.__ai.documentEditButton'); await input('window.__ai.noteTitle', 'Fixture operational explanation updated');
+        await click('window.__ai.documentEditButton');
+        assert.equal(await run('window.__ai.noteDirty()'), false, 'opening saved note does not create a draft');
+        assert.equal((await blockers()).some(reason => /note/i.test(reason)), false);
+        await input('window.__ai.noteTitle', 'Fixture operational explanation updated');
         await click('window.__ai.noteSaveButton'); await until(() => run('!window.__ai.libraryBusy'), 'edited note');
         assert.match((await instance.knowledge.get(noteId)).title, /updated$/);
         await click('window.__ai.documentRemoveButton');
@@ -212,6 +255,45 @@ async function electronFixture() {
         await until(() => run('!window.__ai.libraryBusy'), 'local vector rebuild');
         assert.equal((await instance.knowledge.status()).documents, baselineStatus.documents);
         assert.equal(requests.length, requestCount, 'library actions must not contact an AI provider');
+
+        // Prepared source must reach the main redactor whole, even across the old
+        // 24k renderer boundary. Rejections retain the complete local draft.
+        const boundaryContext = 'Fixture source '.padEnd(23980, '.') + key + '\n' + 'readable remainder '.repeat(500);
+        await run(`window.__draftAi=window.__app.openTool('ai',{question:'q'.repeat(8001),context:${JSON.stringify(boundaryContext)}});void 0;`); await ready('__draftAi');
+        assert.equal(await run('window.__draftAi.question.value.length'), 8001);
+        assert.equal(await run('window.__draftAi.context.value.length'), boundaryContext.length);
+        await click('window.__draftAi.askButton'); assert.equal(requests.length, requestCount, 'oversized question is rejected without a provider call');
+        assert.equal(await run('window.__draftAi.question.value.length'), 8001);
+        await click('window.__draftAi.previewButton'); await until(() => run('!window.__draftAi.previewBusy'), 'whole-source preview');
+        assert.equal(previewSources.at(-1), boundaryContext);
+        const safeBoundary = await run('window.__draftAi.context.value');
+        assert.ok(safeBoundary.length <= 24000); assert.ok(!safeBoundary.includes(key.slice(0, 20))); assert.match(safeBoundary, /truncat|partial/i);
+        const tooLarge = 'x'.repeat(256 * 1024 + 1);
+        await input('window.__draftAi.context', tooLarge); await click('window.__draftAi.previewButton');
+        await until(() => run('!window.__draftAi.previewBusy'), 'oversized context rejection');
+        assert.equal(await run('window.__draftAi.context.value.length'), tooLarge.length); assert.equal(await run('window.__draftAi.previewValue'), null);
+        assert.equal(await run('window.__draftAi.shareContext.checked'), false); assert.equal(requests.length, requestCount);
+        await close('__draftAi', 'Cancel');
+        assert.equal(await run('window.__app.tabs.includes(window.__draftAi)'), true);
+        assert.equal(await run('window.__draftAi.context.value.length'), tooLarge.length);
+        await close('__draftAi', 'Discard drafts and close');
+        assert.equal(await run('window.__app.tabs.includes(window.__draftAi)'), false);
+
+        const longArticle = 'Reference title\n\n' + boundaryContext;
+        await run(`window.__draftAi=window.__app.openTool('ai');void 0;`); await ready('__draftAi');
+        await run(`window.__draftAi.currentDocument={id:'fixture-long',title:'Reference title',content:${JSON.stringify(boundaryContext)}};window.__draftAi.updateControls();void 0;`);
+        await click('window.__draftAi.documentAskButton'); await until(() => run('!window.__draftAi.previewBusy'), 'whole article preview');
+        assert.equal(previewSources.at(-1), longArticle);
+        assert.ok((await run('window.__draftAi.context.value')).length <= 24000);
+        assert.equal(await run(`window.__draftAi.context.value.includes(${JSON.stringify(key.slice(0, 20))})`), false);
+        const preparedArticle = await run('[window.__draftAi.question.value,window.__draftAi.context.value]');
+        await run(`window.__draftAi.currentDocument={id:'fixture-oversize',title:'Rejected article',content:${JSON.stringify(tooLarge)}};window.__draftAi.updateControls();void 0;`);
+        await click('window.__draftAi.documentAskButton'); await choose('Replace draft');
+        await until(() => run('!window.__draftAi.previewBusy'), 'rejected article preparation');
+        assert.deepEqual(await run('[window.__draftAi.question.value,window.__draftAi.context.value]'), preparedArticle);
+        assert.equal(requests.length, requestCount, 'preparing/rejecting source never starts a request');
+        await close('__draftAi', 'Discard drafts and close');
+        await run('window.__app.activate(window.__ai);void 0;'); await ready();
 
         // The real tool result button offers a preview; it never starts a job.
         await run('window.__wifi=window.__app.openTool("wifi");window.__wifi.report={kind:"wifi",findings:[{title:"Fixture weak signal",rssi:-75}],password:"DO_NOT_SHARE"};void 0;');
@@ -269,10 +351,16 @@ async function electronFixture() {
         }
 
         // Cancellation, tab disposal and configuration replacement stop transport.
+        failNext = true; await input('window.__ai.question', 'A failed request keeps this new question');
+        await ask(); assert.equal(await run('window.__ai.assistantDirty()'), true);
+        assert.equal(await run('window.__ai.question.value'), 'A failed request keeps this new question');
         delay = true; await click('window.__ai.askButton'); await until(() => pending.size === 1, 'pending AI request');
         await click('window.__ai.cancelButton'); await idle(); assert.equal(cancelled, 1); assert.equal(await run('window.__app.jobs.size'), 0);
+        assert.equal(await run('window.__ai.assistantDirty()'), true, 'cancelled request does not consume its draft');
         await click('window.__ai.askButton'); await until(() => pending.size === 1, 'AI request before closing tab');
         await click('window.__app.tabbar.children[window.__app.tabs.indexOf(window.__ai)].querySelector("button.close")');
+        await choose('Cancel'); assert.equal(pending.size, 1); assert.equal(await run('window.__app.tabs.includes(window.__ai)'), true);
+        await close('__ai', 'Cancel request and close');
         await until(() => pending.size === 0, 'AI tab disposal cancels transport'); assert.equal(cancelled, 2); assert.equal(await run('window.__app.jobs.size'), 0);
         await run('window.__ai=window.__app.openTool("ai");void 0;'); await ready();
         await input('window.__ai.question', 'Explain RSSI'); await click('window.__ai.askButton'); await until(() => pending.size === 1, 'AI request before configuration replacement');
@@ -297,7 +385,7 @@ async function electronFixture() {
         assert.match(await run('window.__otherAi.libraryStatus.textContent'), /Synthetic index failure/);
         assert.equal(await run('window.__otherAi.libraryStatus.textContent.includes("Local TF-IDF vector index")'), false);
         instance.knowledge.status = realStatus;
-        console.log('AI_UI_PASS: five real provider adapters with synthetic transport, encrypted keys, offline SQLite/vector CRUD, explicit redacted context, escaped answers, citation reading, Explain with AI, 900x560 layout, revision refresh and cancellation');
+        console.log('AI_UI_PASS: five real provider adapters with synthetic transport, encrypted keys, offline SQLite/vector CRUD, full-source redaction, draft close/update protection, failed/cancelled work retention, escaped answers, citation reading, Explain with AI, 900x560 layout, revision refresh and cancellation');
         finish(0);
       } catch (error) { finish(1, error); }
     });

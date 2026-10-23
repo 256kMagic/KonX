@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.22.1 — 2026-10-23
+
+- Redact complete bounded AI context before shortening it; disclose omitted fields, records, and excerpts instead of silently losing evidence.
+- Protect unsent questions, context edits, and knowledge-note drafts when closing AI or preparing an update. Cancelled and failed actions preserve editable input.
+- Keep existing provider destinations, encrypted credentials, explicit sharing, and offline library behavior.
+
+See the [AI guide](docs/AI_KNOWLEDGE_GUIDE.md) and [release notes](docs/releases/0.22.1.md).
+
 ## 0.22.0 — 2026-10-23
 
 - Add saved Guided Change Validation workflows from plan and baseline through manual maintenance, after evidence, and explicit review.

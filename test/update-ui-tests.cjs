@@ -172,10 +172,10 @@ async function fixture() {
       assert.equal(await run('[...document.querySelectorAll(".update-actions button")].find(b=>b.textContent==="Try again").classList.contains("hidden")'), false);
       await close(run); win.destroy();
     }
-    // New notes have no editingId. Pending writes and active sends also block.
+    // Owners report draft/write state; the updater must not infer it from DOM visibility.
     {
       const { win, run, c } = await open(state('ready'));
-      await run(`const note=document.createElement('div');note.textContent='Unsaved note text';fixture.note=note;fixture.app.tabs=[{toolKind:'ai',editingId:null,noteEditor:note,libraryBusy:true},${cleanNotepad}];fixture.app.tabs[1].sending={};fixture.app.tabs[1].docs[0].savePending=Promise.resolve();void fixture.updateKonx(fixture.app);`);
+      await run(`const note=document.createElement('div');note.textContent='Unsaved note text';fixture.note=note;fixture.app.tabs=[{toolKind:'ai',updateBlockers:()=>['Save or discard the Knowledge note draft.','Wait for the Knowledge library operation to finish.']},${cleanNotepad}];fixture.app.tabs[1].sending={};fixture.app.tabs[1].docs[0].savePending=Promise.resolve();void fixture.updateKonx(fixture.app);`);
       await until(() => run('document.querySelector(".update-problems").textContent.includes("Knowledge note")'), 'new note blocker');
       const message = await run('document.querySelector(".update-problems").textContent');
       assert.match(message, /library operation/); assert.match(message, /Stop sending/); assert.match(message, /finish saving/);

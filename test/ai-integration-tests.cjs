@@ -71,7 +71,35 @@ async function runAiIntegrationTests(test) {
     const capture = toolContext({ title: 'Capture', kind: 'capture', packets: [{ data: 'DO_NOT_COLLECT' }], statsEl: { innerText: '10 packets' }, sideBody: { innerText: 'Retransmissions observed' } });
     assert.match(capture, /Retransmissions/); assert.ok(!capture.includes('DO_NOT_COLLECT'));
     const long = toolContext({ title: 'DNS', el: { innerText: 'x'.repeat(50000), password: { value: 'never' } } });
-    assert.ok(long.length < 24000); assert.match(long, /Context truncated/);
+    assert.ok(long.length > 24000 && Buffer.byteLength(long) < 256 * 1024, 'Keep the complete bounded source for main-process redaction');
+    assert.ok(long.endsWith('x'.repeat(50000)));
+  });
+
+  await test('explain-tool context reports whole-field, label, array, property, node, depth and serialization omissions without slicing raw evidence', async () => {
+    const { toolContext, MAX_CONTEXT_INPUT_BYTES } = await import(require('node:url').pathToFileURL(path.join(__dirname, '../src/renderer/js/tool-context.mjs')).href);
+    const whole = 'UNIQUE_WHOLE_FIELD_' + 'x'.repeat(64 * 1024), title = 'UNIQUE_WHOLE_LABEL_' + 'x'.repeat(4096);
+    const field = toolContext({ title, report: { oversized: whole, retained: 'Retained observation', multibyte: '測'.repeat(22000) } });
+    assert.match(field, /Coverage: partial/); assert.match(field, /whole field exceeds 64 KiB/); assert.match(field, /whole tool label/);
+    assert.ok(!field.includes('UNIQUE_WHOLE')); assert.ok(!field.includes('測')); assert.match(field, /Retained observation/);
+    const labels = toolContext({ title: 'Labels', report: { ['x'.repeat(513)]: 'UNEXAMINED_LABEL_VALUE', safe: true } });
+    assert.match(labels, /whole property label/); assert.ok(!labels.includes('UNEXAMINED_LABEL_VALUE'));
+    const array = toolContext({ title: 'Array', report: { rows: Array.from({ length: 101 }, (_, i) => 'row-' + i) } });
+    assert.match(array, /array limit/); assert.ok(array.includes('row-99')); assert.ok(!array.includes('row-100'));
+    const properties = toolContext({ title: 'Properties', report: Object.fromEntries(Array.from({ length: 101 }, (_, i) => ['entry' + i, i])) });
+    assert.match(properties, /property limit/); assert.ok(!properties.includes('entry100'));
+    const nodes = toolContext({ title: 'Nodes', report: Array.from({ length: 100 }, () => Array.from({ length: 100 }, () => true)) });
+    assert.match(nodes, /node limit/);
+    let deep = { value: 'UNEXAMINED_DEEP_VALUE' }; for (let i = 0; i < 10; i++) deep = { child: deep };
+    const depth = toolContext({ title: 'Depth', report: deep }); assert.match(depth, /depth limit/); assert.ok(!depth.includes('UNEXAMINED_DEEP_VALUE'));
+    const cyclic = {}; cyclic.self = cyclic; assert.match(toolContext({ title: 'Cycle', report: cyclic }), /cyclic value/);
+    const aggregate = toolContext({ title: 'Aggregate', report: Array.from({ length: 100 }, (_, i) => ({ value: String(i).padStart(3, '0') + 'x'.repeat(60000) })) });
+    assert.match(aggregate, /serialized output limit/); assert.ok(Buffer.byteLength(aggregate) <= MAX_CONTEXT_INPUT_BYTES);
+    const expanded = toolContext({ title: 'Escaping', report: { value: '\u0001'.repeat(64000), retained: true } });
+    assert.match(expanded, /serialized output limit/); assert.ok(Buffer.byteLength(expanded) <= MAX_CONTEXT_INPUT_BYTES);
+    const device = toolContext({ title: 'Device', toolKind: 'device', report: { devices: [{ host: '192.0.2.1', commands: [{ output: 'NEVER_INCLUDE_TRANSCRIPT' }] }] } });
+    assert.match(device, /192\.0\.2\.1/); assert.ok(!device.includes('NEVER_INCLUDE_TRANSCRIPT')); assert.match(device, /device transcripts excluded/);
+    const summary = toolContext({ title: 'Events', toolKind: 'events', report: { data: 'NEVER_INCLUDE_FULL_REPORT' }, aiContext: { kind: 'counts', received: 4 } });
+    assert.match(summary, /counts/); assert.ok(!summary.includes('NEVER_INCLUDE_FULL_REPORT'));
   });
 }
 module.exports = { runAiIntegrationTests };

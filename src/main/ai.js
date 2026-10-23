@@ -18,6 +18,9 @@ const PROVIDERS = Object.freeze([
 const TIMEOUT = 60000;
 const MAX_BODY = 2 * 1024 * 1024;
 const MAX_ANSWER = 50000;
+const MAX_CONTEXT_INPUT_BYTES = 256 * 1024;
+const MAX_CONTEXT_PREVIEW = 24000;
+const CONTEXT_LIMIT_NOTICE = '\n\n[Context truncated after redaction to fit 24,000 characters. Coverage is partial; review the complete source before drawing conclusions.]';
 const MODEL = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,100}$/;
 const NAMESPACED_MODEL = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,100}(?:\/[A-Za-z0-9][A-Za-z0-9._:-]{0,100})?$/;
 const KEY = /^[\x21-\x7e]{8,1024}$/;
@@ -164,14 +167,18 @@ class AIClient {
   }
 
   preview(context) {
-    if (typeof context !== 'string' || context.length > 24000) fail('Tool context must be text of up to 24,000 characters');
+    if (typeof context !== 'string' || context.length > MAX_CONTEXT_INPUT_BYTES || Buffer.byteLength(context, 'utf8') > MAX_CONTEXT_INPUT_BYTES) fail('Tool context exceeds the 256 KiB UTF-8 preview input limit. Select a smaller complete source; no partial input was accepted');
     if (this.storageError) fail(this.storageError);
     const secrets = [];
     for (const p of PROVIDERS) if (this.config.providers[p.id].keyEnc) {
       try { secrets.push(this._key(p.id)); }
       catch { fail('Saved AI keys could not be checked for redaction. Re-enter or forget them before sharing tool context'); }
     }
-    return { context: redactText(context, secrets) };
+    const redacted = redactText(context, secrets);
+    if (redacted.length <= MAX_CONTEXT_PREVIEW) return { context: redacted };
+    let end = MAX_CONTEXT_PREVIEW - CONTEXT_LIMIT_NOTICE.length;
+    if (/[\uDC00-\uDFFF]/.test(redacted[end])) end--;
+    return { context: redacted.slice(0, end) + CONTEXT_LIMIT_NOTICE };
   }
 
   configure(input = {}) {

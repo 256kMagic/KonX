@@ -17,12 +17,6 @@ export function updateBlockers(app) {
         else if (tab.isDirty(doc)) reasons.push(`Save “${doc.title || 'Notepad document'}” in Notepad.`);
       }
     }
-    if (tab.toolKind === 'ai') {
-      if (tab.libraryBusy) reasons.push('Wait for the Knowledge library operation to finish.');
-      // A new note has no editingId. Keep every open editor until the user
-      // explicitly saves or cancels it; no note snapshot is discarded here.
-      if (tab.noteEditor && !tab.noteEditor.classList.contains('hidden')) reasons.push('Save or cancel the open Knowledge note.');
-    }
   }
   return [...new Set(reasons)];
 }

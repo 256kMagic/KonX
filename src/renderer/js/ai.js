@@ -1,4 +1,4 @@
-import { h, icon, api, toast, errMsg, confirmDialog } from './ui.js';
+import { h, icon, api, modal, toast, errMsg } from './ui.js';
 
 const string = (value) => typeof value === 'string' ? value : '';
 const field = (label, control) => h('label.field', h('span', label), control);
@@ -9,6 +9,7 @@ export class AITab {
     this.id = 'ai-' + Math.random().toString(36).slice(2); this.state = 'idle'; this.jobId = null; this.seq = 0; this.disposed = false;
     this.config = null; this.configBusy = true; this.libraryBusy = false; this.librarySeq = 0; this.articleSeq = 0; this.previewSeq = 0;
     this.report = null; this.currentDocument = null; this.previewValue = null;
+    this.sentDraft = { question: '', context: '' }; this.pendingDraft = null; this.noteBaseline = null; this.prompting = false;
     this.provider = h('select.input', { 'aria-label': 'AI provider', onchange: () => this.providerChanged() });
     this.model = h('input.input', { maxlength: 160, spellcheck: false, 'aria-label': 'AI model', oninput: () => this.updateControls() });
     this.baseUrl = h('input.input', { maxlength: 2048, type: 'url', placeholder: 'https://your-api.example/v1', spellcheck: false, 'aria-label': 'Custom AI API base URL', oninput: () => this.updateControls() });
@@ -22,10 +23,12 @@ export class AITab {
       h('div.ai-form', field('Provider', this.provider), field('Model', this.model), this.baseUrlField),
       h('div.ai-form', field('API key', this.key), this.saveButton, this.forgetButton), this.keyStatus, this.providerHelp,
       h('p.hint', 'Keys are encrypted for this Windows user. Saved keys are never returned to this tab. Saving settings does not contact the provider.'));
-    this.question = h('textarea.input.ai-question', { maxlength: 8000, rows: 3, placeholder: 'Ask about a KonX tool, a vendor, or a finding…', 'aria-label': 'Question for AI', oninput: () => this.updateControls() });
-    this.question.value = string(question).slice(0, 8000);
-    this.context = h('textarea.input.ai-context', { maxlength: 24000, rows: 5, spellcheck: false, placeholder: 'Paste optional tool output or notes. Preview before sharing.', 'aria-label': 'Optional AI context', oninput: () => this.contextChanged() });
-    this.context.value = string(context).slice(0, 24000);
+    this.question = h('textarea.input.ai-question', { rows: 3, placeholder: 'Ask about a KonX tool, a vendor, or a finding…', 'aria-label': 'Question for AI', oninput: () => this.draftChanged() });
+    this.question.value = string(question);
+    // Main redacts complete source before bounding the preview. An input limit
+    // here could split a secret before the redactor sees it.
+    this.context = h('textarea.input.ai-context', { rows: 5, spellcheck: false, placeholder: 'Paste optional tool output or notes. Preview before sharing.', 'aria-label': 'Optional AI context', oninput: () => this.contextChanged() });
+    this.context.value = string(context);
     this.contextLabel = h('p.hint', label ? `${string(label)} · prepared locally for your review.` : 'Context stays local until you preview it, select Send this context, and ask.');
     this.previewButton = h('button.btn.sm', { onclick: () => this.previewContext() }, icon('eye'), 'Preview context');
     this.shareContext = h('input', { type: 'checkbox', disabled: true, 'aria-label': 'Send this context', onchange: () => this.updateControls() });
@@ -58,6 +61,7 @@ export class AITab {
     this.noteVendor = h('input.input', { maxlength: 80, placeholder: 'Optional vendor or topic', 'aria-label': 'Knowledge note vendor' });
     this.noteSource = h('input.input', { type: 'url', maxlength: 2048, placeholder: 'https://… (optional)', 'aria-label': 'Knowledge note source URL' });
     this.noteContent = h('textarea.input', { maxlength: 32000, rows: 8, spellcheck: false, placeholder: 'Paste reference text or write a note. Do not include API keys or passwords.', 'aria-label': 'Knowledge note content' });
+    for (const input of [this.noteTitle, this.noteVendor, this.noteSource, this.noteContent]) input.addEventListener('input', () => this.draftChanged());
     this.noteSaveButton = h('button.btn.primary.sm', { onclick: () => this.saveDocument() }, icon('save'), 'Save local note');
     this.noteCancelButton = h('button.btn.sm', { onclick: () => this.closeEditor() }, 'Cancel editing');
     this.noteEditor = h('div.ai-note-editor.hidden', field('Title', this.noteTitle), field('Vendor or topic', this.noteVendor), field('Source URL', this.noteSource), field('Reference text', this.noteContent),
@@ -83,6 +87,23 @@ export class AITab {
   dirty() {
     return !this.config || this.provider.value !== this.config.provider || this.model.value.trim() !== this.config.model ||
       (this.provider.value === 'custom' && this.baseUrl.value.trim() !== string(this.config.baseUrl));
+  }
+
+  assistantDirty() {
+    return (!!this.question.value.trim() && this.question.value !== this.sentDraft.question) ||
+      (!!this.context.value.trim() && this.context.value !== this.sentDraft.context);
+  }
+  noteValues() { return JSON.stringify([this.editingId || null, this.noteTitle.value, this.noteVendor.value, this.noteSource.value, this.noteContent.value]); }
+  noteDirty() { return !this.noteEditor.classList.contains('hidden') && this.noteValues() !== this.noteBaseline; }
+  draftChanged() { this.updateControls(); this.app.updateStatus?.(this); }
+  async confirmDiscard(title, message, label = 'Discard changes') {
+    if (this.disposed || this.prompting) return false;
+    this.prompting = true; this.draftChanged();
+    try {
+      const result = await modal({ title, body: h('p', message), buttons: [{ label: 'Cancel', value: null }, { label, value: true, danger: true }],
+        onReady: control => { this.draftDialog = control; } });
+      return result === true && !this.disposed;
+    } finally { this.draftDialog = null; this.prompting = false; if (!this.disposed) this.draftChanged(); }
   }
 
   async loadConfig() {
@@ -115,11 +136,11 @@ export class AITab {
   }
 
   updateControls() {
-    const busy = this.configBusy || Boolean(this.jobId), ready = Boolean(this.config);
+    const busy = this.configBusy || Boolean(this.jobId) || this.prompting, ready = Boolean(this.config);
     for (const control of [this.provider, this.model, this.baseUrl, this.key, this.saveButton, this.forgetButton]) control.disabled = busy || !ready;
     this.forgetButton.disabled = busy || !ready || !(this.savedKey() || this.config?.warning);
-    this.askButton.disabled = busy || !ready || this.dirty() || !this.savedKey() || !this.question.value.trim();
-    this.question.disabled = Boolean(this.jobId); this.context.disabled = Boolean(this.jobId);
+    this.askButton.disabled = busy || this.previewBusy || !ready || this.dirty() || !this.savedKey() || !this.question.value.trim();
+    this.question.disabled = Boolean(this.jobId) || this.prompting; this.context.disabled = Boolean(this.jobId) || this.prompting;
     this.previewButton.disabled = busy || !this.context.value.trim() || this.previewBusy;
     this.shareContext.disabled = busy || this.previewBusy || this.previewValue === null || this.previewValue !== this.context.value;
     this.cancelButton.classList.toggle('hidden', !this.jobId); this.cancelButton.disabled = Boolean(this.cancelRequested);
@@ -131,7 +152,8 @@ export class AITab {
       if (this.config.warning) this.keyStatus.textContent += ' ' + this.config.warning;
       this.providerHelp.textContent = this.provider.value === 'nyquest' ? 'Nyquest: create a personal access token in app.nyquest.ai → Settings → API Keys. Requests use the Nyquest developer API.' : this.provider.value === 'custom' ? 'Custom uses an OpenAI-compatible Chat Completions endpoint. Enter its base URL and model ID; HTTPS is required except for loopback servers.' : '';
     }
-    for (const control of [this.noteTitle, this.noteVendor, this.noteSource, this.noteContent, this.noteSaveButton, this.noteCancelButton, this.newDocumentButton, this.rebuildButton, this.documentRemoveButton, this.documentEditButton]) control.disabled = this.libraryBusy;
+    for (const control of [this.noteTitle, this.noteVendor, this.noteSource, this.noteContent, this.noteSaveButton, this.noteCancelButton, this.newDocumentButton, this.rebuildButton, this.documentRemoveButton, this.documentEditButton]) control.disabled = this.libraryBusy || this.prompting;
+    this.documentAskButton.disabled = busy || this.previewBusy || !this.currentDocument;
   }
 
   async configure(forget) {
@@ -153,11 +175,11 @@ export class AITab {
 
   contextChanged() {
     this.previewSeq++; this.previewValue = null; this.shareContext.checked = false;
-    this.preview.textContent = 'Preview the current context before sharing.'; this.updateControls();
+    this.preview.textContent = 'Preview the current context before sharing.'; this.draftChanged();
   }
 
   async previewContext() {
-    if (this.disposed || this.jobId || this.previewBusy || !this.context.value.trim()) return;
+    if (this.disposed || this.jobId || this.prompting || this.previewBusy || !this.context.value.trim()) return;
     const input = this.context.value, seq = ++this.previewSeq;
     this.previewBusy = true; this.shareContext.checked = false; this.updateControls();
     try {
@@ -168,16 +190,17 @@ export class AITab {
       this.preview.textContent = result.context || 'No context remains after redaction.';
       this.status.textContent = 'Review the context above, then select Send this context if you want to include it.';
     } catch (error) { if (!this.disposed && seq === this.previewSeq) { this.previewValue = null; this.status.textContent = errMsg(error); toast(errMsg(error), 'err'); } }
-    finally { if (!this.disposed) { this.previewBusy = false; this.updateControls(); } }
+    finally { if (!this.disposed) { this.previewBusy = false; this.draftChanged(); } }
   }
 
   async start() {
-    if (this.disposed || this.jobId || this.configBusy) return;
+    if (this.disposed || this.jobId || this.configBusy || this.previewBusy || this.prompting) return;
     if (this.dirty() || !this.savedKey()) return toast('Save an API key and connection settings before asking.', 'err');
     const question = this.question.value.trim(), shareContext = this.shareContext.checked;
     if (!question || question.length > 8000) return toast('Enter a question up to 8,000 characters.', 'err');
     if (shareContext && (this.previewValue === null || this.previewValue !== this.context.value)) return toast('Preview the context again before sharing.', 'err');
     const params = { revision: this.config.revision, question, context: shareContext ? this.previewValue : '', shareContext };
+    this.pendingDraft = { question: this.question.value, context: this.context.value, shareContext };
     const id = this.id + ':' + ++this.seq;
     this.cancelRequested = false; this.reportError = null; this.reportReceived = false;
     this.jobId = id; this.app.registerJob(id, this); this.state = 'running'; this.updateControls(); this.app.tabStateChanged(this);
@@ -203,9 +226,15 @@ export class AITab {
       } catch (error) { this.reportError = errMsg(error); }
     }
     if (type === 'done' || type === 'error') {
+      if (type === 'done' && !data.stopped && !this.cancelRequested && this.reportReceived && !this.reportError && this.pendingDraft) {
+        this.sentDraft.question = this.pendingDraft.question;
+        if (this.pendingDraft.shareContext) this.sentDraft.context = this.pendingDraft.context;
+      }
+      this.pendingDraft = null;
       this.app.unregisterJob(this.jobId); this.jobId = null; this.state = 'idle'; this.updateControls(); this.app.tabStateChanged(this);
       this.status.textContent = this.cancelRequested || data.stopped ? 'AI request cancelled. Previous answers remain visible.' : type === 'error' ? string(data.message) || 'AI request failed.' : this.reportError || (this.reportReceived ? 'Answer complete. Review the references and verify suggested actions.' : 'No new answer was produced.');
       if (type === 'error' && !this.cancelRequested) toast(string(data.message) || 'AI request failed.', 'err');
+      this.app.updateStatus?.(this);
     }
   }
 
@@ -251,16 +280,29 @@ export class AITab {
       this.documentContent.textContent = doc.content; this.documentAskButton.disabled = false;
       this.documentSourceButton.classList.toggle('hidden', !doc.sourceUrl);
       this.documentEditButton.classList.toggle('hidden', doc.builtin !== false); this.documentRemoveButton.classList.toggle('hidden', doc.builtin !== false);
+      this.updateControls();
       this.article.scrollIntoView({ block: 'nearest' });
     } catch (error) { if (!this.disposed && seq === this.articleSeq) toast(errMsg(error), 'err'); }
   }
 
-  askAboutDocument() {
-    if (!this.currentDocument || this.jobId) return;
-    this.question.value = `Explain “${this.currentDocument.title}” and how I can use this information in KonX.`.slice(0, 8000);
-    this.context.value = `${this.currentDocument.title}\n\n${this.currentDocument.content}`.slice(0, 24000);
-    this.contextLabel.textContent = 'Local article prepared for your review. Preview it before choosing whether to send this context.';
-    this.contextDetails.open = true; this.contextChanged(); this.question.focus();
+  async askAboutDocument() {
+    if (this.disposed || !this.currentDocument || this.jobId || this.prompting || this.previewBusy) return;
+    const doc = this.currentDocument;
+    if (this.assistantDirty() && !await this.confirmDiscard('Replace AI draft', 'Replace the unsent question or context with this article?', 'Replace draft')) return;
+    if (this.disposed || this.currentDocument !== doc) return;
+    const before = [this.question.value, this.context.value], seq = ++this.previewSeq;
+    this.previewBusy = true; this.updateControls();
+    try {
+      const result = await api.invoke('tools:aiPreview', { context: `${doc.title}\n\n${doc.content}` });
+      if (this.disposed || seq !== this.previewSeq || this.currentDocument !== doc || this.question.value !== before[0] || this.context.value !== before[1]) return;
+      if (typeof result?.context !== 'string' || result.context.length > 24000) throw new Error('Invalid context preview.');
+      this.question.value = `Explain “${doc.title}” and how I can use this information in KonX.`;
+      this.context.value = result.context; this.previewValue = result.context; this.preview.textContent = result.context || 'No context remains after redaction.';
+      this.shareContext.checked = false;
+      this.contextLabel.textContent = 'Local article prepared for your review. Choose whether to send this context.';
+      this.contextDetails.open = true; this.question.focus();
+    } catch (error) { if (!this.disposed && seq === this.previewSeq) { this.status.textContent = errMsg(error); toast(errMsg(error), 'err'); } }
+    finally { if (!this.disposed) { this.previewBusy = false; this.draftChanged(); } }
   }
 
   async openDocumentSource() {
@@ -269,20 +311,28 @@ export class AITab {
     catch (error) { if (!this.disposed) toast(errMsg(error), 'err'); }
   }
 
-  editDocument(doc) {
-    if (this.libraryBusy || doc?.builtin !== false && doc) return;
+  async editDocument(doc) {
+    if (this.disposed || this.libraryBusy || this.prompting || doc?.builtin !== false && doc) return;
+    if (this.noteDirty() && !await this.confirmDiscard('Unsaved knowledge note', 'Discard the current note edits before opening another note?')) return;
+    if (this.disposed) return;
     this.editingId = doc?.id || null; this.noteTitle.value = string(doc?.title); this.noteVendor.value = string(doc?.vendor);
     this.noteSource.value = string(doc?.sourceUrl); this.noteContent.value = string(doc?.content);
-    this.noteEditor.classList.remove('hidden'); this.noteTitle.focus();
+    this.noteBaseline = this.noteValues(); this.noteEditor.classList.remove('hidden'); this.noteTitle.focus(); this.draftChanged();
   }
 
-  closeEditor() {
+  resetEditor() {
     this.editingId = null; this.noteTitle.value = ''; this.noteVendor.value = ''; this.noteSource.value = ''; this.noteContent.value = '';
-    this.noteEditor.classList.add('hidden');
+    this.noteBaseline = null; this.noteEditor.classList.add('hidden'); this.draftChanged();
+  }
+
+  async closeEditor() {
+    if (this.disposed || this.libraryBusy || this.prompting) return;
+    if (this.noteDirty() && !await this.confirmDiscard('Unsaved knowledge note', 'Discard the unsaved knowledge note edits?')) return;
+    if (!this.disposed) this.resetEditor();
   }
 
   async saveDocument() {
-    if (this.disposed || this.libraryBusy) return;
+    if (this.disposed || this.libraryBusy || this.prompting) return;
     if (!this.noteTitle.value.trim() || !this.noteContent.value.trim()) return toast('Enter a title and reference text.', 'err');
     this.libraryBusy = true; this.updateControls();
     try {
@@ -290,7 +340,7 @@ export class AITab {
       if (this.editingId) params.id = this.editingId;
       const doc = await api.invoke('tools:knowledgeSave', params);
       if (this.disposed) return;
-      this.closeEditor(); await this.loadLibrary();
+      this.resetEditor(); await this.loadLibrary();
       if (doc?.id) await this.readDocument(doc.id);
       toast('Saved local knowledge note.', 'ok');
     } catch (error) { if (!this.disposed) toast(errMsg(error), 'err'); }
@@ -300,7 +350,7 @@ export class AITab {
   async removeDocument() {
     const doc = this.currentDocument;
     if (this.disposed || this.libraryBusy || !doc || doc.builtin !== false) return;
-    if (!await confirmDialog(`Remove “${doc.title}” from your local knowledge library?`, { title: 'Remove note', okLabel: 'Remove note', danger: true })) return;
+    if (!await this.confirmDiscard('Remove note', `Remove “${doc.title}” from your local knowledge library?${this.editingId === doc.id && this.noteDirty() ? ' Unsaved edits to this note will also be discarded.' : ''}`, 'Remove note')) return;
     if (this.disposed || this.libraryBusy) return;
     this.libraryBusy = true; this.updateControls();
     try {
@@ -311,26 +361,38 @@ export class AITab {
         this.documentContent.textContent = 'Choose an article from the library.'; this.documentAskButton.disabled = true;
         for (const button of [this.documentSourceButton, this.documentEditButton, this.documentRemoveButton]) button.classList.add('hidden');
       }
-      if (this.editingId === doc.id) this.closeEditor();
+      if (this.editingId === doc.id) this.resetEditor();
       await this.loadLibrary();
     } catch (error) { if (!this.disposed) toast(errMsg(error), 'err'); }
     finally { if (!this.disposed) { this.libraryBusy = false; this.updateControls(); } }
   }
 
   async rebuildLibrary() {
-    if (this.disposed || this.libraryBusy) return;
+    if (this.disposed || this.libraryBusy || this.prompting) return;
     this.libraryBusy = true; this.libraryStatus.textContent = 'Rebuilding the local vector index…'; this.updateControls();
     try { await api.invoke('tools:knowledgeRebuild'); if (!this.disposed) await this.loadLibrary(); }
     catch (error) { if (!this.disposed) this.libraryStatus.textContent = errMsg(error); }
     finally { if (!this.disposed) { this.libraryBusy = false; this.updateControls(); } }
   }
 
+  updateBlockers() {
+    return [...(this.jobId ? ['Wait for the AI request to finish or cancel it.'] : []),
+      ...(this.configBusy || this.libraryBusy || this.previewBusy || this.prompting ? ['Wait for the AI or Knowledge operation to finish.'] : []),
+      ...(this.assistantDirty() ? ['Send or discard the unsent AI question and context.'] : []),
+      ...(this.noteDirty() ? ['Save or discard the unsaved knowledge note.'] : [])];
+  }
+  async requestClose() {
+    if (this.configBusy || this.libraryBusy || this.previewBusy || this.prompting) { toast('Wait for the AI or Knowledge operation to finish.', 'err'); return false; }
+    if (!this.jobId && !this.assistantDirty() && !this.noteDirty()) return true;
+    return this.confirmDiscard('Close AI & Knowledge', `${this.jobId ? 'Cancel the active AI request and close this tab? ' : 'Close this tab? '}Unsent questions, context and unsaved knowledge note edits will be discarded.`, this.jobId ? 'Cancel request and close' : 'Discard drafts and close');
+  }
   show() { this.active = true; if (this.config && !this.jobId && !this.configBusy) this.loadConfig(); this.loadLibrary(); }
   hide() { this.active = false; }
   focus() { this.question.focus(); }
   statusSegments() { return [{ icon: 'insight', text: 'AI & Knowledge' }, { text: this.state === 'running' ? 'Requesting…' : 'Ready' }]; }
   dispose() {
     this.disposed = true; this.key.value = ''; this.context.value = ''; this.previewValue = null; this.preview.textContent = ''; this.noteContent.value = '';
+    this.draftDialog?.close(null); this.pendingDraft = null;
     clearTimeout(this.searchTimer); this.previewSeq++; this.librarySeq++; this.articleSeq++;
     if (this.jobId) { this.stop(); this.app.unregisterJob(this.jobId); this.jobId = null; }
   }

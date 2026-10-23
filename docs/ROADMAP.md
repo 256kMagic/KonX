@@ -44,6 +44,21 @@ The next approved sequence ships each phase with its own tested release, notes, 
 
 Saved workspaces must not connect, collect, or run commands merely by opening. Imports exclude credentials. Topology distinguishes observed, stale, and unresolved links. Event listeners start only on request and retain bounded history. Change validation coordinates reviewed checks around manual maintenance; it does not silently change device configuration.
 
+## Contextual copilot phases
+
+Each phase is tested and published separately with updated release notes and user guides. The assistant stays beside the active tool; evidence attachments and action targets remain explicit when focus changes.
+
+| Version | Deliverable | Status |
+| --- | --- | --- |
+| 0.22.1 | Complete-context redaction, omission notices, and AI draft protection | Complete; 983 tests and packaged checks passed |
+| 0.23.0 | Dockable copilot, conversations, complete request review, provider setup, and basic network context | Planned |
+| 0.24.0 | Terminal, sessions, serial, forwarding, logging, SFTP, and editor assistance | Planned |
+| 0.25.0 | Packet streams, SIP/RTP, capture comparison, security, Wi-Fi, and Mist assistance | Planned |
+| 0.26.0 | Device, topology, events, sites, incidents, runbooks, and change-validation investigations | Planned |
+| 0.27.0 | Reviewed diagnostic actions and editor patches with retained outcomes | Planned |
+
+Opening a prepared tool is separate from starting work. Proposed actions show their target and inputs before execution. Collection, commands, file changes, and sharing remain explicit; observations, uncertainty, and evidence provenance stay visible.
+
 ## Collection scope
 
 Device collection starts with connected Cisco IOS/IOS-XE SSH sessions and fixed read-only commands in a separate channel. Trace results show candidates and unresolved links when evidence is incomplete. Imported reports and a synthetic demo support offline use.

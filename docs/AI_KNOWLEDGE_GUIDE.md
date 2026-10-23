@@ -1,6 +1,6 @@
 # AI & Knowledge
 
-KonX 0.4.0 includes an AI assistant and an offline reference library. Open **AI & Knowledge** from Home, the sidebar, or Network Tools. The assistant explains findings, terminology, and possible next steps. It does not run commands or tools, change device settings, or connect to sessions on your behalf.
+This guide covers AI & Knowledge in KonX 0.22.1. Open **AI & Knowledge** from Home, the sidebar, or Network Tools. The assistant explains findings, terminology, and possible next steps. It does not run commands or tools, change device settings, or connect to sessions on your behalf.
 
 ## Connect a provider
 
@@ -31,6 +31,10 @@ Nyquest personal API keys carry the account's privileges, as described in its [P
 Recognized credentials and saved AI keys are redacted from previews, requests, reference excerpts, and answers. Redaction is best effort. Provider responses and library articles are displayed as text. Instructions embedded in reports or reference notes are treated as evidence rather than instructions to run commands. AI recommendations still need review against the actual device model, software version, permissions, and evidence.
 
 From 0.18.1, recognized credentials are removed before articles are split for indexing. AI references are selected from sanitized full articles around matching query terms, so a relevant passage beyond the first 900 characters remains eligible. Answer redaction also runs before the display-length limit. Existing custom notes retain their original text; upgrading rebuilds the derived search index.
+
+From 0.22.1, tool context also reaches redaction before excerpt shortening. The preparation boundary accepts bounded complete text; oversized fields are omitted whole. Coverage notices identify omitted fields, records, or text, so a short preview does not imply that the whole tool result was examined. Review the original result when the preview reports an omission.
+
+Unsent questions, context edits, and unfinished knowledge notes are protected as drafts. Cancelling an AI tab close keeps them; discarding closes the tab without saving the draft. Failed requests or note saves retain editable input for retry. **Update KonX** lists unfinished AI input as a blocker. Drafts remain in memory and are not restored after KonX exits; save or copy needed input before quitting the application.
 
 **Cancel** stops the current request; closing its tab or quitting KonX cancels its work. Changing AI settings cancels older AI jobs, and stale tabs must refresh their settings. Requests have a 60-second deadline and a 2 MiB response limit. KonX does not automatically retry a failed or interrupted generation. Responses may be incomplete if the provider reaches its output limit. Each question is independent; previous answers are not automatically sent as chat history.
 

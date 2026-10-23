@@ -31,6 +31,7 @@
     if (visualTopology) checks.visualTopology = visualTopology;
     if (liveEvents) checks.liveEvents = liveEvents;
     if (changeValidation) checks.changeValidation = changeValidation;
+    if (aiContextSafety) checks.aiContextSafety = aiContextSafety;
     // Portable launchers do not necessarily forward their app's stdout. Write
     // test evidence only to the parent-provided private artifact file.
     await api.invoke('np:write', options.resultPath, new TextEncoder().encode(JSON.stringify(checks, null, 2)));
@@ -82,6 +83,8 @@
   let visualTopology = null;
   const supportsEvents = versionParts[0] > 0 || versionParts[1] >= 21;
   const supportsChangeValidation = versionParts[0] > 0 || versionParts[1] >= 22;
+  const supportsAiContextSafety = versionParts[0] > 0 || versionParts[1] > 22 || (versionParts[1] === 22 && versionParts[2] >= 1);
+  let aiContextSafety = null;
   let liveEvents = null;
   let changeValidation = null;
   const changeName = 'Synthetic package smoke change validation';
@@ -599,6 +602,31 @@
     await ai.previewContext();
     assert(!ai.preview.textContent.includes('synthetic_context_secret') && ai.preview.textContent.includes('Redacted'), 'AI preview did not redact the test secret');
     assert(!ai.shareContext.checked && !ai.shareContext.disabled, 'Context must require explicit selection after preview');
+    if (supportsAiContextSafety) {
+      const { toolContext } = await import('./js/tool-context.mjs');
+      for (const offset of [3976, 23780]) {
+        const context = toolContext({ title: 'Synthetic boundary report', report: { message: 'x'.repeat(offset) + options.token + ' terminal marker' } });
+        const preview = await api.invoke('tools:aiPreview', { context });
+        assert(preview.context.length <= 24000 && !preview.context.includes(options.token.slice(0, 24)), 'A configured key fragment survived context shortening');
+      }
+      const omitted = await api.invoke('tools:aiPreview', { context: toolContext({ title: 'Synthetic oversized report', report: { observations: Array.from({ length: 160 }, (_, index) => ({ index, value: 'observation' })) } }) });
+      assert(/omit|limit|truncat/i.test(omitted.context), 'The prepared context silently omitted observations');
+      const draft = app.openTool('ai'); await until(() => !draft.configBusy && draft.config, 'AI draft settings');
+      draft.question.value = 'Unsent synthetic investigation'; draft.question.dispatchEvent(new Event('input'));
+      draft.context.value = 'Synthetic selected evidence'; draft.context.dispatchEvent(new Event('input'));
+      draft.editDocument(null); draft.noteTitle.value = 'Unfinished synthetic note'; draft.noteTitle.dispatchEvent(new Event('input'));
+      draft.noteContent.value = 'Retain this draft when closing is cancelled.'; draft.noteContent.dispatchEvent(new Event('input'));
+      assert(draft.updateBlockers().length > 0, 'AI drafts did not block updating');
+      const closing = app.closeTab(draft); await until(() => !!document.querySelector('.modal'), 'AI draft close confirmation');
+      serialFooter('Cancel'); await closing;
+      assert(app.byId.has(draft.id) && draft.question.value === 'Unsent synthetic investigation' && draft.context.value === 'Synthetic selected evidence' && draft.noteContent.value.includes('Retain this draft'), 'Cancelled close discarded AI input');
+      const discard = app.closeTab(draft); await until(() => !!document.querySelector('.modal'), 'AI draft discard confirmation');
+      const discardButton = [...document.querySelectorAll('.modal footer button')].find(button => /discard/i.test(button.textContent));
+      assert(discardButton, 'AI close confirmation has no explicit discard action'); discardButton.click(); await discard;
+      assert(!app.byId.has(draft.id) && app.jobs.size === 0, 'Confirmed AI draft close retained a tab or started work');
+      aiContextSafety = { wholeTextRedaction: true, explicitOmissions: true, draftUpdateBlocker: true, cancelledCloseRetainsInput: true, explicitDiscard: true, noProviderRequests: true };
+      app.activate(ai);
+    }
     const article = await api.invoke('tools:knowledgeSave', { title: noteTitle, vendor: 'Synthetic fixture', content: 'Wireless RSSI observations are cached evidence. Verify the adapter and collection time.' });
     await ai.readDocument(article.id);
     assert(ai.documentContent.textContent.includes('cached evidence'), 'Packaged local article did not render');
