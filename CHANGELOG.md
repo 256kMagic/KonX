@@ -4,6 +4,7 @@
 
 - Rename the contextual assistant from Copilot to KonX-AI across current application labels and guides. Existing local conversations and workspace references remain compatible.
 - Improve encrypted local API-key management, saved-key visibility, reuse and deletion.
+- Retain entered keys after failed saves, protect unsaved connection edits, refresh an open KonX-AI panel after settings changes, and retain pending encrypted-file cleanup through shutdown retry.
 
 See the [KonX-AI guide](docs/KONX_AI.md) and [release notes](docs/releases/0.27.1.md).
 

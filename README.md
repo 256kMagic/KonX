@@ -47,6 +47,9 @@ No GitHub token or background update check is used. The updater runs only in ins
 
 - **KonX-AI:** consistent naming across panels, tool buttons, menus, status messages and guides.
 - **Saved provider keys:** visible encrypted-key status, reuse across requests and restarts, and deletion for the selected provider.
+- **Key-entry fixes:** failed saves retain the entered key, unsaved changes are protected, and the open KonX-AI panel refreshes after connection settings are saved.
+
+KonX-AI capabilities available in this release:
 
 - **Reviewed actions:** choose a completed answer, inspect the exact target and effect, then run bounded Ping/DNS/Traceroute, apply one undoable editor selection replacement or save a new answer note.
 - **Retained outcomes:** action revisions, source references and outcomes survive restart; expired or replayed reviews are rejected, and uncertain effects are never repeated automatically.

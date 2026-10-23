@@ -2,7 +2,7 @@
 
 Version 0.27.1 renames the contextual assistant to **KonX-AI** and improves encrypted provider-key management. See the [KonX-AI guide](KONX_AI.md), [provider setup](AI_KNOWLEDGE_GUIDE.md#connect-a-provider), and [release validation](releases/0.27.1.md).
 
-This guide covers KonX 0.27.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one application. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
+This guide covers KonX 0.27.1 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one application. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
 
 Version 0.27.0 adds reviewed diagnostics, undoable editor replacements and saved answer notes to KonX-AI. See the [KonX-AI guide](KONX_AI.md) and [release validation](releases/0.27.0.md).
 
@@ -82,12 +82,17 @@ For downloads, build instructions, and project information, see the [README](../
 - [Troubleshooting runbooks](RUNBOOKS.md)
 - [Capture comparison](CAPTURE_COMPARISON.md)
 - [Workspace layouts](WORKSPACE_LAYOUTS.md)
+- [Saved site workspaces](SITE_WORKSPACES.md)
+- [Visual topology](TOPOLOGY.md)
+- [Live Events: syslog and SNMP traps](EVENTS.md)
+- [Guided Change Validation](CHANGE_VALIDATION.md)
 - [Session management](SESSION_MANAGEMENT.md)
 - [SSH compatibility](SSH_COMPATIBILITY.md)
 - [Network tools](#network-tools)
 - [Security Suite](SECURITY_SUITE.md)
 - [Wi-Fi and Mist/Marvis](WIRELESS_MIST_GUIDE.md)
-- [AI and knowledge library (0.4.0)](AI_KNOWLEDGE_GUIDE.md)
+- [KonX-AI: contextual assistance and reviewed actions](KONX_AI.md)
+- [AI provider settings and knowledge library](AI_KNOWLEDGE_GUIDE.md)
 - [Settings](#settings)
 - [Keyboard reference](#keyboard-reference)
 - [Application data and backups](#application-data-and-backups)
@@ -98,7 +103,7 @@ Examples use reserved documentation addresses such as `192.0.2.10`, `198.51.100.
 
 ## Install, run, and update
 
-Download a Windows x64 executable from the [0.18.1 release](https://github.com/256kMagic/KonX/releases/tag/v0.18.1).
+Download a Windows x64 executable from the [0.27.1 release](https://github.com/256kMagic/KonX/releases/tag/v0.27.1).
 
 | Download | Use it when | How to start |
 | --- | --- | --- |
@@ -107,7 +112,7 @@ Download a Windows x64 executable from the [0.18.1 release](https://github.com/2
 
 The portable executable still uses a Windows user profile for settings, saved sessions, and editor recovery. It does **not** automatically place all data beside the executable or make encrypted credentials transferable between computers. See [Application data and backups](#application-data-and-backups).
 
-**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.18.1.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
+**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.27.1.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
 
 For updates from **installed 0.6.2 or later**, or **portable 0.6.0 or later**:
 
@@ -120,7 +125,7 @@ From 0.16.1, staged update filenames include KonX and the version being installe
 
 Installed copies retain their installation folder and mode. Portable copies retain their filename and location; the containing folder must be writable. Both continue to use the existing Windows profile. No update is applied just because you close KonX, and no release checks run in the background. See [Updating KonX](UPDATING.md) for cancellation, failures, and release preparation.
 
-Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.18.1 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
+Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.27.1 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
 
 Npcap is optional for packet capture; SSH, SFTP, Notepad, and the other tools do not require it. Updating KonX does not install or update Npcap.
 
@@ -740,6 +745,12 @@ KonX's normal Windows profile is under `%APPDATA%\KonX`. Installed and portable 
 | `mist.json` | Mist cloud selection and Windows-encrypted API token (0.3.0+) |
 | `ai.json` | AI provider/model settings and Windows-encrypted API keys (0.4.0+) |
 | `knowledge/library.sqlite` and SQLite journal files | Offline reference articles, custom notes, chunks, and local vector index (0.4.0+) |
+| `copilot-conversations/` | KonX-AI conversations, selected evidence, reviewed requests, answers and action outcomes; the folder name is retained for compatibility |
+| `site-workspaces/` | Saved site notes, session references and panel arrangements |
+| `device-snapshots/` | Saved device observations and captured command output |
+| `incidents/` | Local incident records and retained evidence |
+| `runbooks/` | Saved custom diagnostic procedures |
+| `change-validation/` | Saved maintenance plans, evidence and recorded decisions |
 | `notepad/session.json` | Editor document list and restore information |
 | `notepad/backup/*.txt` | UTF-8 recovery text for unsaved editor work |
 | Chromium/Electron profile files | UI state such as recent sessions and expanded folders |
@@ -754,7 +765,7 @@ For an isolated profile, advanced users can launch from PowerShell with a separa
 
 ```powershell
 $env:KONX_USERDATA = Join-Path $env:LOCALAPPDATA 'KonX-TestProfile'
-& '.\KonX-0.2.0-portable.exe'
+& '.\KonX-0.27.1-portable.exe'
 ```
 
 Run this from the folder containing the portable executable. The environment variable applies to that PowerShell process and launches from it; use a normal shortcut or a separate shell for your normal profile. This setting does not make Windows-encrypted credentials portable.
