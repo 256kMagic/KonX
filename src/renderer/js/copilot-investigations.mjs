@@ -111,13 +111,13 @@ export function installInvestigationContext(tab) {
   tab.copilotContextChoices = () => investigationContextChoices(tab);
   tab.captureCopilotContext = options => captureInvestigationContext(tab, options);
   tab.navigateCopilotSource = locator => navigateInvestigationSource(tab, locator);
-  tab.copilotButton = h('button.btn.sm', { 'aria-label': 'Ask Copilot about investigation evidence', onclick: event => {
+  tab.copilotButton = h('button.btn.sm', { 'aria-label': 'Ask KonX-AI about investigation evidence', onclick: event => {
     contextMenu(event.clientX, event.clientY, tab.copilotContextChoices().map(choice => ({ ...choice, action: () => {
       if (choice.disabled || tab.disposed) return;
       try { const snapshot = tab.captureCopilotContext({ choice: choice.choice }); Promise.resolve(tab.app.openCopilot(tab, { snapshot, question: choice.label + '. Distinguish observations, manual assessments, inferences and unknowns.' })).catch(error => toast(errMsg(error), 'error')); }
       catch (error) { toast(errMsg(error), 'error'); }
     } })));
-  } }, 'Ask Copilot');
+  } }, 'Ask KonX-AI');
   tab.el.querySelector('.tool-title')?.append(tab.copilotButton);
 }
 

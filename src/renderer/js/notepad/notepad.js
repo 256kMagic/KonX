@@ -50,7 +50,7 @@ export class NotepadTab {
       menu('Encoding', () => this.encodingMenu()),
       menu('Language', () => this.languageMenu()),
       menu('Tools', () => toolsMenu(this)),
-      menu('Ask Copilot', () => workspaceCopilotItems(this)),
+      menu('Ask KonX-AI', () => workspaceCopilotItems(this)),
       h('div.np-sep'),
       this.iconBtn('file-plus', 'New (Ctrl+N)', () => this.newDoc()),
       this.iconBtn('folder-open', 'Open (Ctrl+O)', () => this.open()),

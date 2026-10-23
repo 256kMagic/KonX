@@ -98,8 +98,8 @@ export class EvidenceContext {
     return this.touch(token);
   }
   capture(descriptor = {}, options = {}) {
-    if (options.mode !== undefined && !['all', 'selected'].includes(options.mode)) throw new Error('Choose all or selected Copilot rows');
-    if (options.selectedRowIds !== undefined && (!Array.isArray(options.selectedRowIds) || options.selectedRowIds.length > MAX_ROWS || options.selectedRowIds.some(id => typeof id !== 'string' || !/^[a-z]+:\d+$/.test(id)))) throw new Error('Choose at most 200 valid Copilot row identifiers');
+    if (options.mode !== undefined && !['all', 'selected'].includes(options.mode)) throw new Error('Choose all or selected KonX-AI rows');
+    if (options.selectedRowIds !== undefined && (!Array.isArray(options.selectedRowIds) || options.selectedRowIds.length > MAX_ROWS || options.selectedRowIds.some(id => typeof id !== 'string' || !/^[a-z]+:\d+$/.test(id)))) throw new Error('Choose at most 200 valid KonX-AI row identifiers');
     const mode = options.mode || (options.selectedRowIds !== undefined || descriptor.hasSelection ? 'selected' : 'all');
     const requested = options.selectedRowIds === undefined ? null : new Set(options.selectedRowIds);
     const omissions = [...this.inputOmissions, ...(descriptor.omissions || [])];
@@ -127,7 +127,7 @@ export class EvidenceContext {
       omissions: [...new Set(omissions)],
     };
     // A programmer/schema error is explicit, never repaired by raw truncation.
-    if (out.omissions.length > 32 || bytes(JSON.stringify(out)) > COPILOT_SNAPSHOT_BYTES) throw new Error('Copilot snapshot exceeds its bounded evidence envelope');
+    if (out.omissions.length > 32 || bytes(JSON.stringify(out)) > COPILOT_SNAPSHOT_BYTES) throw new Error('KonX-AI snapshot exceeds its bounded evidence envelope');
     return frozen(out);
   }
 }

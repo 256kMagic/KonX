@@ -475,6 +475,7 @@ const fakeCrypt = {
   await require('./knowledge-tests.cjs').runKnowledgeTests(test);
   await require('./ai-integration-tests.cjs').runAiIntegrationTests(test);
   await require('./ai-ui-tests.cjs').runAiUiTests(test);
+  await require('./ai-key-retention-tests.cjs').runAiKeyRetentionTests(test);
   await require('./copilot-context-tests.cjs').runCopilotContextTests(test);
   await require('./copilot-tests.cjs').runCopilotTests(test);
   await require('./copilot-ui-tests.cjs').runCopilotUiTests(test);

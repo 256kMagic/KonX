@@ -59,7 +59,7 @@ export async function showSipCalls(analysis, { onExportCall, onExportReport, ini
   const ladder = h('div.sip-ladder-scroll');
   const detail = h('div.sip-message-detail', { 'aria-live': 'polite' });
   const count = h('span.hint');
-  const copilotButton = h('button.btn.sm', { disabled: !selectedCall, onclick: () => close({ action: 'copilot', call: selectedCall }) }, 'Ask Copilot about this call');
+  const copilotButton = h('button.btn.sm', { disabled: !selectedCall, onclick: () => close({ action: 'copilot', call: selectedCall }) }, 'Ask KonX-AI about this call');
   const search = h('input.input', {
     type: 'search', placeholder: 'Search Call-ID, parties, outcome, or method',
     'aria-label': 'Search SIP calls',

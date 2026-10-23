@@ -13,7 +13,7 @@ const selected = (values, ids) => values.filter(value => ids.has(value.id)).map(
 /** One app-owned conversation/request owner; moving or hiding its view is passive. */
 export class CopilotController {
   constructor(app) {
-    this.app = app; this.id = 'copilot-controller'; this.title = 'Copilot'; this.icon = 'insight'; this.toolKind = 'copilot';
+    this.app = app; this.id = 'copilot-controller'; this.title = 'KonX-AI'; this.icon = 'insight'; this.toolKind = 'copilot';
     this.conversations = []; this.conversation = null; this.provider = null; this.issues = []; this.limits = {};
     this.question = ''; this.includeKnowledge = false; this.stream = true;
     this.attachmentIds = new Set(); this.historyTurnIds = new Set(); this.draftBaseline = '';
@@ -28,10 +28,10 @@ export class CopilotController {
   draftSignature() { return JSON.stringify([this.question, [...this.attachmentIds], [...this.historyTurnIds], this.includeKnowledge, this.stream]); }
   hasUnsavedInput() { return this.draftSignature() !== this.draftBaseline || !!this.prepared || this.actions.hasDraft(); }
   updateBlockers() {
-    return [...(this.jobId ? ['Wait for Copilot to finish or cancel its request.'] : []),
-      ...(this.busy || this.prompting ? ['Wait for the Copilot operation to finish.'] : []),
-      ...(this.hasUnsavedInput() ? ['Send or discard the unsent Copilot draft.'] : []),
-      ...(this.discardIds.size ? ['Retry discarding the unused Copilot request review.'] : []), ...this.actions.updateBlockers()];
+    return [...(this.jobId ? ['Wait for KonX-AI to finish or cancel its request.'] : []),
+      ...(this.busy || this.prompting ? ['Wait for the KonX-AI operation to finish.'] : []),
+      ...(this.hasUnsavedInput() ? ['Send or discard the unsent KonX-AI draft.'] : []),
+      ...(this.discardIds.size ? ['Retry discarding the unused KonX-AI request review.'] : []), ...this.actions.updateBlockers()];
   }
   changed() {
     if (this.disposed) return;
@@ -55,7 +55,7 @@ export class CopilotController {
   }
   async confirmDraft(message = 'Discard the unsent draft before changing conversations?') {
     if (!this.hasUnsavedInput()) return true;
-    return await this.dialog({ title: 'Unsent Copilot draft', body: h('p', message),
+    return await this.dialog({ title: 'Unsent KonX-AI draft', body: h('p', message),
       buttons: [{ label: 'Keep draft', value: null }, { label: 'Discard draft', value: true, danger: true }] }) === true && !this.disposed;
   }
   invalidate(message) {
@@ -92,7 +92,7 @@ export class CopilotController {
     this.conversations = value.conversations || []; this.issues = value.issues || []; this.limits = value.limits || {}; this.changed();
   }
   async open({ sourceTab, snapshot, question } = {}) {
-    if (this.disposed) throw new Error('Copilot has been disposed.');
+    if (this.disposed) throw new Error('KonX-AI has been disposed.');
     this.viewClosed = false; this.panel.disposed = false;
     if (sourceTab) this.focusedTabChanged(sourceTab);
     if ((this.busy || this.jobId || this.prompting || this.actions.locked) && (snapshot || typeof question === 'string')) {
@@ -278,12 +278,12 @@ export class CopilotController {
     this.changed();
   }
   async requestClose() {
-    if (this.busy || this.prompting || this.actions.busy) { toast('Wait for the Copilot operation to finish.', 'err'); return false; }
-    if (this.actions.jobId) return await this.dialog({ title: 'Close Copilot', body: h('p', 'Cancel the reviewed action and close? Any effect already applied remains; its outcome will be retained without automatic retry.'),
+    if (this.busy || this.prompting || this.actions.busy) { toast('Wait for the KonX-AI operation to finish.', 'err'); return false; }
+    if (this.actions.jobId) return await this.dialog({ title: 'Close KonX-AI', body: h('p', 'Cancel the reviewed action and close? Any effect already applied remains; its outcome will be retained without automatic retry.'),
       buttons: [{ label: 'Keep open', value: null }, { label: 'Cancel action and close', value: true, danger: true }] }) === true;
-    if (this.jobId) return await this.dialog({ title: 'Close Copilot', body: h('p', 'Cancel this request and discard the unsent draft? Saved conversations and evidence remain available.'),
+    if (this.jobId) return await this.dialog({ title: 'Close KonX-AI', body: h('p', 'Cancel this request and discard the unsent draft? Saved conversations and evidence remain available.'),
       buttons: [{ label: 'Keep open', value: null }, { label: 'Cancel request and close', value: true, danger: true }] }) === true;
-    if (!await this.confirmDraft('Discard this unsent draft and close Copilot? Saved conversations and evidence remain available.')) return false;
+    if (!await this.confirmDraft('Discard this unsent draft and close KonX-AI? Saved conversations and evidence remain available.')) return false;
     this.invalidate(); this.actions.invalidate(); return await this.flushDiscard() && await this.actions.flushDiscard();
   }
   closeView() {
@@ -318,14 +318,14 @@ export class CopilotController {
 export class CopilotPanel {
   constructor(controller) {
     this.controller = controller; this.app = controller.app; this.kind = 'tool'; this.toolKind = 'copilot'; this.id = 'copilot-panel';
-    this.title = 'Copilot'; this.icon = 'insight'; this.state = 'idle'; this.disposed = false;
-    this.conversationSelect = h('select.input', { 'aria-label': 'Copilot conversation', onchange: () => controller.selectConversation(this.conversationSelect.value) });
+    this.title = 'KonX-AI'; this.icon = 'insight'; this.state = 'idle'; this.disposed = false;
+    this.conversationSelect = h('select.input', { 'aria-label': 'KonX-AI conversation', onchange: () => controller.selectConversation(this.conversationSelect.value) });
     this.newButton = h('button.btn.sm', { title: 'New conversation', onclick: () => controller.createConversation() }, icon('plus'), 'New');
     this.renameButton = h('button.btn.sm', { title: 'Rename conversation', onclick: () => controller.renameConversation() }, icon('edit'));
     this.deleteButton = h('button.btn.sm', { title: 'Delete conversation', onclick: () => controller.removeConversation() }, icon('trash'));
-    this.settingsButton = h('button.btn.sm', { onclick: () => this.app.openTool('ai') }, icon('settings'), 'AI settings & library');
+    this.settingsButton = h('button.btn.sm', { onclick: () => this.app.openTool('ai') }, icon('settings'), 'KonX-AI Settings & Library');
     this.providerStatus = h('div.copilot-provider', { role: 'status' });
-    this.transportSelect = h('select.input', { 'aria-label': 'Copilot response transport', onchange: () => controller.selectStream(this.transportSelect.value === 'stream') },
+    this.transportSelect = h('select.input', { 'aria-label': 'KonX-AI response transport', onchange: () => controller.selectStream(this.transportSelect.value === 'stream') },
       h('option', { value: 'stream' }, 'Stream when supported'), h('option', { value: 'buffered' }, 'Buffered response'));
     this.transportHint = h('p.hint');
     this.testButton = h('button.btn.sm', { onclick: () => controller.prepare(true) }, 'Review a connection test');
@@ -338,7 +338,7 @@ export class CopilotPanel {
     this.turns = h('div.copilot-turns', { 'aria-label': 'Conversation replies' }, this.savedTurns, this.pendingTurn);
     this.history = h('div.copilot-history');
     this.historyDetails = h('details', h('summary', 'Previous replies included'), this.history);
-    this.question = h('textarea.input', { rows: 4, placeholder: 'Ask about the selected evidence…', 'aria-label': 'Copilot question', oninput: () => controller.editQuestion(this.question.value) });
+    this.question = h('textarea.input', { rows: 4, placeholder: 'Ask about the selected evidence…', 'aria-label': 'KonX-AI question', oninput: () => controller.editQuestion(this.question.value) });
     this.knowledge = h('input', { type: 'checkbox', 'aria-label': 'Include local knowledge references', onchange: () => controller.selectKnowledge(this.knowledge.checked) });
     this.prepareButton = h('button.btn.primary', { onclick: () => controller.prepare() }, icon('eye'), 'Prepare request');
     this.cancelButton = h('button.btn.sm', { onclick: () => controller.stop() }, icon('stop'), 'Cancel request');
@@ -351,7 +351,7 @@ export class CopilotPanel {
     this.review = h('section.copilot-review.hidden', { 'aria-label': 'Review before sending' }, h('h3', 'Review before sending'), this.reviewMeta,
       h('p.hint', 'This is the complete request body, including system instructions, selected history, evidence and any library excerpts. Authentication headers are excluded.'),
       this.reviewLimitations, this.requestBody, h('div.copilot-actions', this.sendButton, this.discardButton));
-    this.el = h('div.view.copilot-view', h('div.copilot-header', h('div.copilot-heading', icon('insight'), h('h2', 'Copilot')), this.settingsButton),
+    this.el = h('div.view.copilot-view', h('div.copilot-header', h('div.copilot-heading', icon('insight'), h('h2', 'KonX-AI')), this.settingsButton),
       h('div.copilot-scroll', h('div.copilot-conversations', this.conversationSelect, this.newButton, this.renameButton, this.deleteButton),
         this.providerStatus, this.connectionDetails, this.focusStatus, this.attachButton, this.issues, this.evidenceDetails, this.historyDetails,
         h('section.copilot-compose', h('label.field', h('span', 'Your question'), this.question), h('label.copilot-check', this.knowledge, 'Include local knowledge references'),
@@ -375,7 +375,7 @@ export class CopilotPanel {
     this.testButton.disabled = locked || !config?.hasKey; this.prepareButton.disabled = locked || !config?.hasKey || !conversation || !c.question.trim();
     this.settingsButton.disabled = c.prompting;
     this.attachButton.disabled = locked || !c.focusedTab || c.focusedTab.disposed || !copilotContextSupport(c.focusedTab).supported;
-    this.focusStatus.textContent = `Workspace view: ${c.focusedTab?.title || 'None'}. Evidence is selected separately. Copilot does not target a terminal.`;
+    this.focusStatus.textContent = `Workspace view: ${c.focusedTab?.title || 'None'}. Evidence is selected separately. KonX-AI does not target a terminal.`;
     this.issues.replaceChildren(...c.issues.map(issue => h('p.hint', text(issue.message))));
     this.renderEvidence(locked); this.renderHistory(locked); this.renderTurns();
     this.cancelButton.classList.toggle('hidden', !c.jobId); this.cancelButton.disabled = !!c.cancelRequested;
@@ -409,7 +409,7 @@ export class CopilotPanel {
         h('p.hint', `${snapshot.kind} · ${when(snapshot.capturedAt)} · ${snapshot.coverage?.complete ? 'Complete observed scope' : 'Partial or unknown coverage'}`),
         ...(snapshot.omissions || []).map(item => h('p.hint', item)), stale, source, body);
       }));
-      if (!attachments.length) this.evidence.append(h('p.hint', 'No evidence attached. Use “Ask Copilot” in a tool or “Attach from current view” to choose evidence.'));
+      if (!attachments.length) this.evidence.append(h('p.hint', 'No evidence attached. Use “Ask KonX-AI” in a tool or “Attach from current view” to choose evidence.'));
     }
     for (const [id, controls] of this.attachmentControls || []) {
       const checked = c.attachmentIds.has(id); controls.checkbox.checked = checked;
@@ -458,6 +458,6 @@ export class CopilotPanel {
   onHostWindowChanged() { this.refit(); }
   updateBlockers() { return this.controller.updateBlockers(); }
   requestClose() { return this.controller.requestClose(); }
-  statusSegments() { return [{ icon: 'insight', text: 'Copilot' }, { text: this.controller.jobId ? 'Request in progress' : 'Local conversation' }]; }
+  statusSegments() { return [{ icon: 'insight', text: 'KonX-AI' }, { text: this.controller.jobId ? 'Request in progress' : 'Local conversation' }]; }
   dispose() { this.disposed = true; this.controller.closeView(); }
 }

@@ -27,7 +27,7 @@ async function runCopilotActionLifecycleTests(test) {
     const held = deferred(); let cancelled = false;
     f.actions.run = async (_params, _emit, signal) => { f.actions.hasOwnership = true; signal.onStop = () => { cancelled = true; }; await held.promise; f.actions.hasOwnership = false; };
     await f.invoke('tools:start', 'copilot-action', {}, 'owned-action'); await tick();
-    await assert.rejects(f.invoke('app:updateInstall'), /running tools|reviewed Copilot/);
+    await assert.rejects(f.invoke('app:updateInstall'), /running tools|reviewed KonX-AI/);
     f.app.quit(); await tick(); assert.equal(cancelled, true); assert.equal(f.app.exited, false); assert.equal(f.window.isDestroyed(), false);
     assert.throws(() => f.invoke('tools:copilotActionPrepare', {}), /closing/); assert.throws(() => f.invoke('tools:start', 'copilot-action', {}, 'late-action'), /closing/);
     assert.equal(f.actions.options.requestEditor(request), false);
@@ -38,7 +38,7 @@ async function runCopilotActionLifecycleTests(test) {
     const f = fixture(), order = []; f.actions.hasOwnership = true; f.actions.hasPendingCleanup = true;
     f.actions.close = async () => { order.push('actions'); throw new Error('Synthetic action outcome could not be saved'); };
     f.copilot.close = async () => { order.push('copilot'); };
-    await assert.rejects(f.invoke('app:updateInstall'), /reviewed Copilot/);
+    await assert.rejects(f.invoke('app:updateInstall'), /reviewed KonX-AI/);
     const close = f.nativeClose(); assert.equal(close.defaultPrevented, true); await settle(() => f.calls.includes('shutdown-error'));
     assert.equal(f.app.exited, false); assert.equal(f.window.isDestroyed(), false); assert.equal(f.actions.hasOwnership, true); assert.deepEqual(order.slice(0, 2), ['actions', 'copilot']);
     f.actions.close = async () => { order.push('actions'); f.actions.hasOwnership = false; f.actions.hasPendingCleanup = false; };

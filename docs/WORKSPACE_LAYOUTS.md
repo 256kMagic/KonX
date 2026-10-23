@@ -48,7 +48,7 @@ In Operations Wall, use the pane-count dropdown to show one to four views. Reduc
 
 Focus initially hides Sessions and Context to give the tool more room. Use **Show sessions** or **Show context** when needed. Leaving Focus restores the sidebar visibility you had before entering it.
 
-Incident Desk uses the existing local incident workspace. A layout change does not assign evidence to an incident or share context with AI. Use **Add to incident** and review/save the pending evidence, or use **Ask Copilot** to choose evidence and review a request before sending it.
+Incident Desk uses the existing local incident workspace. A layout change does not assign evidence to an incident or share context with AI. Use **Add to incident** and review/save the pending evidence, or use **Ask KonX-AI** to choose evidence and review a request before sending it.
 
 Open **Incident Workspace**, then select that open tab in the **Incident dossier** pane. Its existing saved-case list appears under **Case navigation**. Leaving Incident Desk returns that list to its original tool view.
 

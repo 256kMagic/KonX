@@ -1,12 +1,18 @@
 # AI & Knowledge
 
-This guide covers AI & Knowledge in KonX 0.27.0. Open **AI & Knowledge** from Home, the sidebar, or Network Tools. The standalone assistant explains findings, terminology, and possible next steps. Copilot separately offers [reviewed actions](COPILOT.md#reviewed-actions): bounded diagnostics, selected editor replacements and new answer notes, each requiring a prepared review and an explicit execution click. Neither assistant automatically connects sessions or changes device settings.
+This guide covers AI & Knowledge in KonX 0.27.1. Open **AI & Knowledge** from Home, the sidebar, or Network Tools. The standalone assistant explains findings, terminology, and possible next steps. KonX-AI separately offers [reviewed actions](KONX_AI.md#reviewed-actions): bounded diagnostics, selected editor replacements and new answer notes, each requiring a prepared review and an explicit execution click. Neither assistant automatically connects sessions or changes device settings.
 
-The new [Copilot](COPILOT.md) keeps conversations beside supported tools and previews the complete outbound request. **AI & Knowledge** remains the place to configure providers and manage the offline reference library. Its existing standalone assistant remains available.
+The new [KonX-AI](KONX_AI.md) keeps conversations beside supported tools and previews the complete outbound request. **AI & Knowledge** remains the place to configure providers and manage the offline reference library. Its existing standalone assistant remains available.
 
 ## Connect a provider
 
-Select a provider, review the model ID, enter its API key, and choose **Save connection**. Saving does not make a network request. Keys are encrypted for the current Windows account and stored separately from session settings. A saved key is never returned to the page. Each provider keeps its own key and model setting; **Forget key** removes the selected provider's saved key. API access and billing belong to the provider account.
+Select a provider, review the model ID, enter its API key, and choose **Save connection**. Saving does not make a network request. Keys are encrypted for the current Windows account and stored separately from session settings. A saved key is never returned to the page. Each provider keeps its own key and model setting. API access and billing belong to the provider account.
+
+After a successful save, the key field becomes empty and the status confirms that an encrypted key is saved. The empty field does not mean the saved key is missing. KonX-AI reuses that provider's saved key for connection tests and requests, including after closing a panel or restarting the app. Saving model changes with an empty key field keeps the existing key. Enter a new key only to add or replace one.
+
+Choose **Delete saved key** to remove the selected provider's key from the local store. Other providers' keys remain saved. Deletion does not save or discard a replacement key or other unsaved connection edits in the form. This does not revoke the key at the provider; manage remote revocation in that provider's account. After deletion, that provider needs a new saved key before another request or connection test.
+
+If saving fails, the entered key remains in the open settings form so you can correct the error and retry. Pending key or connection changes are drafts until you save them; closing or changing providers requires discarding those changes explicitly. Unsaved drafts do not survive an application exit.
 
 | Provider | Credential and API |
 | --- | --- |
@@ -16,7 +22,7 @@ Select a provider, review the model ID, enter its API key, and choose **Save con
 | Nyquest | Personal API key created in **app.nyquest.ai → Settings → API Keys**. KonX uses the [OpenAI-compatible chat endpoint](https://docs.nyquest.ai/developer-api/openai-compatibility) and defaults to `nyquest/auto`. You can enter an exact accessible `vendor/model` ID instead. |
 | Custom | An OpenAI-compatible **Chat Completions** endpoint, its API key, and an exact model ID. Enter the API base URL, for example `https://gateway.example/v1`; KonX appends `/chat/completions`. This is not an arbitrary API adapter. |
 
-Built-in provider destinations are fixed. Custom connections require HTTPS, except explicitly configured HTTP on `localhost`, `127.0.0.1`, or `[::1]` for a local service. Changing a saved custom destination requires entering the key again or forgetting it first. Redirects are rejected rather than forwarding credentials.
+Built-in provider destinations are fixed. Custom connections require HTTPS, except explicitly configured HTTP on `localhost`, `127.0.0.1`, or `[::1]` for a local service. Changing a saved custom destination requires entering the key again or deleting it first. Redirects are rejected rather than forwarding credentials.
 
 Provider model availability changes. The editable model field lets you select an ID your account supports. A subscription to a provider's consumer chat application does not itself configure an API key in KonX.
 
@@ -25,12 +31,12 @@ Nyquest personal API keys carry the account's privileges, as described in its [P
 ## Ask about tools and results
 
 1. Review the existing result, terminal selection or editor document in its normal view.
-2. Choose **Ask Copilot** (or an existing **Explain with AI** entry point). Basic tool results attach directly; views with several evidence types offer **Attach from current view** choices. Opening the panel alone does not gather data or contact a provider.
+2. Choose **Ask KonX-AI** (or an existing **Explain with AI** entry point). Basic tool results attach directly; views with several evidence types offer **Attach from current view** choices. Opening the panel alone does not gather data or contact a provider.
 3. Inspect the retained evidence and omission notices. Select the attachments and completed turns to include, enter your question, and opt into local knowledge references if useful.
 4. Choose **Prepare request** and inspect the destination, model and complete request. Choose **Send reviewed request** to send exactly that prepared request. Changes require a fresh review.
-5. Read the answer alongside its source references and original tool evidence. References show the material supplied to the model; they do not independently verify generated claims. See the [Copilot guide](COPILOT.md) for each tool's evidence choices and storage limits.
+5. Read the answer alongside its source references and original tool evidence. References show the material supplied to the model; they do not independently verify generated claims. See the [KonX-AI guide](KONX_AI.md) for each tool's evidence choices and storage limits.
 
-The standalone assistant in **AI & Knowledge** still supports **Optional context → Preview context → Send this context**, followed by **Ask AI**. Each standalone question is independent, with up to five matching library excerpts; its open-tab answers are not saved as Copilot conversations. Library **Ask about this** prepares the selected article for this standalone flow. Hostnames, addresses and other operational details can remain in previews; remove anything you do not want to send.
+The standalone assistant in **AI & Knowledge** still supports **Optional context → Preview context → Send this context**, followed by **Ask AI**. Each standalone question is independent, with up to five matching library excerpts; its open-tab answers are not saved as KonX-AI conversations. Library **Ask about this** prepares the selected article for this standalone flow. Hostnames, addresses and other operational details can remain in previews; remove anything you do not want to send.
 
 Recognized credentials and saved AI keys are redacted from previews, requests, reference excerpts, and answers. Redaction is best effort. Provider responses and library articles are displayed as text. Instructions embedded in reports or reference notes are treated as evidence rather than instructions to run commands. AI recommendations still need review against the actual device model, software version, permissions, and evidence.
 
@@ -56,12 +62,14 @@ The library uses a real local SQLite database at `%APPDATA%\KonX\knowledge\libra
 
 Retrieval uses **local TF-IDF cosine vectors**, with limited terminology expansion. This is word-based vector retrieval, not neural semantic embeddings. It requires no embedding API key, model download, separate database server, or background cloud traffic. Queries retrieve relevant excerpts for the assistant; an answer without local matches is marked as relying on the model's general knowledge. As the library grows, neural embeddings and a larger-scale vector index can be added without changing the user-facing library workflow.
 
-AI connection settings are in `%APPDATA%\KonX\ai.json`. Library notes and the index stay local unless relevant excerpts are included in an explicit request. KonX does not automatically index sessions, terminal output, captures, editor files, Mist credentials, or diagnostic logs. Standalone AI questions and answers are held in the open tab. Copilot separately saves local conversations, explicitly attached evidence, exact reviewed requests and completed answers.
+AI connection settings are in `%APPDATA%\KonX\ai.json`. Library notes and the index stay local unless relevant excerpts are included in an explicit request. KonX does not automatically index sessions, terminal output, captures, editor files, Mist credentials, or diagnostic logs. Standalone AI questions and answers are held in the open tab. KonX-AI separately saves local conversations, explicitly attached evidence, exact reviewed requests and completed answers.
 
 ## Troubleshooting
 
 - **Access rejected:** check the key, selected model, provider permissions, and API billing. KonX displays a bounded error instead of a raw provider response.
-- **Saved key cannot decrypt:** re-enter or forget the affected key under the same Windows account. Keys encrypted for another Windows user cannot be assumed portable.
+- **Empty key field after saving:** check the saved-key status. The field intentionally stays blank; a saved key is reused without re-entry.
+- **Save failed:** correct the reported error and retry with the retained draft. A failed save does not replace a previously saved key.
+- **Saved key cannot decrypt:** replace or delete the affected key under the same Windows account. Keys encrypted for another Windows user cannot be assumed portable.
 - **Custom endpoint fails:** confirm its base URL and Chat Completions compatibility. A URL ending in `/chat/completions` is not the base URL expected by this field.
 - **Library unavailable:** retain the database and its journal files. If startup reports corruption or an incompatible schema, preserve a copy before recovery work; do not delete it to clear the error.
 - **Weak or missing explanation:** refine the question, preview relevant results, and add an accurate reference note. Check the linked vendor documentation and the original tool evidence.

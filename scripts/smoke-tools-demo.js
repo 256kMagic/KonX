@@ -53,7 +53,7 @@
   assert(mist.region.options.length === 12 && mist.config.regions.length === 12, 'Mist cloud regions are missing');
   assert(mist.token.type === 'password', 'Mist credential input must mask its value');
   assert(app.jobs.size === 0, 'Opening tool tabs unexpectedly started a job');
-  const ai = app.openTool('ai');
+  let ai = app.openTool('ai');
   await until(() => !ai.configBusy && ai.config, 'AI connection settings');
   assert(ai.provider.options.length === 5 && ai.key.type === 'password', 'Five AI providers and a masked key input are required');
   const knowledge = await api.invoke('tools:knowledgeStatus');
@@ -601,6 +601,12 @@
     await until(() => !ai.configBusy, 'synthetic AI credential save');
     assert(ai.config.provider === 'nyquest' && ai.config.hasKey && ai.key.value === '', 'AI credential was not saved securely');
     assert(!JSON.stringify(await api.invoke('tools:aiConfig')).includes(options.token), 'AI settings exposed a saved key');
+    assert(!ai.saveButton.disabled, 'Saved Nyquest settings cannot be saved again with an empty key field');
+    ai.saveButton.click(); await until(() => !ai.configBusy, 'saved Nyquest key reuse with an empty input');
+    assert(ai.config.provider === 'nyquest' && ai.config.hasKey && ai.key.value === '' && !ai.forgetButton.disabled, 'Saving with an empty field removed the Nyquest key');
+    await app.closeTab(ai); assert(!app.byId.has(ai.id), 'Saved AI settings did not close cleanly');
+    ai = app.openTool('ai'); await until(() => !ai.configBusy && ai.config, 'reopened saved Nyquest settings');
+    assert(ai.config.provider === 'nyquest' && ai.config.hasKey && ai.key.value === '' && ai.savedKey() && !ai.forgetButton.disabled && app.jobs.size === 0, 'Reopened Nyquest settings lost the retained key or started a request');
     ai.context.value = 'RSSI -67 dBm\npassword=synthetic_context_secret'; ai.context.dispatchEvent(new Event('input'));
     await ai.previewContext();
     assert(!ai.preview.textContent.includes('synthetic_context_secret') && ai.preview.textContent.includes('Redacted'), 'AI preview did not redact the test secret');
@@ -635,9 +641,10 @@
       await app.saveSettings({ uiLayout: 'workbench' });
       const source = app.openTool('subnet', { input: '192.0.2.37/26' });
       const panel = await app.explainTool(source), controller = app.copilot;
-      assert(panel && app.byId.get(panel.id) === panel && controller.conversation?.attachments.length === 1, 'Copilot did not attach typed source evidence');
-      assert(app.workspaceLayout.get().primaryId === source.id && app.workspaceLayout.get().companionId === panel.id, 'Copilot replaced the source instead of using the companion pane');
-      controller.applyConversation(await api.invoke('tools:copilotRename', controller.conversation.id, controller.conversation.revision, 'Synthetic package Copilot'), { retainDraft: true });
+      assert(TOOLS.find(tool => tool.kind === 'copilot')?.label === 'KonX-AI' && panel.title === 'KonX-AI' && panel.el.querySelector('h2').textContent === 'KonX-AI' && document.querySelector('[aria-label="Open contextual KonX-AI"]'), 'Packaged KonX-AI naming is missing from its entry points');
+      assert(panel && app.byId.get(panel.id) === panel && controller.conversation?.attachments.length === 1, 'KonX-AI did not attach typed source evidence');
+      assert(app.workspaceLayout.get().primaryId === source.id && app.workspaceLayout.get().companionId === panel.id, 'KonX-AI replaced the source instead of using the companion pane');
+      controller.applyConversation(await api.invoke('tools:copilotRename', controller.conversation.id, controller.conversation.revision, 'Synthetic package KonX-AI'), { retainDraft: true });
       controller.selectKnowledge(true); await controller.prepare();
       const preparation = controller.prepared;
       assert(preparation && panel.requestBody.textContent === preparation.body && preparation.body.includes('192.0.2.37/26'), 'Exact request preview omitted source facts');
@@ -650,17 +657,17 @@
         await app.saveSettings({ uiLayout: layout }); app.workspaceLayout.float(panel); app.activate(source); app.activate(panel);
         assert(app.workspaceLayout.visible.has(source) && panel.el === node && controller.prepared === preparation, 'Layout movement replaced the source, conversation, or request');
       }
-      assert(await app.popouts.open(panel), 'Copilot native pop-out failed');
+      assert(await app.popouts.open(panel), 'KonX-AI native pop-out failed');
       assert(panel.el === node && panel.el.ownerDocument !== document && controller.prepared === preparation, 'Pop-out replaced the conversation view');
-      await app.popouts.dock(panel); assert(panel.el === node && node.ownerDocument === document, 'Dock back lost the canonical Copilot view');
-      assert(controller.updateBlockers().length > 0, 'Unsent Copilot draft did not block updates');
-      const closing = app.closeTab(panel); await until(() => !!document.querySelector('.modal'), 'Copilot close review'); serialFooter('Keep draft'); await closing;
+      await app.popouts.dock(panel); assert(panel.el === node && node.ownerDocument === document, 'Dock back lost the canonical KonX-AI view');
+      assert(controller.updateBlockers().length > 0, 'Unsent KonX-AI draft did not block updates');
+      const closing = app.closeTab(panel); await until(() => !!document.querySelector('.modal'), 'KonX-AI close review'); serialFooter('Keep draft'); await closing;
       assert(app.byId.has(panel.id) && controller.prepared === preparation, 'Cancelled close discarded the reviewed request');
-      const discard = app.closeTab(panel); await until(() => !!document.querySelector('.modal'), 'Copilot explicit discard'); serialFooter('Discard draft'); await discard;
-      assert(!app.byId.has(panel.id) && app.jobs.size === 0, 'Copilot close retained a tab or started work');
+      const discard = app.closeTab(panel); await until(() => !!document.querySelector('.modal'), 'KonX-AI explicit discard'); serialFooter('Discard draft'); await discard;
+      assert(!app.byId.has(panel.id) && app.jobs.size === 0, 'KonX-AI close retained a tab or started work');
       if (versionParts[1] >= 24) {
         const editor = await app.openNotepad();
-        const doc = editor.newDoc({ title: 'Copilot fixture', text: 'Selected synthetic editor evidence\nDo not collect this second line' });
+        const doc = editor.newDoc({ title: 'KonX-AI fixture', text: 'Selected synthetic editor evidence\nDo not collect this second line' });
         editor.editor.setSelection({ startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 35 });
         await app.openCopilot(editor);
         const before = doc.model.getValue(), count = controller.conversation.attachments.length;
@@ -677,7 +684,7 @@
       }
       if (versionParts[1] >= 25) {
         await app.openCopilot(security);
-        assert(security.copilotButton && !panel.attachButton.disabled, 'Packaged traffic Copilot entry is unavailable');
+        assert(security.copilotButton && !panel.attachButton.disabled, 'Packaged traffic KonX-AI entry is unavailable');
         const snapshot = security.captureCopilotContext({ choice: 'assessment' });
         await controller.attach(snapshot); const attachment = controller.conversation.attachments.at(-1);
         assert(attachment.snapshot.kind === 'security' && attachment.snapshot.facts.rows.length === security.report.checks.length && app.jobs.size === 0, 'Retained assessment facts were not attached passively');
@@ -685,9 +692,9 @@
       }
       if (versionParts[1] >= 26) {
         const investigation = app.openTool('change-validation', { validationId: changeValidation.savedId }); await investigation.ready;
-        assert(investigation.record?.id === changeValidation.savedId && !investigation.isDirty(), 'Retained validation could not reopen for Copilot');
+        assert(investigation.record?.id === changeValidation.savedId && !investigation.isDirty(), 'Retained validation could not reopen for KonX-AI');
         await app.openCopilot(investigation);
-        assert(investigation.copilotButton && !panel.attachButton.disabled, 'Packaged investigation Copilot entry is unavailable');
+        assert(investigation.copilotButton && !panel.attachButton.disabled, 'Packaged investigation KonX-AI entry is unavailable');
         const snapshot = investigation.captureCopilotContext({ choice: 'saved-plan' });
         await controller.attach(snapshot); const attachment = controller.conversation.attachments.at(-1);
         assert(attachment.snapshot.kind === 'change-validation' && attachment.snapshot.facts.rows[0].plan.name === changeName && attachment.snapshot.facts.rows[0].decisions.every(item => item.status === 'unknown') && app.jobs.size === 0, 'Saved investigation evidence or manual decisions did not survive passive attachment');
@@ -733,8 +740,8 @@
     await complete({ phase: options.phase, version: info.version, tools: supportsComparison ? 11 : supportsRunbooks ? 10 : supportsRemoteCapture ? 9 : supportsIncidents ? 8 : supportsRtp ? 7 : supportsSnapshots ? 6 : supportsDeviceInspector ? 5 : 4, ...(deviceInspector ? { deviceInspector } : {}), ...(deviceSnapshots ? { deviceSnapshots } : {}), ...(rtpMedia ? { rtpMedia } : {}), ...(incidentWorkspace ? { incidentWorkspace } : {}), ...(remoteCapture ? { remoteCapture } : {}), ...(runbooks ? { runbooks } : {}), ...(captureComparison ? { captureComparison } : {}), assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
   } else if (options.phase === 'forget') {
     if (supportsCopilot) {
-      const list = await api.invoke('tools:copilotList'), record = list.conversations.find(item => item.name === 'Synthetic package Copilot');
-      assert(record && list.issues.length === 0 && !app.copilot && app.jobs.size === 0, 'Copilot conversation was lost or automatically opened/sent after restart');
+      const list = await api.invoke('tools:copilotList'), record = list.conversations.find(item => item.name === 'Synthetic package KonX-AI');
+      assert(record && list.issues.length === 0 && !app.copilot && app.jobs.size === 0, 'KonX-AI conversation was lost or automatically opened/sent after restart');
       const conversation = await api.invoke('tools:copilotGet', record.id);
       assert(conversation.attachments.length === (versionParts[1] >= 24 ? 2 : 1) && conversation.attachments[0].snapshot.scope.inputs.address === '192.0.2.37/26' && conversation.turns.length === 0, 'Immutable source evidence changed after restart');
       const panel = await app.openCopilot(); await app.copilot.selectConversation(record.id);
@@ -838,7 +845,7 @@
     assert(!config.hasToken && !JSON.stringify(config).includes(options.token), 'Mist token remained after removal');
     app.activate(ai);
     await until(() => !ai.configBusy, 'AI settings after activation');
-    assert(ai.config.provider === 'nyquest' && ai.config.hasKey && ai.key.value === '', 'Encrypted AI key did not survive restart');
+    assert(ai.config.provider === 'nyquest' && ai.config.hasKey && ai.key.value === '' && ai.savedKey() && !ai.forgetButton.disabled, 'Encrypted Nyquest key did not survive restart');
     ai.forgetButton.click(); await until(() => !ai.configBusy, 'synthetic AI credential removal');
     assert(!ai.config.hasKey && !JSON.stringify(await api.invoke('tools:aiConfig')).includes(options.token), 'AI credential remained after Forget');
     const notes = await api.invoke('tools:knowledgeList', { query: noteTitle });

@@ -39,7 +39,7 @@ async function fixture(fn, options = {}) {
 }
 
 async function runCopilotActionsTests(test) {
-  await test('AI action suggestions are present only in contextual Copilot preparation, never standalone or minimal provider tests', async () => fixture(async ({ dir }) => {
+  await test('AI action suggestions are present only in contextual KonX-AI preparation, never standalone or minimal provider tests', async () => fixture(async ({ dir }) => {
     const { AIClient } = require('../src/main/ai'), ai = new AIClient({ dir, crypt: { available: () => true, encrypt: value => 'owned:' + value, decrypt: value => value.slice(6) }, knowledge: { search: async () => [] } });
     ai.configure({ key: 'Synthetic_Reviewed_Action_Key_1234567890' }); const revision = ai.getConfig().revision;
     const normal = await ai.prepareConversation({ revision, question: 'What diagnostic would help?', includeKnowledge: false, stream: false });

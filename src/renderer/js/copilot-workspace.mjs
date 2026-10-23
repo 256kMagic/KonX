@@ -65,7 +65,7 @@ export function workspaceCopilotItems(tab) {
 
 function requireChoice(tab, choice) {
   const found = workspaceContextChoices(tab).find(item => item.choice === choice);
-  if (!found) throw new Error('Choose which current workspace evidence to attach to Copilot.');
+  if (!found) throw new Error('Choose which current workspace evidence to attach to KonX-AI.');
   if (found.disabled) throw new Error('The selected workspace evidence is unavailable. Select text or metadata first.');
 }
 

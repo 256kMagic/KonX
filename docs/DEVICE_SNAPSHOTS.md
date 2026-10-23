@@ -30,6 +30,6 @@ Configuration differences describe captured text and sections; they are not a si
 
 Snapshots are stored in the current KonX profile's `device-snapshots` directory. They retain original command output. Running configurations may contain credentials or sensitive network details; they remain local files and are not encrypted by the snapshot library. Protect the profile and review reports before sharing.
 
-From 0.26.0, **Ask Copilot** can attach selected comparison changes with their before/after snapshot references. Device Inspector separately offers selected parsed facts, complete selected command output or recorded trace candidates. Nothing is collected again when attaching. Inspect the evidence, omissions and complete request before sending; configuration text may contain sensitive information. See the [Copilot guide](COPILOT.md).
+From 0.26.0, **Ask KonX-AI** can attach selected comparison changes with their before/after snapshot references. Device Inspector separately offers selected parsed facts, complete selected command output or recorded trace candidates. Nothing is collected again when attaching. Inspect the evidence, omissions and complete request before sending; configuration text may contain sensitive information. See the [KonX-AI guide](KONX_AI.md).
 
 Delete a snapshot only when its evidence is no longer needed. Deleting a library entry does not modify a switch or an independently exported report. Corrupt or unreadable stored entries are reported instead of silently treated as an empty history.

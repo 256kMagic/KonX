@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.27.1 — KonX-AI and Saved Provider Keys
+
+- Rename the contextual assistant from Copilot to KonX-AI across current application labels and guides. Existing local conversations and workspace references remain compatible.
+- Improve encrypted local API-key management, saved-key visibility, reuse and deletion.
+
+See the [KonX-AI guide](docs/KONX_AI.md) and [release notes](docs/releases/0.27.1.md).
+
 ## 0.27.0 — 2026-10-23
 
 - Review and run a bounded single-target Ping, DNS query or Traceroute from a completed Copilot answer.
@@ -8,7 +15,7 @@
 - Retain action targets, review digests and outcomes. Expired, stale and replayed reviews are rejected; uncertain outcomes never trigger an automatic retry.
 - Avoid the reproduced Windows initial hard-link publication failure with an exclusive native move for new Copilot, Incident, Change Validation and saved-site files, preserving collision and cleanup ownership checks.
 
-See the [Copilot guide](docs/COPILOT.md) and [release notes](docs/releases/0.27.0.md).
+See the [Copilot guide](docs/KONX_AI.md) and [release notes](docs/releases/0.27.0.md).
 
 ## 0.26.0 — 2026-10-23
 
@@ -17,7 +24,7 @@ See the [Copilot guide](docs/COPILOT.md) and [release notes](docs/releases/0.27.
 - Serialize incident reads and writes, retain failed cleanup ownership, and guard shutdown and updates against pending incident operations.
 - Retry transient Windows file-replacement failures within a bounded interval, validating both source and destination identity/version before every retry.
 
-See the [Copilot guide](docs/COPILOT.md) and [release notes](docs/releases/0.26.0.md).
+See the [Copilot guide](docs/KONX_AI.md) and [release notes](docs/releases/0.26.0.md).
 
 ## 0.25.0 — 2026-10-23
 
@@ -25,7 +32,7 @@ See the [Copilot guide](docs/COPILOT.md) and [release notes](docs/releases/0.26.
 - Add selected security, Wi-Fi and Mist observations with original scope, frame references, coverage and omissions.
 - Attaching existing results performs no new capture, parsing, cloud query, audio export or file read.
 
-See the [Copilot guide](docs/COPILOT.md) and [release notes](docs/releases/0.25.0.md).
+See the [Copilot guide](docs/KONX_AI.md) and [release notes](docs/releases/0.25.0.md).
 
 ## 0.24.0 � 2026-10-23
 
@@ -33,7 +40,7 @@ See the [Copilot guide](docs/COPILOT.md) and [release notes](docs/releases/0.25.
 - Add saved-session context, SFTP listing/selection/transfer metadata, and current editor selections or documents.
 - Add the current-view evidence picker; attachments remain local, bounded and immutable, with no automatic commands, transfers or provider requests.
 
-See the [Copilot guide](docs/COPILOT.md) and [release notes](docs/releases/0.24.0.md).
+See the [Copilot guide](docs/KONX_AI.md) and [release notes](docs/releases/0.24.0.md).
 
 ## 0.23.0 — 2026-10-23
 
@@ -43,7 +50,7 @@ See the [Copilot guide](docs/COPILOT.md) and [release notes](docs/releases/0.24.
 - Add explicit provider connection tests, actual reported token usage, cancellation, interrupted-request handling, and shutdown ownership.
 - Capture typed basic network tool facts from their original run inputs and selections, with coverage and omission notices.
 
-See the [Copilot guide](docs/COPILOT.md) and [release notes](docs/releases/0.23.0.md).
+See the [Copilot guide](docs/KONX_AI.md) and [release notes](docs/releases/0.23.0.md).
 
 ## 0.22.1 — 2026-10-23
 

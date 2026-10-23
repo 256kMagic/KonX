@@ -28,7 +28,7 @@ Export **HTML** for a readable standalone report or **JSON** for structured evid
 
 Binary capture contents are not embedded in these reports. Open a retained capture and save it separately if the recipient needs packet bytes. Large text may be visibly truncated in the report while the retained asset remains complete. Review report contents before sharing: terminal output, configuration, syslog, and packet data can contain credentials or other sensitive values. Incident assets are ordinary local files, not an encrypted archive.
 
-From 0.26.0, **Ask Copilot** offers explicit choices for selected complete text evidence, retained timeline entries, and integrity information. Truncated text is omitted with a notice; attachment does not reread the source file. Review the saved attachment and complete request before sending it to your provider. See the [Copilot guide](COPILOT.md).
+From 0.26.0, **Ask KonX-AI** offers explicit choices for selected complete text evidence, retained timeline entries, and integrity information. Truncated text is omitted with a notice; attachment does not reread the source file. Review the saved attachment and complete request before sending it to your provider. See the [KonX-AI guide](KONX_AI.md).
 
 ## Storage, limits, and unfinished work
 

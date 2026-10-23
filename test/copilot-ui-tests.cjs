@@ -13,20 +13,20 @@ const pause = (ms = 20) => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check, label, timeout = 12000) { const stop = Date.now() + timeout; while (!await check()) { if (Date.now() >= stop) throw new Error('Timed out: ' + label); await pause(); } }
 
 async function runCopilotUiTests(test) {
-  await test('Copilot real Electron UI with canonical workspace ownership, actual store/prepare/provider transport, explicit evidence and guarded drafts', async () => {
+  await test('KonX-AI real Electron UI with canonical workspace ownership, actual store/prepare/provider transport, explicit evidence and guarded drafts', async () => {
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'konx-copilot-ui-')); let child, output = '';
     try {
       const env = { ...process.env, KONX_COPILOT_UI_ROOT: temp }; delete env.ELECTRON_RUN_AS_NODE;
       child = spawn(require(path.join(REPO, 'node_modules/electron')), [__filename, '--copilot-ui-fixture'], { windowsHide: true, env, stdio: ['ignore', 'pipe', 'pipe'] });
       const collect = value => { output = (output + value).slice(-1024 * 1024); }; child.stdout.on('data', collect); child.stderr.on('data', collect);
       const code = await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => { child.kill(); reject(new Error('Copilot UI timeout\n' + output)); }, 70000);
+        const timer = setTimeout(() => { child.kill(); reject(new Error('KonX-AI UI timeout\n' + output)); }, 70000);
         child.once('error', error => { clearTimeout(timer); reject(error); }); child.once('exit', value => { clearTimeout(timer); resolve(value); });
       });
       if (code !== 0) {
         const evidence = path.join(REPO, 'review/copilot-ui'); fs.mkdirSync(evidence, { recursive: true });
         fs.writeFileSync(path.join(evidence, 'last-failure.log'), output);
-        assert.fail('Copilot UI fixture failed: ' + output.trim().split(/\r?\n/).slice(-8).join('\n'));
+        assert.fail('KonX-AI UI fixture failed: ' + output.trim().split(/\r?\n/).slice(-8).join('\n'));
       }
       assert.match(output, /COPILOT_UI_PASS/);
     } finally {
@@ -120,9 +120,10 @@ await window.__open();window.__ready=true;`);
   };
   const input = (expression, value) => run(`${expression}.value=${JSON.stringify(value)};${expression}.dispatchEvent(new Event('input',{bubbles:true}));void 0;`);
   const choice = async label => { const expression = `Array.from(document.querySelectorAll('.modal footer button')).find(e=>e.textContent===${JSON.stringify(label)})`; await until(() => run(`Boolean(${expression})`), label); await click(expression); };
-  const idle = () => until(() => run('!__c.busy&&!__c.jobId&&!__c.prompting'), 'Copilot idle');
+  const idle = () => until(() => run('!__c.busy&&!__c.jobId&&!__c.prompting'), 'KonX-AI idle');
   try {
-    await until(() => run('Boolean(window.__ready)'), 'Copilot module ready');
+    await until(() => run('Boolean(window.__ready)'), 'KonX-AI module ready');
+    assert.deepEqual(await run('[__p.title,__p.el.querySelector("h2").textContent,__p.question.getAttribute("aria-label"),__p.statusSegments()[0].text]'), ['KonX-AI', 'KonX-AI', 'KonX-AI question', 'KonX-AI']);
     assert.equal(requests.length, 0); assert.equal((await service.list()).conversations.length, 0); assert.deepEqual(await run('__c.updateBlockers()'), []);
     await click('__p.newButton'); await input('document.querySelector(".modal input")', 'Fixture conversation'); await choice('Save name'); await idle();
     const id = await run('__c.conversation.id'); assert.equal((await service.get(id)).name, 'Fixture conversation');
@@ -131,7 +132,7 @@ await window.__open();window.__ready=true;`);
     const snapshot = { schemaVersion: 1, kind: 'dns', title: 'Synthetic DNS observation', capturedAt: new Date().toISOString(), source: { tabId: 'fixture-source', runId: 'fixture-run', revision: 1 }, state: 'complete', scope: { name: 'example.invalid', recordType: 'A' }, selection: { mode: 'all', ids: [] }, facts: { addresses: ['192.0.2.42'], note: key }, coverage: { observed: 1, total: 1, complete: true }, omissions: ['Synthetic fixture; no live lookup occurred.'] };
     await run('__app.activate(__source,{focus:false});void 0;');
     await run(`__c.attach(${JSON.stringify(snapshot)})`); await idle(); assert.equal(requests.length, 0);
-    assert.equal(await run('window.__statusTab'), 'fixture-source', 'background Copilot changes preserve the focused source footer');
+    assert.equal(await run('window.__statusTab'), 'fixture-source', 'background KonX-AI changes preserve the focused source footer');
     assert.equal((await service.get(id)).attachments.length, 1); assert.equal((await run('__p.evidence.textContent')).includes(key), false);
     await input('__p.question', 'Explain this DNS evidence'); await click('__p.prepareButton'); await idle();
     const first = await run('__c.prepared'); assert.equal(await run('__p.requestBody.textContent'), first.body); assert.equal(requests.length, 0); assert.ok(first.body.includes('192.0.2.42'));

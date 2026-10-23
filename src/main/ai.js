@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const https = require('https');
 const http = require('http');
 const { checkCancelled, onCancel } = require('./security/common');
+const { sameFile, sameVersion, publishNewFileSync } = require('./atomic-replacement');
 
 const PROVIDERS = Object.freeze([
   { id: 'openai', label: 'OpenAI', defaultModel: 'gpt-5-mini' },
@@ -130,18 +131,21 @@ function parseAnswer(provider, value) {
 class AIClient {
   constructor({ dir, crypt, request = https.request, knowledge }) {
     if (!dir || !crypt || typeof request !== 'function' || !knowledge || typeof knowledge.search !== 'function') throw new TypeError('AI storage, encryption, transport and knowledge search are required');
-    this.file = path.join(dir, 'ai.json');
+    this.file = path.resolve(dir, 'ai.json');
     this.crypt = crypt;
     this.transport = request;
     this.knowledge = knowledge;
     this.config = defaults();
     this.revision = crypto.randomUUID();
     this.storageError = '';
+    this.fileVersion = null; this.pendingTemps = new Map(); this.pendingHandles = new Map();
     this.prepared = new WeakSet();
     try {
-      const stat = fs.statSync(this.file);
-      if (!stat.isFile() || stat.size > 100000) throw new Error();
+      const stat = fs.lstatSync(this.file, { bigint: true });
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 100000n) throw new Error();
+      this.fileVersion = stat;
       const data = JSON.parse(fs.readFileSync(this.file, 'utf8'));
+      if (!sameVersion(stat, fs.lstatSync(this.file, { bigint: true }))) throw new Error();
       if (!record(data) || data.version !== 1 || !PROVIDERS.some((p) => p.id === data.provider) || !record(data.providers)) throw new Error();
       const loaded = defaults();
       loaded.provider = data.provider;
@@ -154,14 +158,15 @@ class AIClient {
       }
       this.config = loaded;
     } catch (error) {
-      if (error.code !== 'ENOENT') this.storageError = 'Saved AI settings could not be read. Save a new key or forget the saved key to repair them.';
+      if (error.code !== 'ENOENT') this.storageError = 'Saved AI settings could not be read. Replace or delete a saved key to repair them; an externally changed file requires reopening KonX.';
     }
   }
 
   getConfig() {
     const selected = this.config.providers[this.config.provider];
     const keyPresence = Object.fromEntries(PROVIDERS.map((p) => [p.id, !!this.config.providers[p.id].keyEnc]));
-    return { provider: this.config.provider, model: selected.model, baseUrl: this.config.provider === 'custom' ? selected.baseUrl : '', revision: this.revision, providers: PROVIDERS.map((p) => ({ ...p, model: this.config.providers[p.id].model, baseUrl: p.custom ? this.config.providers[p.id].baseUrl : '' })), hasKey: keyPresence[this.config.provider], keyPresence, ...(this.storageError ? { warning: this.storageError } : {}) };
+    const warning = [this.storageError, this.pendingTemps.size ? 'Encrypted temporary settings cleanup is pending. Saving again or closing KonX retries owned cleanup.' : ''].filter(Boolean).join(' ');
+    return { provider: this.config.provider, model: selected.model, baseUrl: this.config.provider === 'custom' ? selected.baseUrl : '', revision: this.revision, providers: PROVIDERS.map((p) => ({ ...p, model: this.config.providers[p.id].model, baseUrl: p.custom ? this.config.providers[p.id].baseUrl : '' })), hasKey: keyPresence[this.config.provider], keyPresence, ...(warning ? { warning } : {}) };
   }
 
   _encryptionAvailable() {
@@ -174,7 +179,7 @@ class AIClient {
     const secrets = [];
     for (const p of PROVIDERS) if (this.config.providers[p.id].keyEnc) {
       try { secrets.push(this._key(p.id)); }
-      catch { fail('Saved AI keys could not be checked for redaction. Re-enter or forget them before sharing tool context'); }
+      catch { fail('Saved AI keys could not be checked for redaction. Replace or delete them before sharing tool context'); }
     }
     const redacted = redactText(context, secrets);
     if (redacted.length <= MAX_CONTEXT_PREVIEW) return { context: redacted };
@@ -197,7 +202,7 @@ class AIClient {
     if (provider === 'custom') {
       const target = input.baseUrl === undefined ? selected.baseUrl : baseUrl(input.baseUrl);
       if (!target && key !== null) fail('Enter the custom API base URL first');
-      if (target !== selected.baseUrl && selected.keyEnc && !key && key !== null) fail('Re-enter the API key when changing the custom API base URL, or forget it first');
+      if (target !== selected.baseUrl && selected.keyEnc && !key && key !== null) fail('Re-enter the API key when changing the custom API base URL, or delete it first');
       selected.baseUrl = target;
       if (!selected.model && key !== null) fail('Enter the custom provider model ID');
     } else if (input.baseUrl !== undefined && input.baseUrl !== '') fail('Custom API base URLs apply only to the Custom provider');
@@ -212,20 +217,87 @@ class AIClient {
       } catch { fail('The AI API key could not be encrypted; saved settings are unchanged'); }
     }
     next.provider = provider;
+    this.cleanupTemps();
+    if (this.hasOwnership) fail('Encrypted AI settings cleanup is still pending. Retry saving or closing KonX before creating another settings file');
     const temp = `${this.file}.${crypto.randomUUID()}.tmp`;
+    let fd = null, published = false;
+    const checkTarget = () => {
+      let current; try { current = fs.lstatSync(this.file, { bigint: true }); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      if (this.fileVersion ? !sameVersion(this.fileVersion, current) : !!current) throw Object.assign(new Error('AI settings changed outside this connection; reopen KonX before saving.'), { code: 'ATOMIC_CONFLICT' });
+    };
     try {
       fs.mkdirSync(path.dirname(this.file), { recursive: true });
-      fs.writeFileSync(temp, JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-      fs.renameSync(temp, this.file);
-    } catch {
-      try { fs.unlinkSync(temp); } catch { /* Retain the previous configuration. */ }
-      fail('AI settings could not be saved; previous settings are unchanged');
+      checkTarget();
+      fd = fs.openSync(temp, 'wx', 0o600);
+      this.pendingTemps.set(temp, null); this.pendingHandles.set(fd, { file: temp, identity: null });
+      const identity = fs.fstatSync(fd, { bigint: true });
+      this.pendingTemps.set(temp, identity); this.pendingHandles.get(fd).identity = identity;
+      fs.writeFileSync(fd, JSON.stringify(next, null, 2), 'utf8'); fs.fsyncSync(fd);
+      const source = fs.fstatSync(fd, { bigint: true });
+      if (!this.closeDescriptor(fd)) throw new Error('Descriptor close remains pending');
+      fd = null;
+      if (!sameVersion(source, fs.lstatSync(temp, { bigint: true }))) throw Object.assign(new Error(), { code: 'ATOMIC_CONFLICT' });
+      checkTarget();
+      if (this.fileVersion) fs.renameSync(temp, this.file);
+      else publishNewFileSync(fs, temp, this.file, source);
+      published = true;
+      this.config = next; this.revision = crypto.randomUUID(); this.storageError = '';
+      this.fileVersion = source;
+      const saved = fs.lstatSync(this.file, { bigint: true });
+      if (!sameFile(source, saved) || source.size !== saved.size || source.mtimeNs !== saved.mtimeNs) throw Object.assign(new Error(), { code: 'ATOMIC_CONFLICT' });
+      this.fileVersion = saved;
+    } catch (error) {
+      if (published) {
+        this.storageError = 'AI settings were saved, but their file could not be verified. Reopen KonX before changing or using this connection.';
+        fail(this.storageError);
+      }
+      if (error.code === 'ATOMIC_CONFLICT') fail('AI settings changed outside this connection; reopen KonX before saving. Previous in-memory settings are unchanged');
+      fail('AI settings could not be saved; previous settings are unchanged. Your entered key remains in the field for retry');
+    } finally {
+      this.cleanupTemps();
     }
-    this.config = next;
-    this.storageError = '';
-    this.revision = crypto.randomUUID();
     return this.getConfig();
   }
+
+  cleanupTemps() {
+    for (const fd of this.pendingHandles.keys()) this.closeDescriptor(fd);
+    for (const [file, owned] of this.pendingTemps) {
+      if (!owned || [...this.pendingHandles.values()].some(item => item.file === file)) continue;
+      let current;
+      try { current = fs.lstatSync(file, { bigint: true }); }
+      catch (error) { if (error.code === 'ENOENT') this.pendingTemps.delete(file); continue; }
+      if (!sameFile(owned, current)) continue;
+      try {
+        // POSIX initial publication leaves an owned hard-link alias. Removing
+        // that alias changes target ctime, so adopt only that expected change.
+        const alias = sameFile(owned, this.fileVersion);
+        let before;
+        if (alias) {
+          before = fs.lstatSync(this.file, { bigint: true });
+          if (!sameVersion(this.fileVersion, before)) continue;
+        }
+        fs.unlinkSync(file); this.pendingTemps.delete(file);
+        if (alias) {
+          try {
+            const after = fs.lstatSync(this.file, { bigint: true });
+            if (!sameFile(before, after) || before.size !== after.size || before.mtimeNs !== after.mtimeNs) throw new Error();
+            this.fileVersion = after;
+          } catch { this.storageError = 'Saved AI settings changed during temporary file cleanup. Reopen KonX before changing or using this connection.'; }
+        }
+      } catch { /* Retain the exact owned alias for another cleanup attempt. */ }
+    }
+  }
+  closeDescriptor(fd) {
+    const owned = this.pendingHandles.get(fd); if (!owned) return true;
+    try {
+      const current = fs.fstatSync(fd, { bigint: true });
+      if (owned.identity && !sameFile(owned.identity, current)) return false;
+      if (!owned.identity) { owned.identity = current; this.pendingTemps.set(owned.file, current); }
+      fs.closeSync(fd); this.pendingHandles.delete(fd); return true;
+    } catch (error) { if (error.code === 'EBADF') { this.pendingHandles.delete(fd); return true; } return false; }
+  }
+  get hasOwnership() { return this.pendingTemps.size > 0 || this.pendingHandles.size > 0; }
+  close() { this.cleanupTemps(); if (this.hasOwnership) fail('Encrypted AI settings temporary files could not be cleaned up. Retry closing KonX.'); }
 
   _assertRevision(revision) {
     if (typeof revision !== 'string' || revision !== this.revision) fail('AI settings changed; refresh settings and retry');
@@ -237,8 +309,9 @@ class AIClient {
     if (!entry.keyEnc) fail('Save an API key for the selected AI provider first');
     if (!this._encryptionAvailable()) fail('Secure Windows credential encryption is unavailable');
     let key;
-    try { key = this.crypt.decrypt(entry.keyEnc); } catch { fail('The saved AI API key could not be decrypted; save it again'); }
-    if (typeof key !== 'string' || !KEY.test(key)) fail('The saved AI API key is invalid; save it again');
+    const label = PROVIDERS.find(item => item.id === provider)?.label || provider;
+    try { key = this.crypt.decrypt(entry.keyEnc); } catch { fail(`The saved ${label} API key could not be decrypted; replace or delete that provider's key in KonX-AI Settings`); }
+    if (typeof key !== 'string' || !KEY.test(key)) fail(`The saved ${label} API key is invalid; replace or delete that provider's key in KonX-AI Settings`);
     return key;
   }
 
@@ -261,7 +334,7 @@ class AIClient {
 
   async prepareConversation({ revision, question, history = [], evidence = [], includeKnowledge = false, stream = true, test = false }, signal = {}) {
     this._assertRevision(revision); checkCancelled(signal);
-    if (typeof question !== 'string' || !question.trim() || question.length > 8000 || !Array.isArray(history) || !Array.isArray(evidence)) fail('Invalid Copilot question or context');
+    if (typeof question !== 'string' || !question.trim() || question.length > 8000 || !Array.isArray(history) || !Array.isArray(evidence)) fail('Invalid KonX-AI question or context');
     const provider = this.config.provider, selected = { ...this.config.providers[provider] }, secrets = this._allKeys();
     model(selected.model, provider); if (provider === 'custom') baseUrl(selected.baseUrl); this._key(provider);
     const redact = this.redactor();
@@ -279,7 +352,7 @@ class AIClient {
     const safeHistory = clean(history), safeEvidence = clean(evidence), references = [];
     if (includeKnowledge && !test) {
       let matches; try { matches = await this._retrieve(safeQuestion.slice(0, 4000), signal, Date.now() + TIMEOUT, secrets); }
-      catch { fail(signal.stopped ? 'Copilot preparation cancelled' : 'The local knowledge library could not be searched. Rebuild it and retry'); }
+      catch { fail(signal.stopped ? 'KonX-AI preparation cancelled' : 'The local knowledge library could not be searched. Rebuild it and retry'); }
       for (const item of Array.isArray(matches) ? matches.slice(0, 5) : []) {
         if (!record(item)) continue;
         let sourceUrl = '';
@@ -331,8 +404,8 @@ class AIClient {
       emit('delta', { text: answer }); emit('usage', usage);
       return { answer, usage, limitations };
     } catch (error) {
-      if (signal.stopped) throw new Error('Copilot request cancelled');
-      throw new Error(error instanceof PublicError ? redactText(error.message, secrets) : 'The Copilot request could not be completed. Review provider settings before retrying.');
+      if (signal.stopped) throw new Error('KonX-AI request cancelled');
+      throw new Error(error instanceof PublicError ? redactText(error.message, secrets) : 'The KonX-AI request could not be completed. Review provider settings before retrying.');
     }
   }
 
@@ -356,7 +429,7 @@ class AIClient {
       // Also redact any other configured provider key pasted into a question or reply.
       for (const p of PROVIDERS) if (p.id !== provider && this.config.providers[p.id].keyEnc) {
         try { secrets.push(this._key(p.id)); }
-        catch { fail('Saved AI keys could not be checked for redaction. Re-enter or forget the unreadable key before asking AI'); }
+        catch { fail('Saved AI keys could not be checked for redaction. Replace or delete the unreadable key before asking AI'); }
       }
       const question = redactText(params.question.trim(), secrets);
       const context = params.shareContext === true ? redactText(params.context || '', secrets) : '';

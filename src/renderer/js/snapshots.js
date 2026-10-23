@@ -161,7 +161,7 @@ export class SnapshotTab {
         (device.warnings || []).map((warning) => h('p.hint', warning)))),
       ...(report.unmatched || []).map((device) => h('p.notice', `${device.side}: ${device.deviceLabel} · ${device.reason}`)),
       ...(report.warnings || []).map((warning) => h('p.notice', warning)),
-      report.sensitive ? h('p.notice', 'This comparison contains captured configuration. Its local evidence and JSON export can contain credentials. Ask Copilot attaches only explicitly selected changes after review; changed configuration may contain sensitive text.') : null);
+      report.sensitive ? h('p.notice', 'This comparison contains captured configuration. Its local evidence and JSON export can contain credentials. Ask KonX-AI attaches only explicitly selected changes after review; changed configuration may contain sensitive text.') : null);
     this.renderRows(); this.renderChange();
   }
 

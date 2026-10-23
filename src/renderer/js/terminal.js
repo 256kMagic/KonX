@@ -80,7 +80,7 @@ export class TerminalTab {
       type: 'button', role: 'switch', 'aria-label': 'Highlight Cisco output',
       'aria-checked': 'false', onclick: () => this.toggleCiscoHighlighting(),
     }, h('span.term-log-track', { 'aria-hidden': 'true' }), 'Cisco colors', this.ciscoState);
-    this.copilotButton = h('button.btn.sm.ghost', { type: 'button', 'aria-label': 'Choose terminal evidence for Copilot', onclick: e => { const r = e.currentTarget.getBoundingClientRect(); contextMenu(r.left, r.bottom, workspaceCopilotItems(this)); } }, icon('insight'), 'Ask Copilot');
+    this.copilotButton = h('button.btn.sm.ghost', { type: 'button', 'aria-label': 'Choose terminal evidence for KonX-AI', onclick: e => { const r = e.currentTarget.getBoundingClientRect(); contextMenu(r.left, r.bottom, workspaceCopilotItems(this)); } }, icon('insight'), 'Ask KonX-AI');
     this.logbar = h('div.term-logbar', this.logSwitch, this.ciscoSwitch, this.copilotButton, this.logPath, this.logReveal, this.logErrorEl);
     this.el = h('div.view', this.logbar, this.wrap);
     this._renderLogging();

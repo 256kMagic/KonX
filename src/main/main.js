@@ -80,7 +80,7 @@ let toolsShuttingDown = false;
 let ownedConnectionQuitApproved = false;
 
 function ownedToolJobs() { return [...toolJobs.values()].filter(signal => ['remote-capture', 'runbook', 'events', 'copilot', 'copilot-action'].includes(signal.kind)); }
-function hasToolOwnership() { return remoteReservations > 0 || ownedToolJobs().length > 0 || !!remoteResults?.hasOpenHandles || !!remoteCapture.hasPendingCleanup || !!runbookStore?.hasOwnership || !!sites?.hasOwnership || !!events?.hasOwnership || !!changes?.hasOwnership || !!incidents?.hasOwnership || !!copilot?.hasOwnership || !!copilotActions?.hasOwnership; }
+function hasToolOwnership() { return remoteReservations > 0 || ownedToolJobs().length > 0 || !!remoteResults?.hasOpenHandles || !!remoteCapture.hasPendingCleanup || !!runbookStore?.hasOwnership || !!sites?.hasOwnership || !!events?.hasOwnership || !!changes?.hasOwnership || !!incidents?.hasOwnership || !!copilot?.hasOwnership || !!copilotActions?.hasOwnership || !!ai?.hasOwnership; }
 function hasSerialOwnership() { return !!connections?.hasSerialOwnership; }
 function hasPopoutOwnership() { return !!workspaceWindows?.hasOwnership; }
 function dialogOwner() { return workspaceWindows?.dialogOwner() || (win && !win.isDestroyed() ? win : undefined); }
@@ -561,6 +561,7 @@ function registerIpc() {
   handle('tools:mistConfigure', (params) => mist.configure(params));
   handle('tools:aiConfig', () => ai.getConfig());
   handle('tools:aiConfigure', (params) => {
+    if (toolsShuttingDown || updateShutdownPending) throw new Error('KonX is closing; wait before changing AI connection settings.');
     const config = ai.configure(params);
     for (const signal of jobs.values()) {
       if (!['ai', 'copilot'].includes(signal.kind)) continue;
@@ -738,8 +739,8 @@ app.whenReady().then(() => {
       if (sftp.queue.active.size || sftp.queue.jobs.some((job) => ['queued', 'running'].includes(job.status))) reasons.push('Finish or cancel file transfers before updating.');
       if (capture.sessions.size || capture.startRequests.size || capture.builtin.sessions.size || capture.builtin.startRequests.size) reasons.push('Stop packet capture before updating.');
       if (toolJobs.size) reasons.push('Stop running tools and AI requests before updating.');
-      if (copilot.hasOwnership) reasons.push('Wait for Copilot to save its work or quit KonX to retry pending cleanup before updating.');
-      if (copilotActions.hasOwnership) reasons.push('Wait for reviewed Copilot actions to finish or quit KonX to retry saving their outcomes before updating.');
+      if (copilot.hasOwnership) reasons.push('Wait for KonX-AI to save its work or quit KonX to retry pending cleanup before updating.');
+      if (copilotActions.hasOwnership) reasons.push('Wait for reviewed KonX-AI actions to finish or quit KonX to retry saving their outcomes before updating.');
       if (remoteCapture.hasPendingCleanup) reasons.push('Quit KonX to retry pending remote capture file cleanup before updating.');
       if (remoteResults.hasPendingCleanup) reasons.push('Quit KonX to retry pending remote capture result cleanup before updating.');
       if (runbookStore.hasPendingCleanup) reasons.push('Quit KonX to retry pending runbook file cleanup before updating.');
@@ -747,6 +748,7 @@ app.whenReady().then(() => {
       if (changes.hasOwnership) reasons.push('Wait for change validation operations or quit KonX to retry pending file cleanup before updating.');
       if (incidents.hasOwnership) reasons.push('Wait for incident evidence operations or quit KonX to retry pending file cleanup before updating.');
       if (sites.hasOwnership) reasons.push('Wait for saved workspace operations or quit KonX to retry pending file cleanup before updating.');
+      if (ai.hasOwnership) reasons.push('Quit KonX to retry encrypted AI settings cleanup before updating.');
       if (pendingPrompts.size) reasons.push('Finish the open connection prompts before updating.');
       if (knowledge.busy) reasons.push('Wait for the knowledge library to finish its current operation.');
       return reasons;
@@ -799,7 +801,7 @@ app.on('before-quit', (event) => {
     const cleanupErrors = [];
     const popoutError = await popoutCleanup;
     if (popoutError) cleanupErrors.push(popoutError);
-    for (const cleanup of [() => remoteCapture.closePending(), () => remoteResults?.close(), () => runbookStore?.close(), () => sites?.close(), () => events?.close(), () => changes?.close(), () => incidents?.close(), () => copilotActions?.close(), () => copilot?.close(),
+    for (const cleanup of [() => remoteCapture.closePending(), () => remoteResults?.close(), () => runbookStore?.close(), () => sites?.close(), () => events?.close(), () => changes?.close(), () => incidents?.close(), () => copilotActions?.close(), () => copilot?.close(), () => ai?.close?.(),
       () => hasSerialOwnership() ? connections.waitForSerialCleanup() : undefined]) {
       try { await cleanup(); } catch (error) { cleanupErrors.push(error.message); }
     }
@@ -808,8 +810,9 @@ app.on('before-quit', (event) => {
     if (changes?.hasOwnership) cleanupErrors.push('Change validation resources still require cleanup.');
     if (incidents?.hasOwnership) cleanupErrors.push('Incident evidence resources still require cleanup.');
     if (sites?.hasOwnership) cleanupErrors.push('Saved workspace resources still require cleanup.');
-    if (copilot?.hasOwnership) cleanupErrors.push('Copilot resources still require cleanup.');
-    if (copilotActions?.hasOwnership) cleanupErrors.push('Reviewed Copilot action outcomes still require cleanup.');
+    if (copilot?.hasOwnership) cleanupErrors.push('KonX-AI resources still require cleanup.');
+    if (copilotActions?.hasOwnership) cleanupErrors.push('Reviewed KonX-AI action outcomes still require cleanup.');
+    if (ai?.hasOwnership) cleanupErrors.push('Encrypted AI settings temporary files still require cleanup.');
     if (hasSerialOwnership()) cleanupErrors.push('Serial port resources still require cleanup.');
     await updateCleanup;
     if (cleanupErrors.length) throw new Error(cleanupErrors.join('\n'));

@@ -1,10 +1,11 @@
 'use strict';
 const assert = require('node:assert/strict');
+const syncFs = require('node:fs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
-const { publishNewFile } = require('../src/main/atomic-replacement');
+const { publishNewFile, publishNewFileSync } = require('../src/main/atomic-replacement');
 const { CopilotStore } = require('../src/main/copilot-store');
 const { IncidentStore } = require('../src/main/incidents');
 const { ChangeValidationStore } = require('../src/main/change-validation');
@@ -25,6 +26,41 @@ function storeOf(kind, root, options) { return kind === 'copilot' ? new CopilotS
 const create = (kind, store) => kind === 'copilot' ? store.create({ name: 'Before' }) : kind === 'incident' ? store.create({ title: 'Before' }) : kind === 'site' ? store.save({ name: 'Before' }) : store.create(plan('Before'));
 
 async function runAtomicPublicationTests(test) {
+  await test('synchronous initial settings publication preserves complete Unicode-path contents and refuses target collisions', () => fixture(async root => {
+    const folder = path.join(root, 'settings-ü-' + 'a'.repeat(80), 'b'.repeat(80), 'c'.repeat(80)); await fs.mkdir(folder, { recursive: true });
+    const source = await candidate(folder, 'Complete encrypted settings fixture'), target = path.join(folder, 'ai-ü.json');
+    const consumed = publishNewFileSync(syncFs, source.file, target, source.version);
+    assert.equal(consumed, process.platform === 'win32');
+    assert.equal(await fs.readFile(target, 'utf8'), 'Complete encrypted settings fixture');
+    if (consumed) await assert.rejects(fs.lstat(source.file), { code: 'ENOENT' });
+    else assert.equal(await fs.readFile(source.file, 'utf8'), 'Complete encrypted settings fixture');
+    const collision = await candidate(folder, 'Different pending settings fixture');
+    assert.throws(() => publishNewFileSync(syncFs, collision.file, target, collision.version), { code: 'EEXIST' });
+    assert.equal(await fs.readFile(target, 'utf8'), 'Complete encrypted settings fixture');
+    assert.equal(await fs.readFile(collision.file, 'utf8'), 'Different pending settings fixture');
+  }));
+  await test('synchronous settings publication rejects changed source contents or identity before reaching the native move', () => fixture(async root => {
+    const target = path.join(root, 'ai.json'); let invoked = false;
+    const options = { platform: 'win32', moveNoReplace: () => { invoked = true; } };
+    const modified = await candidate(root); await fs.appendFile(modified.file, '\nChanged after flush');
+    assert.throws(() => publishNewFileSync(syncFs, modified.file, target, modified.version, options), { code: 'ATOMIC_CONFLICT' });
+    const replaced = await candidate(root), retained = replaced.file + '.owned';
+    await fs.rename(replaced.file, retained); await fs.writeFile(replaced.file, 'Foreign path occupant', { flag: 'wx' });
+    assert.throws(() => publishNewFileSync(syncFs, replaced.file, target, replaced.version, options), { code: 'ATOMIC_CONFLICT' });
+    assert.equal(invoked, false); assert.equal(await fs.readFile(replaced.file, 'utf8'), 'Foreign path occupant');
+    assert.equal(await fs.readFile(retained, 'utf8'), 'Complete reviewed record');
+    await assert.rejects(fs.lstat(target), { code: 'ENOENT' });
+  }));
+  await test('synchronous native publication fails once without fallback, keeping its source available for owned cleanup', () => fixture(async root => {
+    const source = await candidate(root), target = path.join(root, 'ai.json'), io = Object.create(syncFs);
+    for (const name of ['renameSync', 'linkSync', 'copyFileSync']) io[name] = () => assert.fail('Forbidden synchronous publication fallback: ' + name);
+    for (const code of ['EIO', 'EBUSY']) {
+      let calls = 0;
+      assert.throws(() => publishNewFileSync(io, source.file, target, source.version, { platform: 'win32', moveNoReplace: () => { calls++; throw error(code); } }), { code });
+      assert.equal(calls, 1); assert.equal(await fs.readFile(source.file, 'utf8'), 'Complete reviewed record');
+      await assert.rejects(fs.lstat(target), { code: 'ENOENT' });
+    }
+  }));
   await test('new file publication preserves Unicode long paths and refuses an existing target without altering either file', () => fixture(async root => {
     const folder = path.join(root, 'unicode-ü-' + 'a'.repeat(80), 'b'.repeat(80), 'c'.repeat(80)); await fs.mkdir(folder, { recursive: true });
     const { file, version } = await candidate(folder), target = path.join(folder, 'report-ü.json');

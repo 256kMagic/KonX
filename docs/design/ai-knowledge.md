@@ -1,5 +1,7 @@
 # AI and local knowledge architecture
 
+This document describes the standalone **AI & Knowledge** provider and library implementation. The contextual **KonX-AI** workflow adds saved conversations, exact request review and reviewed actions; see the [KonX-AI guide](../KONX_AI.md).
+
 The assistant helps users understand KonX results and choose further investigations. The first implementation supports OpenAI, Claude, Gemini, Nyquest, and an explicitly configured OpenAI-compatible endpoint. The offline library remains usable when no provider is configured.
 
 ```mermaid

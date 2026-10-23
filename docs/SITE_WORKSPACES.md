@@ -28,7 +28,7 @@ Deleting a site removes its workspace record. Saved sessions, captures, and inci
 
 The library keeps up to 100 workspaces, with at most 128 session references, 64 capture references, 64 incident links, 32 panels, and 128 KiB of notes in each. Unsupported views and unsaved connection specifications are omitted when capturing panels, with an explanation. A revision check prevents another editor from silently overwriting newer saved changes. Failed saves and cancelled dialogs retain the draft; save or discard unsaved definitions before updating or closing their tab.
 
-From 0.26.0, **Ask Copilot** can attach the current draft's name, notes and grouped references. It does not resolve those references, read captures or connect sessions. Review the attachment and complete request before sharing it with a provider.
+From 0.26.0, **Ask KonX-AI** can attach the current draft's name, notes and grouped references. It does not resolve those references, read captures or connect sessions. Review the attachment and complete request before sharing it with a provider.
 
 From 0.27.0, new and imported site records use an exclusive native publication step on Windows, avoiding a reproduced failure on the first subsequent save. An existing destination is never overwritten by initial publication. Persistent permission or file-lock errors still retain the draft for an explicit retry.
 

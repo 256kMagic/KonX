@@ -10,7 +10,7 @@ const KINDS = ['device', 'snapshots', 'topology', 'events', 'sites', 'incidents'
 const FILES = ['copilot-investigations.mjs', 'device.js', 'snapshots.js', 'topology.js', 'events.js', 'site-workspaces.js', 'incidents.js', 'runbooks.js', 'change-validation.js'];
 
 async function runCopilotInvestigationTests(test) {
-  await test('investigation Copilot: actual eight renderer views attach selected canonical evidence without backend actions, clipping or unrelated data', async () => {
+  await test('investigation KonX-AI: actual eight renderer views attach selected canonical evidence without backend actions, clipping or unrelated data', async () => {
     const base = fs.realpathSync(os.tmpdir()), root = fs.mkdtempSync(path.join(base, 'konx-copilot-investigation-'));
     let child, output = '';
     try {

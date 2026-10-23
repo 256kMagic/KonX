@@ -66,9 +66,9 @@ class CopilotActions {
       if (input.target != null) fail('A new local note cannot overwrite an existing target');
       const start = params.start ?? 0, end = params.end ?? turn.answer.length;
       if (start >= end || end > turn.answer.length || /[\uDC00-\uDFFF]/.test(turn.answer[start] || '') || /[\uDC00-\uDFFF]/.test(turn.answer[end] || '')) fail('Choose a nonempty complete-character excerpt from this answer');
-      const footer = `\n\n---\nSaved from KonX Copilot conversation ${conversation.id}, answer ${turn.id}.\nAI-generated interpretation; verify it against the cited source evidence.\n`;
+      const footer = `\n\n---\nSaved from KonX-AI conversation ${conversation.id}, answer ${turn.id}.\nAI-generated interpretation; verify it against the cited source evidence.\n`;
       const content = turn.answer.slice(start, end) + footer; if (content.length > 32000) fail('This note exceeds 32,000 characters; choose a shorter answer excerpt');
-      effect = await this.knowledge.prepareArticle({ title: params.title, content, vendor: 'KonX', sourceUrl: '', tags: ['copilot', 'reviewed-answer'] });
+      effect = await this.knowledge.prepareArticle({ title: params.title, content, vendor: 'KonX', sourceUrl: '', tags: ['konx-ai', 'reviewed-answer'] });
       savedParams = { title: effect.title, start, end, contentDigest: digest(effect.content), contentChars: effect.content.length };
       preview = { title: 'Save this answer as a new local note', effect: 'Create one new Knowledge library article; no existing article is replaced.', article: effect };
       limitations.push('This saves AI interpretation with provenance, not independently verified documentation.', 'If the save acknowledgment is lost, check the library before saving another copy.');

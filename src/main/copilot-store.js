@@ -14,7 +14,7 @@ const KINDS = Object.freeze(['ping', 'sweep', 'portscan', 'traceroute', 'dns', '
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const clone = value => structuredClone(value);
 function fail(message, code = 'COPILOT_INVALID') { throw Object.assign(new Error(message), { code }); }
-function object(value, fields, label = 'Copilot value') {
+function object(value, fields, label = 'KonX-AI value') {
   if (!value || typeof value !== 'object' || Array.isArray(value) || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) fail(`${label} must be an object`);
   for (const key of Object.keys(value)) if (!fields.includes(key)) fail(`${label} contains an unsupported field`);
   return value;
@@ -23,12 +23,12 @@ function text(value, max, label = 'Text', empty = true) {
   if (typeof value !== 'string' || value.length > max || value.includes('\0') || !empty && !value.trim()) fail(`${label} must be ${empty ? '' : 'nonempty '}text of at most ${max} characters`);
   return value;
 }
-function uuid(value) { if (!UUID.test(value) || typeof value !== 'string') fail('Invalid Copilot identifier'); return value; }
+function uuid(value) { if (!UUID.test(value) || typeof value !== 'string') fail('Invalid KonX-AI identifier'); return value; }
 function revision(value) { if (!Number.isSafeInteger(value) || value < 1) fail('Reopen the conversation; its current revision is required', 'COPILOT_CONFLICT'); return value; }
-function timestamp(value) { if (typeof value !== 'string' || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString() !== value) fail('Invalid Copilot timestamp'); return value; }
+function timestamp(value) { if (typeof value !== 'string' || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString() !== value) fail('Invalid KonX-AI timestamp'); return value; }
 function array(value, max, label) { if (!Array.isArray(value) || value.length > max) fail(`${label} exceeds its ${max}-entry limit`, 'COPILOT_LIMIT'); return value; }
 function ids(value, max, label) { const out = array(value, max, label).map(uuid); if (new Set(out).size !== out.length) fail(`Duplicate ${label}`); return out; }
-function json(value, max = LIMITS.recordBytes) { const data = JSON.stringify(value); if (Buffer.byteLength(data) > max) fail('Copilot data exceeds its byte limit', 'COPILOT_LIMIT'); return data; }
+function json(value, max = LIMITS.recordBytes) { const data = JSON.stringify(value); if (Buffer.byteLength(data) > max) fail('KonX-AI data exceeds its byte limit', 'COPILOT_LIMIT'); return data; }
 function boundedData(value, sanitize = value => value) {
   let nodes = 0;
   function visit(item, depth, field) {
@@ -56,7 +56,7 @@ function normalizeSnapshot(input, sanitize = value => value) {
   object(input, ['schemaVersion', 'kind', 'title', 'capturedAt', 'source', 'state', 'scope', 'selection', 'facts', 'coverage', 'omissions'], 'Evidence snapshot');
   // Bound the complete input before redaction, without dropping an inner field.
   json(boundedData(input), LIMITS.snapshotBytes);
-  if (input.schemaVersion !== 1 || !KINDS.includes(input.kind)) fail('This tool does not yet support typed Copilot evidence');
+  if (input.schemaVersion !== 1 || !KINDS.includes(input.kind)) fail('This tool does not yet support typed KonX-AI evidence');
   object(input.source, ['tabId', 'runId', 'revision'], 'Evidence source');
   object(input.selection, ['mode', 'ids'], 'Evidence selection');
   object(input.coverage, ['observed', 'total', 'complete'], 'Evidence coverage');
@@ -109,21 +109,21 @@ const emptyUsage = () => ({ inputTokens: null, outputTokens: null, totalTokens: 
 
 class CopilotStore {
   constructor(profile, { fs: io = fs, now = () => Date.now(), publishNew = publishNewFile } = {}) {
-    if (typeof profile !== 'string' || !path.isAbsolute(profile)) fail('Copilot requires an absolute profile directory');
+    if (typeof profile !== 'string' || !path.isAbsolute(profile)) fail('KonX-AI requires an absolute profile directory');
     this.directory = path.join(profile, 'copilot-conversations'); this.io = io; this.now = now; this.publishNew = publishNew;
     this.queue = Promise.resolve(); this.pendingOperations = 0; this.cleanup = new Map(); this.handles = new Set(); this.activeTurns = new Set(); this.activeActions = new Set(); this.reservations = new Map(); this.closing = null;
   }
   get hasOwnership() { return this.pendingOperations > 0 || this.cleanup.size > 0 || this.handles.size > 0 || this.activeTurns.size > 0 || this.activeActions.size > 0; }
   get hasPendingCleanup() { return this.cleanup.size > 0 || this.handles.size > 0; }
   serialize(fn) {
-    if (this.closing) fail('Copilot storage is closing', 'COPILOT_CLOSING');
+    if (this.closing) fail('KonX-AI storage is closing', 'COPILOT_CLOSING');
     this.pendingOperations++; const result = this.queue.then(fn).finally(() => this.pendingOperations--); this.queue = result.catch(() => {}); return result;
   }
   time() { return new Date(this.now()).toISOString(); }
   file(id) { return path.join(this.directory, uuid(id) + '.json'); }
   async ready() {
     await this.io.mkdir(this.directory, { recursive: true }); const stat = await this.io.lstat(this.directory);
-    if (!stat.isDirectory() || stat.isSymbolicLink()) fail('Copilot storage must be a real directory');
+    if (!stat.isDirectory() || stat.isSymbolicLink()) fail('KonX-AI storage must be a real directory');
     this.directory = await this.io.realpath(this.directory); await this.retryCleanup();
   }
   async retryCleanup() {
@@ -139,9 +139,9 @@ class CopilotStore {
   }
   async closeHandle(handle) { await handle.close(); this.handles.delete(handle); }
   async entries() {
-    if (this.cleanup.size + this.handles.size > LIMITS.conversations) fail('Copilot cleanup must finish before opening more files', 'COPILOT_CLEANUP');
+    if (this.cleanup.size + this.handles.size > LIMITS.conversations) fail('KonX-AI cleanup must finish before opening more files', 'COPILOT_CLEANUP');
     const handle = await this.io.opendir(this.directory, { bufferSize: 32 }); this.handles.add(handle); const names = [];
-    try { for (;;) { const item = await handle.read(); if (!item) break; names.push(item.name); if (names.length > LIMITS.conversations * 2) fail('Copilot directory entry limit reached', 'COPILOT_LIMIT'); } }
+    try { for (;;) { const item = await handle.read(); if (!item) break; names.push(item.name); if (names.length > LIMITS.conversations * 2) fail('KonX-AI directory entry limit reached', 'COPILOT_LIMIT'); } }
     finally { await this.closeHandle(handle); }
     return names.sort();
   }
@@ -163,9 +163,9 @@ class CopilotStore {
       if (!file.endsWith('.json') || !UUID.test(file.slice(0, -5))) continue;
       count++; const other = file.slice(0, -5); if (other === id) continue;
       total += (await this.regular(this.file(other))).size + (this.reservations.get(other) || 0);
-      if (total > LIMITS.libraryBytes) fail('Copilot library reached its 32 MiB limit; remove an old conversation', 'COPILOT_LIMIT');
+      if (total > LIMITS.libraryBytes) fail('KonX-AI library reached its 32 MiB limit; remove an old conversation', 'COPILOT_LIMIT');
     }
-    if (!names.includes(id + '.json') && count >= LIMITS.conversations || total > LIMITS.libraryBytes || bytes + reserve > LIMITS.recordBytes) fail('Copilot storage capacity reached; start or remove a conversation', 'COPILOT_LIMIT');
+    if (!names.includes(id + '.json') && count >= LIMITS.conversations || total > LIMITS.libraryBytes || bytes + reserve > LIMITS.recordBytes) fail('KonX-AI storage capacity reached; start or remove a conversation', 'COPILOT_LIMIT');
   }
   async publish(value, initial = false, reserve = 0) {
     validateRecord(value); const data = json(value); await this.capacity(value.id, Buffer.byteLength(data), reserve);
@@ -275,7 +275,7 @@ class CopilotStore {
   }
   close() {
     if (this.closing) return this.closing;
-    this.closing = this.queue.then(async () => { await this.retryCleanup(); if (this.hasOwnership) fail('Copilot cleanup or a request outcome is still pending; retry closing', 'COPILOT_CLEANUP'); }).finally(() => { this.closing = null; }); return this.closing;
+    this.closing = this.queue.then(async () => { await this.retryCleanup(); if (this.hasOwnership) fail('KonX-AI cleanup or a request outcome is still pending; retry closing', 'COPILOT_CLEANUP'); }).finally(() => { this.closing = null; }); return this.closing;
   }
 }
 

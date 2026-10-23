@@ -11,7 +11,7 @@ while (!fs.existsSync(path.join(ROOT, 'package.json')) || !fs.existsSync(path.jo
 const SOURCE = path.resolve(__dirname, '../src/renderer/js');
 
 async function runCopilotWorkspaceTests(test) {
-  await test('workspace Copilot: real xterm, Monaco, SFTP and session menus attach only explicit bounded evidence without actions', async () => {
+  await test('workspace KonX-AI: real xterm, Monaco, SFTP and session menus attach only explicit bounded evidence without actions', async () => {
     const base = fs.realpathSync(os.tmpdir()), root = fs.mkdtempSync(path.join(base, 'konx-copilot-workspace-'));
     let child, output = '';
     try {
@@ -89,7 +89,7 @@ async function fixture() {
       let requiresChoice=false;try{terminal.captureCopilotContext()}catch{requiresChoice=true}assert(requiresChoice,'Workspace capture silently chose ambient terminal context');
       terminal.copilotButton.click();let button=[...document.querySelectorAll('.ctx .item')].find(el=>el.textContent.includes('Explain selected terminal text'));
       if(!button)button=[...document.querySelectorAll('button')].find(el=>el.textContent.includes('Explain selected terminal text'));
-      assert(button,'Terminal Copilot menu absent');const beforeMenu=calls.length;button.click();assert(attachments.length===1&&calls.length===beforeMenu,'Terminal menu performed extra actions');
+      assert(button,'Terminal KonX-AI menu absent');const beforeMenu=calls.length;button.click();assert(attachments.length===1&&calls.length===beforeMenu,'Terminal menu performed extra actions');
       terminal.term.clearSelection();terminal.ro.disconnect();terminal.term.reset();terminal.term.resize(20,3);await new Promise(resolve=>terminal.term.write('A'.repeat(80)+'\\r\\nTAIL',resolve));terminal.term.scrollToLine(1);
       const clipped=capture(terminal,'visible');assert(!clipped.facts.rows[0].text.includes('AAAA')&&/clipped/.test(clipped.omissions.join(' ')),'Clipped wrapped secret prefix retained');
       terminal.term.reset();terminal.term.resize(80,6);await new Promise(resolve=>terminal.term.write(('Z'.repeat(80)+'\\r\\n').repeat(650),resolve));terminal.term.selectAll();
@@ -102,7 +102,7 @@ async function fixture() {
       const badNav=sftp.remote.navigate('/missing');take('sftp:list').reject(new Error('synthetic access denied'));await badNav;const failed=capture(sftp,'remote-listing');assert(failed.facts.runSummary.observedPath==='/new'&&failed.facts.runSummary.request.path==='/missing'&&failed.facts.runSummary.request.state==='error','Failed navigation relabelled retained listing');
       sftp.xfers.update({id:1,name:'failed.bin',direction:'down',src:'/remote/failed.bin',dst:'C:/Synthetic/failed.bin',size:9,done:2,status:'error',error:'Synthetic transfer failure',bytes:'NEVER_COLLECT_FILE_CONTENT'});
       const xf=capture(sftp,'transfers');assert(xf.facts.rows[0].error==='Synthetic transfer failure'&&!JSON.stringify(xf).includes('NEVER_COLLECT_FILE_CONTENT'),'Transfer error omitted or file data leaked');
-      sftp.copilotButton.click();const transferMenu=[...document.querySelectorAll('.ctx .item')].find(el=>el.textContent.includes('Explain transfer status and errors'));assert(transferMenu,'SFTP Copilot menu missing');const beforeTransferMenu=calls.length;transferMenu.click();assert(calls.length===beforeTransferMenu&&attachments.length===2,'SFTP menu performed backend action');
+      sftp.copilotButton.click();const transferMenu=[...document.querySelectorAll('.ctx .item')].find(el=>el.textContent.includes('Explain transfer status and errors'));assert(transferMenu,'SFTP KonX-AI menu missing');const beforeTransferMenu=calls.length;transferMenu.click();assert(calls.length===beforeTransferMenu&&attachments.length===2,'SFTP menu performed backend action');
       const late=sftp.remote.navigate('/late');const lateReq=take('sftp:list');sftp.onClosed('Synthetic disconnect');lateReq.resolve([{name:'late.bin',size:1}]);await late;assert(sftp.remote.cwd==='/new','Late disconnected listing accepted');assert(/not live/.test(capture(sftp,'remote-listing').omissions.join(' ')),'Retained listing freshness absent');
       const np=new NotepadTab(host);fixture.replaceChildren(np.el);host.active=np;await np.ready;
       const other=np.newDoc({text:'UNRELATED_DOCUMENT_SECRET',title:'Other'});const doc=np.newDoc({text:'Selected café 😀 KnownSyntheticKeyAcrossSelection\\nUnselected current text',title:'Current'});
@@ -112,9 +112,9 @@ async function fixture() {
       const oldSnapshot=notepad;doc.model.setValue('Edited text');assert(oldSnapshot.facts.rows[0].text.includes('Selected café')&&capture(np,'document').facts.rows[0].text==='Edited text','Notepad snapshot mutated or revision wrong');
       doc.model.setValue('Z'.repeat(60000)+'OPAQUE_SUFFIX_NEVER_PREFIX');const big=capture(np,'document');assert(big.facts.rows[0].text===null&&!JSON.stringify(big).includes('ZZZZ')&&/complete chosen text/.test(big.omissions.join(' ')),'Oversized document raw prefix attached');
       doc.model.setValue('Small again');np.editor.setSelection(new np.monaco.Selection(1,1,1,1));let emptyRejected=false;try{capture(np,'selection')}catch{emptyRejected=true}assert(emptyRejected,'Empty selection fell back to whole document');
-      [...np.menubar.querySelectorAll('button')].find(el=>el.textContent==='Ask Copilot').click();const docMenu=[...document.querySelectorAll('.ctx .item')].find(el=>el.textContent.includes('Explain current Notepad document'));assert(docMenu,'Notepad Copilot menu missing');const beforeDocMenu=calls.length;docMenu.click();assert(calls.length===beforeDocMenu&&attachments.length===3&&doc.model.getValue()==='Small again','Notepad menu performed backend action or edit');
-      const tree=new SessionTree(host);tree.data={folders:[],sessions:[session]};tree.sessionMenu(5,5,session);let settingsButton=[...document.querySelectorAll('.ctx .item')].find(el=>el.textContent.includes('Ask Copilot about saved settings'));
-      assert(settingsButton,'Saved-session Copilot menu missing');const beforeSession=calls.length;settingsButton.click();assert(calls.length===beforeSession&&attachments.length===4,'Session context connected or read extra data');
+      [...np.menubar.querySelectorAll('button')].find(el=>el.textContent==='Ask KonX-AI').click();const docMenu=[...document.querySelectorAll('.ctx .item')].find(el=>el.textContent.includes('Explain current Notepad document'));assert(docMenu,'Notepad KonX-AI menu missing');const beforeDocMenu=calls.length;docMenu.click();assert(calls.length===beforeDocMenu&&attachments.length===3&&doc.model.getValue()==='Small again','Notepad menu performed backend action or edit');
+      const tree=new SessionTree(host);tree.data={folders:[],sessions:[session]};tree.sessionMenu(5,5,session);let settingsButton=[...document.querySelectorAll('.ctx .item')].find(el=>el.textContent.includes('Ask KonX-AI about saved settings'));
+      assert(settingsButton,'Saved-session KonX-AI menu missing');const beforeSession=calls.length;settingsButton.click();assert(calls.length===beforeSession&&attachments.length===4,'Session context connected or read extra data');
       const saved=attachments[3].snapshot;forbiddenSnapshot(saved);assert(saved.source.revision===null&&saved.source.runId===null&&saved.facts.rows[0].connectionState===null,'Saved session invented runtime or revision');snapshots.push(saved);
       assert(revisions.length>10,'Workspace producer revision updates missing');
       assert(!calls.some(call=>['conn:write','sftp:read','sftp:write','np:read','conn:startLog','xfer:start'].includes(call.channel)),'Context feature executed a mutation or content read');

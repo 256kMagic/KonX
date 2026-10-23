@@ -22,7 +22,7 @@ export async function showTraffic(stream, { allowCopilot = false } = {}) {
   let parsed = null;
   let parseError = '';
   let alive = true;
-  const copilotButton = h('button.btn.sm', { disabled: true, onclick: () => close({ action: 'copilot', parsed }) }, 'Ask Copilot about this stream');
+  const copilotButton = h('button.btn.sm', { disabled: true, onclick: () => close({ action: 'copilot', parsed }) }, 'Ask KonX-AI about this stream');
   const out = h('div.traffic-content', h('div.hint', 'Reconstructing messages…'));
   const summary = h('div.traffic-summary');
   const notices = h('div');

@@ -1,16 +1,18 @@
 # KonX User Guide
 
+Version 0.27.1 renames the contextual assistant to **KonX-AI** and improves encrypted provider-key management. See the [KonX-AI guide](KONX_AI.md), [provider setup](AI_KNOWLEDGE_GUIDE.md#connect-a-provider), and [release validation](releases/0.27.1.md).
+
 This guide covers KonX 0.27.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one application. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
 
-Version 0.27.0 adds reviewed diagnostics, undoable editor replacements and saved answer notes to Copilot. See the [Copilot guide](COPILOT.md) and [release validation](releases/0.27.0.md).
+Version 0.27.0 adds reviewed diagnostics, undoable editor replacements and saved answer notes to KonX-AI. See the [KonX-AI guide](KONX_AI.md) and [release validation](releases/0.27.0.md).
 
-Version 0.26.0 adds device, topology, event, site, incident, runbook and change-validation evidence to Copilot. See the [Copilot guide](COPILOT.md#investigation-evidence) and [release validation](releases/0.26.0.md).
+Version 0.26.0 adds device, topology, event, site, incident, runbook and change-validation evidence to KonX-AI. See the [KonX-AI guide](KONX_AI.md#investigation-evidence) and [release validation](releases/0.26.0.md).
 
-Version 0.25.0 adds packet, readable stream, SIP/RTP, capture comparison, security and wireless evidence to Copilot. See the [Copilot guide](COPILOT.md#traffic-and-wireless-evidence) and [release validation](releases/0.25.0.md).
+Version 0.25.0 adds packet, readable stream, SIP/RTP, capture comparison, security and wireless evidence to KonX-AI. See the [KonX-AI guide](KONX_AI.md#traffic-and-wireless-evidence) and [release validation](releases/0.25.0.md).
 
-Version 0.24.0 adds explicit terminal text, connection diagnostics, SFTP metadata, and editor selections to [Copilot](COPILOT.md#workspace-evidence). See [release validation](releases/0.24.0.md).
+Version 0.24.0 adds explicit terminal text, connection diagnostics, SFTP metadata, and editor selections to [KonX-AI](KONX_AI.md#workspace-evidence). See [release validation](releases/0.24.0.md).
 
-Version 0.23.0 adds [Copilot](COPILOT.md): local conversations beside your work, immutable evidence, exact request review, explicit provider testing, and basic network tool context. See [release validation](releases/0.23.0.md).
+Version 0.23.0 adds [KonX-AI](KONX_AI.md): local conversations beside your work, immutable evidence, exact request review, explicit provider testing, and basic network tool context. See [release validation](releases/0.23.0.md).
 
 Version 0.22.1 repairs AI context preparation and protects unsaved AI input. See [AI & Knowledge](AI_KNOWLEDGE_GUIDE.md) and [release validation](releases/0.22.1.md).
 

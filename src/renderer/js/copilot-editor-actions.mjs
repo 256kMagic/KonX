@@ -1,4 +1,4 @@
-// The live editor owns identity and applicability. A historical Copilot excerpt
+// The live editor owns identity and applicability. A historical KonX-AI excerpt
 // or model-supplied document ID is never permission to edit a document.
 const models = new WeakMap();
 const fields = ['startLineNumber', 'startColumn', 'endLineNumber', 'endColumn'];

@@ -19,7 +19,7 @@ import { EventsTab } from './events.js';
 import { ChangeValidationTab } from './change-validation.js';
 
 export const TOOLS = [
-  { kind: 'copilot', label: 'KonX Copilot', icon: 'insight', desc: 'Review selected evidence and exact requests before asking your configured AI' },
+  { kind: 'copilot', label: 'KonX-AI', icon: 'insight', desc: 'Review selected evidence and exact requests before asking your configured AI' },
   { kind: 'change-validation', label: 'Guided Change Validation', icon: 'route', desc: 'Plan a manual change, retain before and after evidence, and record reviewed outcomes' },
   { kind: 'sites', label: 'Saved Site Workspaces', icon: 'folder', desc: 'Save site session groups, notes, capture and incident references, and panel arrangements' },
   { kind: 'topology', label: 'Visual Topology', icon: 'link', desc: 'Explore observed device links, command evidence, and candidate endpoint paths' },

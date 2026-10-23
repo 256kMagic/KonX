@@ -199,7 +199,7 @@ export class SessionTree {
       s.protocol === 'ssh' || !s.protocol ? { label: 'Connect SFTP', icon: 'file-transfer', action: () => this.app.openSftp({ sessionId: s.id }, { name: s.name || s.host }) } : null,
       '-',
       { label: 'Edit…', icon: 'edit', shortcut: 'F2', action: () => this.app.editSession(s) },
-      { label: 'Ask Copilot about saved settings', icon: 'insight', action: () => {
+      { label: 'Ask KonX-AI about saved settings', icon: 'insight', action: () => {
         try { return this.app.openCopilot(null, { snapshot: captureSessionContext(s), question: 'Explain these saved connection settings and their unknowns. Suggest checks without connecting or changing anything.' }); }
         catch (error) { toast(errMsg(error), 'err'); }
       } },

@@ -509,7 +509,7 @@ export class SftpTab {
     this.local = new FilePane(this, 'local');
     this.remote = new FilePane(this, 'remote');
     this.xfers = new TransferPanel(this);
-    this.copilotButton = h('button.btn.sm', { type: 'button', 'aria-label': 'Choose SFTP evidence for Copilot', onclick: e => { const r = e.currentTarget.getBoundingClientRect(); contextMenu(r.left, r.bottom, workspaceCopilotItems(this)); } }, icon('insight'), 'Ask Copilot');
+    this.copilotButton = h('button.btn.sm', { type: 'button', 'aria-label': 'Choose SFTP evidence for KonX-AI', onclick: e => { const r = e.currentTarget.getBoundingClientRect(); contextMenu(r.left, r.bottom, workspaceCopilotItems(this)); } }, icon('insight'), 'Ask KonX-AI');
     this.el = h('div.view', h('div.tool-summary', this.copilotButton), h('div.sftp', h('div.sftp-panes', this.local.el, this.remote.el), this.xfers.el));
     this.refreshLocalSoon = debounce(() => this.local.refresh(), 300);
     this.refreshRemoteSoon = debounce(() => this.remote.refresh(), 300);

@@ -13,7 +13,7 @@ async function main() {
     ['docs/USER_GUIDE.md', 'USER_GUIDE.md'], ['docs/UPDATING.md', 'UPDATING.md'],
     ['docs/SECURITY_SUITE.md', 'SECURITY_SUITE.md'], ['docs/WIRELESS_MIST_GUIDE.md', 'WIRELESS_MIST_GUIDE.md'],
     ['docs/AI_KNOWLEDGE_GUIDE.md', 'AI_KNOWLEDGE_GUIDE.md'],
-    ['docs/COPILOT.md', 'COPILOT.md'],
+    ['docs/KONX_AI.md', 'KONX_AI.md'],
     ['docs/DEVICE_INSPECTOR.md', 'DEVICE_INSPECTOR.md'],
     ['docs/DEVICE_SNAPSHOTS.md', 'DEVICE_SNAPSHOTS.md'],
     ['docs/RTP_MEDIA.md', 'RTP_MEDIA.md'],

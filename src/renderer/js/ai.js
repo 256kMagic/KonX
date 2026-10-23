@@ -13,16 +13,16 @@ export class AITab {
     this.provider = h('select.input', { 'aria-label': 'AI provider', onchange: () => this.providerChanged() });
     this.model = h('input.input', { maxlength: 160, spellcheck: false, 'aria-label': 'AI model', oninput: () => this.updateControls() });
     this.baseUrl = h('input.input', { maxlength: 2048, type: 'url', placeholder: 'https://your-api.example/v1', spellcheck: false, 'aria-label': 'Custom AI API base URL', oninput: () => this.updateControls() });
-    this.key = h('input.input', { type: 'password', maxlength: 1024, autocomplete: 'off', spellcheck: false, 'data-lpignore': 'true', placeholder: 'Paste API key', 'aria-label': 'AI API key' });
+    this.key = h('input.input', { type: 'password', maxlength: 1024, autocomplete: 'off', spellcheck: false, 'data-lpignore': 'true', placeholder: 'Paste API key', 'aria-label': 'AI API key', oninput: () => this.draftChanged() });
     this.saveButton = h('button.btn', { onclick: () => this.configure(false) }, icon('save'), 'Save connection');
-    this.forgetButton = h('button.btn', { onclick: () => this.configure(true) }, icon('trash'), 'Forget key');
+    this.forgetButton = h('button.btn', { onclick: () => this.configure(true) }, icon('trash'), 'Delete saved key');
     this.keyStatus = h('div.ai-key-status', { role: 'status' }, 'Reading local AI settings…');
     this.providerHelp = h('p.hint');
     this.baseUrlField = field('Custom API base URL', this.baseUrl);
     this.connection = h('details.ai-connection', { open: true }, h('summary', 'AI connection'),
       h('div.ai-form', field('Provider', this.provider), field('Model', this.model), this.baseUrlField),
       h('div.ai-form', field('API key', this.key), this.saveButton, this.forgetButton), this.keyStatus, this.providerHelp,
-      h('p.hint', 'Keys are encrypted for this Windows user. Saved keys are never returned to this tab. Saving settings does not contact the provider.'));
+      h('p.hint', 'Save each provider key once. Keys stay encrypted for this Windows user across restarts and are reused for requests and connection tests. The empty password field is for a new or replacement key; saved keys are never returned to this tab. Delete saved key removes only the selected provider’s key.'));
     this.question = h('textarea.input.ai-question', { rows: 3, placeholder: 'Ask about a KonX tool, a vendor, or a finding…', 'aria-label': 'Question for AI', oninput: () => this.draftChanged() });
     this.question.value = string(question);
     // Main redacts complete source before bounding the preview. An input limit
@@ -85,7 +85,7 @@ export class AITab {
   }
 
   dirty() {
-    return !this.config || this.provider.value !== this.config.provider || this.model.value.trim() !== this.config.model ||
+    return !this.config || Boolean(this.key.value) || this.provider.value !== this.config.provider || this.model.value.trim() !== this.config.model ||
       (this.provider.value === 'custom' && this.baseUrl.value.trim() !== string(this.config.baseUrl));
   }
 
@@ -107,12 +107,15 @@ export class AITab {
   }
 
   async loadConfig() {
-    if (this.disposed || this.jobId || this.configBusy && this.config) return;
+    if (this.disposed || this.jobId || this.prompting || this.configBusy && this.config) return;
     this.configBusy = true; this.updateControls();
     try {
       const config = await api.invoke('tools:aiConfig');
       if (this.disposed) return;
-      if (!this.config || config.revision !== this.config.revision) { this.key.value = ''; this.applyConfig(config); }
+      if (!this.config || config.revision !== this.config.revision) {
+        if (this.config && this.dirty()) { this.config = config; this.contextChanged(); this.status.textContent = 'Saved connection settings changed. Your unsaved connection edits are still here; review them before saving.'; }
+        else this.applyConfig(config);
+      }
       else this.config = config;
     } catch (error) { if (!this.disposed) this.status.textContent = errMsg(error); }
     finally { if (!this.disposed) { this.configBusy = false; this.updateControls(); } }
@@ -124,11 +127,20 @@ export class AITab {
     this.config = config;
     this.provider.replaceChildren(...config.providers.map((provider) => h('option', { value: provider.id }, provider.label)));
     this.provider.value = config.provider; this.model.value = string(config.model); this.baseUrl.value = string(config.baseUrl);
+    this.connectionProvider = config.provider;
     if (changed) this.contextChanged();
   }
 
-  providerChanged() {
+  async providerChanged() {
+    const next = this.provider.value;
+    const previous = this.config?.providers.find(item => item.id === this.connectionProvider);
+    if (this.key.value || this.model.value.trim() !== string(previous?.model) || (this.connectionProvider === 'custom' && this.baseUrl.value.trim() !== string(previous?.baseUrl))) {
+      this.provider.value = this.connectionProvider;
+      if (!await this.confirmDiscard('Unsaved connection edits', 'The connection edits or API key in this form have not been saved. Discard them before changing providers?', 'Discard connection edits')) return;
+      this.provider.value = next;
+    }
     this.key.value = '';
+    this.connectionProvider = this.provider.value;
     const provider = this.config?.providers.find((item) => item.id === this.provider.value);
     this.model.value = this.provider.value === this.config?.provider ? string(this.config.model) : string(provider?.model ?? provider?.defaultModel);
     this.baseUrl.value = this.provider.value === this.config?.provider ? string(this.config.baseUrl) : string(provider?.baseUrl ?? provider?.defaultBaseUrl);
@@ -147,7 +159,9 @@ export class AITab {
     this.baseUrlField.classList.toggle('hidden', this.provider.value !== 'custom');
     if (ready) {
       const label = this.config.providers.find((provider) => provider.id === this.provider.value)?.label || this.provider.value;
-      this.keyStatus.textContent = this.savedKey() ? `An encrypted key is saved for ${label}.` : `No API key saved for ${label}.`;
+      this.key.placeholder = this.savedKey() ? 'Saved encrypted — leave blank to keep' : 'Paste API key, then Save connection';
+      this.keyStatus.textContent = this.savedKey() ? `An encrypted key is saved for ${label} and will be reused. No need to enter it again.` : `No API key saved for ${label}.`;
+      if (this.key.value) this.keyStatus.textContent += ' The key in this field is not saved yet.';
       if (this.dirty()) this.keyStatus.textContent += ' Save this connection before asking.';
       if (this.config.warning) this.keyStatus.textContent += ' ' + this.config.warning;
       this.providerHelp.textContent = this.provider.value === 'nyquest' ? 'Nyquest: create a personal access token in app.nyquest.ai → Settings → API Keys. Requests use the Nyquest developer API.' : this.provider.value === 'custom' ? 'Custom uses an OpenAI-compatible Chat Completions endpoint. Enter its base URL and model ID; HTTPS is required except for loopback servers.' : '';
@@ -157,20 +171,28 @@ export class AITab {
   }
 
   async configure(forget) {
-    const key = this.key.value; this.key.value = '';
-    if (this.disposed || this.configBusy || this.jobId || !this.config) return;
+    if (this.disposed || this.configBusy || this.jobId || this.prompting || !this.config) return;
+    const key = this.key.value;
     if (!forget && !this.savedKey() && !key.trim()) return toast('Enter an API key for this provider.', 'err');
     this.configBusy = true; this.updateControls(); this.status.textContent = forget ? 'Removing the saved key…' : 'Saving AI connection settings…';
     try {
-      const params = { provider: this.provider.value, model: this.model.value.trim() };
-      if (this.provider.value === 'custom') params.baseUrl = this.baseUrl.value.trim();
+      const params = { provider: this.provider.value };
+      if (!forget) params.model = this.model.value.trim();
+      if (!forget && this.provider.value === 'custom') params.baseUrl = this.baseUrl.value.trim();
       if (forget) params.key = null;
       else if (key.trim()) params.key = key.trim();
       const config = await api.invoke('tools:aiConfigure', params);
       if (this.disposed) return;
-      this.applyConfig(config); this.status.textContent = forget ? 'Saved API key removed.' : 'Connection saved. Ask a question when ready.';
+      if (!forget) this.key.value = '';
+      if (forget) { this.config = config; this.contextChanged(); }
+      else this.applyConfig(config);
+      this.status.textContent = forget ? 'Saved API key deleted for this provider. Any unsaved replacement or connection edits remain in the form.' : 'Connection saved. The encrypted key will be reused for requests and connection tests.';
+      // A companion panel can stay visible while settings are edited. Refresh
+      // its key presence immediately rather than waiting for activation.
+      try { await this.app.copilot?.refreshStatus(); }
+      catch { this.status.textContent += ' Reopen KonX-AI to refresh its connection status.'; }
     } catch (error) { if (!this.disposed) { this.status.textContent = errMsg(error); toast(errMsg(error), 'err'); } }
-    finally { this.key.value = ''; if (!this.disposed) { this.configBusy = false; this.updateControls(); } }
+    finally { if (!this.disposed) { this.configBusy = false; this.draftChanged(); } }
   }
 
   contextChanged() {
@@ -379,12 +401,13 @@ export class AITab {
     return [...(this.jobId ? ['Wait for the AI request to finish or cancel it.'] : []),
       ...(this.configBusy || this.libraryBusy || this.previewBusy || this.prompting ? ['Wait for the AI or Knowledge operation to finish.'] : []),
       ...(this.assistantDirty() ? ['Send or discard the unsent AI question and context.'] : []),
+      ...(this.config && this.dirty() ? ['Save or discard the unsaved AI connection settings and API key.'] : []),
       ...(this.noteDirty() ? ['Save or discard the unsaved knowledge note.'] : [])];
   }
   async requestClose() {
     if (this.configBusy || this.libraryBusy || this.previewBusy || this.prompting) { toast('Wait for the AI or Knowledge operation to finish.', 'err'); return false; }
-    if (!this.jobId && !this.assistantDirty() && !this.noteDirty()) return true;
-    return this.confirmDiscard('Close AI & Knowledge', `${this.jobId ? 'Cancel the active AI request and close this tab? ' : 'Close this tab? '}Unsent questions, context and unsaved knowledge note edits will be discarded.`, this.jobId ? 'Cancel request and close' : 'Discard drafts and close');
+    if (!this.jobId && !this.assistantDirty() && !this.noteDirty() && !this.dirty()) return true;
+    return this.confirmDiscard('Close AI & Knowledge', `${this.jobId ? 'Cancel the active AI request and close this tab? ' : 'Close this tab? '}Unsaved connection settings and API keys, questions, context and knowledge note edits will be discarded.`, this.jobId ? 'Cancel request and close' : 'Discard drafts and close');
   }
   show() { this.active = true; if (this.config && !this.jobId && !this.configBusy) this.loadConfig(); this.loadLibrary(); }
   hide() { this.active = false; }

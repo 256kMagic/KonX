@@ -65,7 +65,7 @@ function pendingTurn(body = '{}') {
 }
 
 async function runCopilotTests(test) {
-  await test('Copilot sends exactly the reviewed redacted body after a durable pending turn, preserving immutable references', async () => fixture(async ({ service, store, calls, refs, searches, setHandler, dir }) => {
+  await test('KonX-AI sends exactly the reviewed redacted body after a durable pending turn, preserving immutable references', async () => fixture(async ({ service, store, calls, refs, searches, setHandler, dir }) => {
     let value = await create(service);
     value = await service.attach(value.id, value.revision, snapshot({ facts: { rows: [{ note: KEY, password: 'SyntheticPasswordThatMustBeRedacted' }] } }));
     const preview = await prepare(service, value, { question: `Explain ${KEY}`, attachmentIds: [value.attachments[0].id], includeKnowledge: true });
@@ -83,7 +83,7 @@ async function runCopilotTests(test) {
     assert.ok(fs.existsSync(path.join(dir, 'ai.json')));
   }));
 
-  await test('Copilot follow-ups include selected complete questions, answers and citations without recursive request bodies', async () => fixture(async ({ service }) => {
+  await test('KonX-AI follow-ups include selected complete questions, answers and citations without recursive request bodies', async () => fixture(async ({ service }) => {
     let value = await create(service); const first = await send(service, await prepare(service, value, { includeKnowledge: true })); value = await service.get(value.id);
     const preview = await prepare(service, value, { historyTurnIds: [first.report.turn.id], question: 'Why is that uncertain?' });
     const envelope = JSON.parse(JSON.parse(preview.body).input[0].content[0].text);
@@ -92,7 +92,7 @@ async function runCopilotTests(test) {
     const noHistory = await prepare(service, value); assert.equal(JSON.parse(JSON.parse(noHistory.body).input[0].content[0].text).conversation.length, 0);
   }));
 
-  await test('Copilot rejects stale, expired, replayed and changed-provider preparations without another POST', async () => {
+  await test('KonX-AI rejects stale, expired, replayed and changed-provider preparations without another POST', async () => {
     let clock = Date.now(); await fixture(async ({ service, ai, calls }) => {
       let value = await create(service), preview = await prepare(service, value); value = await service.rename(value.id, value.revision, 'Renamed');
       await assert.rejects(send(service, preview), /changed/); assert.equal(calls.length, 0);
@@ -102,18 +102,18 @@ async function runCopilotTests(test) {
     }, { now: () => clock });
   });
 
-  await test('Copilot concurrent conversation writes cannot silently replace another revision', async () => fixture(async ({ service }) => {
+  await test('KonX-AI concurrent conversation writes cannot silently replace another revision', async () => fixture(async ({ service }) => {
     const value = await create(service), result = await Promise.allSettled([service.rename(value.id, value.revision, 'First'), service.rename(value.id, value.revision, 'Second')]);
     assert.equal(result.filter(v => v.status === 'fulfilled').length, 1); assert.equal(result.filter(v => v.status === 'rejected')[0].reason.code, 'COPILOT_CONFLICT');
   }));
 
-  await test('Copilot refuses to POST when the pending turn cannot be saved', async () => {
+  await test('KonX-AI refuses to POST when the pending turn cannot be saved', async () => {
     let failOpen = false; const io = Object.create(fsp); io.open = async (...args) => { if (failOpen && args[1] === 'wx') throw Object.assign(new Error('Owned synthetic disk failure'), { code: 'EACCES' }); return fsp.open(...args); };
     await fixture(async ({ service, calls }) => { const value = await create(service), preview = await prepare(service, value); failOpen = true;
       await assert.rejects(send(service, preview)); assert.equal(calls.length, 0); failOpen = false; assert.equal((await service.get(value.id)).turns.length, 0); }, { io });
   });
 
-  await test('Copilot retains a failed final save for cleanup retry without billing a second request', async () => {
+  await test('KonX-AI retains a failed final save for cleanup retry without billing a second request', async () => {
     let failRename = false; const io = Object.create(fsp); io.rename = async (...args) => { if (failRename) throw Object.assign(new Error('Owned synthetic disk failure'), { code: 'EACCES' }); return fsp.rename(...args); };
     await fixture(async ({ service, calls, setHandler }) => {
       const value = await create(service), preview = await prepare(service, value);
@@ -147,20 +147,20 @@ async function runCopilotTests(test) {
     }
   });
 
-  await test('Copilot restart marks pending requests interrupted and never resends them', async () => fixture(async ({ service, store, dir, calls }) => {
+  await test('KonX-AI restart marks pending requests interrupted and never resends them', async () => fixture(async ({ service, store, dir, calls }) => {
     const value = await create(service), pending = pendingTurn(); await store.beginTurn(value.id, value.revision, pending);
     const restarted = new CopilotStore(dir), recovered = await restarted.get(value.id);
     assert.equal(recovered.turns[0].status, 'interrupted'); assert.match(recovered.turns[0].error, /not sent again/); assert.equal(calls.length, 0); await restarted.close();
   }, { allowRetained: true }));
 
-  await test('Copilot capacity reservation rejects an answer that could overflow after a billed request', async () => fixture(async ({ service, store, calls }) => {
+  await test('KonX-AI capacity reservation rejects an answer that could overflow after a billed request', async () => fixture(async ({ service, store, calls }) => {
     let value = await create(service);
     for (let i = 0; i < 15; i++) { const turn = pendingTurn('x'.repeat(250000)); turn.status = 'complete'; turn.completedAt = now(); value.turns.push(turn); }
     validateRecord(value); fs.writeFileSync(store.file(value.id), JSON.stringify(value));
     const preview = await prepare(service, value); await assert.rejects(send(service, preview), /capacity/); assert.equal(calls.length, 0); assert.equal((await service.get(value.id)).turns.length, 15);
   }));
 
-  await test('Copilot typed evidence rejects unsupported, oversized and malformed facts without partial attachment', async () => fixture(async ({ service }) => {
+  await test('KonX-AI typed evidence rejects unsupported, oversized and malformed facts without partial attachment', async () => fixture(async ({ service }) => {
     const value = await create(service);
     assert.throws(() => normalizeSnapshot(snapshot({ kind: 'terminal', command: 'must not execute' })), /unsupported/);
     assert.throws(() => normalizeSnapshot(snapshot({ facts: { text: 'x'.repeat(LIMITS.snapshotBytes) } })), /byte limit/);
@@ -175,7 +175,7 @@ async function runCopilotTests(test) {
     const preview = await prepare(service, attached, { attachmentIds: [attached.attachments[0].id] }); assert.ok(!preview.body.includes(KEY));
   }));
 
-  await test('Copilot close waits for cancelled preparation and native request finalization, discarding unused previews', async () => fixture(async ({ service, ai, calls, setHandler }) => {
+  await test('KonX-AI close waits for cancelled preparation and native request finalization, discarding unused previews', async () => fixture(async ({ service, ai, calls, setHandler }) => {
     const value = await create(service); let started;
     const began = new Promise(resolve => { started = resolve; }); ai.knowledge.search = () => { started(); return new Promise(() => {}); };
     const preparing = prepare(service, value, { includeKnowledge: true }); const rejected = assert.rejects(preparing, /cancelled/); await began; await service.close(); await rejected;
@@ -188,7 +188,7 @@ async function runCopilotTests(test) {
     const unused = await prepare(service, await service.get(value.id)); await service.close(); await assert.rejects(send(service, unused), /already used/);
   }));
 
-  await test('Copilot storage rejects a real junction and retains failed owned temporary cleanup for retry', async () => {
+  await test('KonX-AI storage rejects a real junction and retains failed owned temporary cleanup for retry', async () => {
     await fixture(async ({ dir }) => {
       const target = path.join(dir, 'owned-other-directory'); fs.mkdirSync(target); const profile = path.join(dir, 'junction-profile'); fs.mkdirSync(profile);
       fs.symlinkSync(target, path.join(profile, 'copilot-conversations'), 'junction'); const store = new CopilotStore(profile);
@@ -258,7 +258,7 @@ async function runCopilotTests(test) {
     });
   });
 
-  await test('Copilot real IPC rejects shutdown mutations, guards provider testing and supports revision-safe CRUD', async () => fixture(async ({ service, ai, calls }) => {
+  await test('KonX-AI real IPC rejects shutdown mutations, guards provider testing and supports revision-safe CRUD', async () => fixture(async ({ service, ai, calls }) => {
     const handlers = new Map(); let closing = false; registerCopilot((name, handler) => handlers.set(name, handler), { copilot: service, isClosing: () => closing });
     const invoke = (name, ...args) => handlers.get('tools:copilot' + name)(...args);
     const value = await invoke('Create', { name: 'IPC fixture' }); assert.equal((await invoke('List')).conversations.length, 1);
@@ -267,7 +267,7 @@ async function runCopilotTests(test) {
     closing = false; assert.deepEqual(await invoke('Remove', value.id, renamed.revision), { removed: value.id });
   }));
 
-  await test('Copilot IPC reports a committed save honestly when shutdown begins during the write', async () => {
+  await test('KonX-AI IPC reports a committed save honestly when shutdown begins during the write', async () => {
     let duringPublish = () => {}, closing = false; const publishNew = async (...args) => { const value = await publishNewFile(...args); duringPublish(); return value; };
     await fixture(async ({ service }) => {
       const handlers = new Map(); registerCopilot((name, handler) => handlers.set(name, handler), { copilot: service, isClosing: () => closing });
@@ -278,4 +278,4 @@ async function runCopilotTests(test) {
 }
 
 module.exports = { runCopilotTests };
-if (require.main === module) { let passed = 0; runCopilotTests(async (name, fn) => { await fn(); passed++; console.log('PASS ' + name); }).then(() => console.log(`${passed} Copilot tests passed`)).catch(error => { console.error(error); process.exitCode = 1; }); }
+if (require.main === module) { let passed = 0; runCopilotTests(async (name, fn) => { await fn(); passed++; console.log('PASS ' + name); }).then(() => console.log(`${passed} KonX-AI tests passed`)).catch(error => { console.error(error); process.exitCode = 1; }); }

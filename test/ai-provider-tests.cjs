@@ -150,7 +150,7 @@ async function runAIProviderTests(input) {
     await fixture(async ({ client, dir }) => {
       fs.mkdirSync(path.join(dir, 'ai.json'));
       const before = client.getConfig();
-      assert.throws(() => client.configure({ key: KEY }), /previous settings are unchanged/);
+      assert.throws(() => client.configure({ key: KEY }), /settings changed outside/);
       assert.deepEqual(client.getConfig(), before);
       assert.deepEqual(fs.readdirSync(dir), ['ai.json']);
     });
@@ -165,6 +165,74 @@ async function runAIProviderTests(input) {
       assert.throws(() => client.preview('test'), /could not be read/);
       client.configure({ key: KEY });
       assert.ok(!client.getConfig().warning);
+    });
+  });
+
+  await test('AI credential saves flush before publication and retain previous ciphertext on flush or rename failure', async () => {
+    await fixture(async ({ client, dir }) => {
+      client.configure({ provider: 'nyquest', key: KEY });
+      const file = path.join(dir, 'ai.json'), raw = fs.readFileSync(file, 'utf8'), before = client.getConfig();
+      for (const method of ['fsyncSync', 'renameSync']) {
+        const real = fs[method]; fs[method] = () => { throw Object.assign(new Error('Synthetic filesystem failure'), { code: 'EPERM' }); };
+        try { assert.throws(() => client.configure({ key: SECOND_KEY }), /previous settings are unchanged/); }
+        finally { fs[method] = real; }
+        assert.equal(fs.readFileSync(file, 'utf8'), raw); assert.deepEqual(client.getConfig(), before);
+        assert.equal(client.hasOwnership, false); assert.deepEqual(fs.readdirSync(dir), ['ai.json']);
+      }
+      client.configure({ key: SECOND_KEY }); assert.equal(client.getConfig().hasKey, true);
+      assert.notEqual(fs.readFileSync(file, 'utf8'), raw);
+    });
+  });
+
+  await test('AI retains descriptors and temporary-file ownership across failed stat, close and cleanup without accumulating files', async () => {
+    await fixture(async ({ client, dir }) => {
+      client.configure({ provider: 'nyquest', key: KEY }); const original = fs.readFileSync(client.file, 'utf8');
+      const realStat = fs.fstatSync, realClose = fs.closeSync;
+      fs.fstatSync = () => { throw Object.assign(new Error('Synthetic stat failure'), { code: 'EIO' }); };
+      try { assert.throws(() => client.configure({ key: SECOND_KEY }), /could not be saved/); assert.equal(client.pendingHandles.size, 1); assert.equal(client.pendingTemps.size, 1); }
+      finally { fs.fstatSync = realStat; }
+      fs.closeSync = () => { throw Object.assign(new Error('Synthetic close failure'), { code: 'EBUSY' }); };
+      try {
+        assert.throws(() => client.close(), /could not be cleaned up/);
+        assert.throws(() => client.configure({ key: SECOND_KEY }), /cleanup is still pending/);
+        assert.equal(client.pendingHandles.size, 1); assert.equal(client.pendingTemps.size, 1); assert.equal(fs.readdirSync(dir).length, 2);
+      } finally { fs.closeSync = realClose; }
+      client.close(); assert.equal(client.hasOwnership, false); assert.equal(fs.readFileSync(client.file, 'utf8'), original);
+      client.configure({ key: SECOND_KEY }); assert.equal(client.getConfig().hasKey, true);
+    });
+  });
+
+  await test('AI failed publication preserves a substituted temporary file and retries only restored owned cleanup', async () => {
+    await fixture(async ({ client, dir }) => {
+      client.configure({ provider: 'nyquest', key: KEY }); const raw = fs.readFileSync(client.file, 'utf8'), before = client.getConfig();
+      const realRename = fs.renameSync; let temporary, held;
+      fs.renameSync = (source, target) => {
+        if (target === client.file) { temporary = source; held = source + '.owned'; realRename(source, held); fs.writeFileSync(source, 'foreign fixture'); throw Object.assign(new Error(), { code: 'EPERM' }); }
+        return realRename(source, target);
+      };
+      try { assert.throws(() => client.configure({ key: SECOND_KEY }), /could not be saved/); }
+      finally { fs.renameSync = realRename; }
+      assert.equal(fs.readFileSync(temporary, 'utf8'), 'foreign fixture'); assert.equal(fs.readFileSync(client.file, 'utf8'), raw);
+      assert.equal(client.getConfig().revision, before.revision); assert.equal(client.hasOwnership, true);
+      assert.throws(() => client.close(), /could not be cleaned up/);
+      fs.renameSync(temporary, path.join(dir, 'foreign-fixture')); fs.renameSync(held, temporary);
+      client.close(); assert.equal(client.hasOwnership, false); assert.equal(fs.readFileSync(path.join(dir, 'foreign-fixture'), 'utf8'), 'foreign fixture');
+    });
+  });
+
+  await test('AI refuses externally modified settings and never reports an in-place publication mutation as saved', async () => {
+    await fixture(async ({ client }) => {
+      client.configure({ provider: 'nyquest', key: KEY }); const before = client.getConfig(), raw = fs.readFileSync(client.file, 'utf8');
+      fs.writeFileSync(client.file, raw + '\n');
+      assert.throws(() => client.configure({ key: SECOND_KEY }), /changed outside/);
+      assert.equal(fs.readFileSync(client.file, 'utf8'), raw + '\n'); assert.deepEqual(client.getConfig(), before);
+    });
+    await fixture(async ({ client }) => {
+      client.configure({ provider: 'nyquest', key: KEY }); const rename = fs.renameSync;
+      fs.renameSync = (source, target) => { const result = rename(source, target); if (target === client.file) fs.appendFileSync(target, '\nexternal mutation'); return result; };
+      try { assert.throws(() => client.configure({ key: SECOND_KEY }), /saved, but their file could not be verified/); }
+      finally { fs.renameSync = rename; }
+      assert.match(client.getConfig().warning, /could not be verified/); assert.throws(() => client.preview('harmless fixture'), /could not be verified/);
     });
   });
 

@@ -44,6 +44,17 @@ async function publishNewFile(io, temporary, target, sourceVersion, { platform =
   }
 }
 
+// Synchronous configuration owners use the same exclusive publication boundary,
+// without blocking the main process for retry delays. Their UI retains the draft
+// when a transient sharing violation requires a later user retry.
+function publishNewFileSync(io, temporary, target, sourceVersion, { platform = process.platform, moveNoReplace = moveNewWindowsFile } = {}) {
+  if (typeof temporary !== 'string' || typeof target !== 'string' || !path.isAbsolute(temporary) || !path.isAbsolute(target)
+      || temporary.includes('\0') || target.includes('\0') || path.dirname(temporary) !== path.dirname(target) || path.resolve(temporary) === path.resolve(target)) throw conflict();
+  if (!sameVersion(sourceVersion, io.lstatSync(temporary, { bigint: true }))) throw conflict();
+  if (platform === 'win32') { moveNoReplace(temporary, target); return true; }
+  io.linkSync(temporary, target); return false;
+}
+
 async function replaceOwnedFile(io, temporary, target, sourceVersion, targetVersion) {
   for (let attempt = 0; ; attempt++) {
     let source, destination;
@@ -59,4 +70,4 @@ async function replaceOwnedFile(io, temporary, target, sourceVersion, targetVers
     }
   }
 }
-module.exports = { sameFile, sameVersion, replaceOwnedFile, publishNewFile };
+module.exports = { sameFile, sameVersion, replaceOwnedFile, publishNewFile, publishNewFileSync };

@@ -158,9 +158,9 @@ async function electronFixture() {
         const baselineStatus = await instance.knowledge.status(); assert.ok(baselineStatus.documents >= 10); assert.ok(baselineStatus.chunks > 0);
         assert.deepEqual(await blockers(), [], 'blank AI view has no draft blocker');
 
-        // A failed save clears the password field too; use real validation failure.
+        // Failed validation retains the unsaved key for correction and retry.
         await input('window.__ai.key', 'not a valid key'); await click('window.__ai.saveButton'); await ready();
-        assert.equal(await run('window.__ai.key.value'), ''); assert.equal(await run('window.__ai.config.hasKey'), false);
+        assert.equal(await run('window.__ai.key.value'), 'not a valid key'); assert.equal(await run('window.__ai.config.hasKey'), false);
         await input('window.__ai.key', key); await click('window.__ai.saveButton'); await ready();
         assert.equal(await run('window.__ai.config.hasKey'), true); assert.equal(await run('window.__ai.key.value'), '');
         const storedPath = path.join(fixtureRoot, 'profile', 'ai.json');
@@ -305,10 +305,10 @@ async function electronFixture() {
         await close('__draftAi', 'Discard drafts and close');
         await run('window.__app.activate(window.__ai);void 0;'); await ready();
 
-        // Supported tools now attach explicitly selected evidence to Copilot.
+        // Supported tools now attach explicitly selected evidence to KonX-AI.
         // Standalone AI provider/draft coverage above remains independent.
         const attachEvidence = async (tab, label, kind, count) => {
-          await click(`window.${tab}.el.querySelector('[aria-label="Ask Copilot about this evidence"]')`);
+          await click(`window.${tab}.el.querySelector('[aria-label="Ask KonX-AI about this evidence"]')`);
           assert.equal(requests.length, requestCount, 'opening an evidence chooser must not send anything');
           await click(`Array.from(document.querySelectorAll('.ctx .item')).find(el=>el.textContent.trim()===${JSON.stringify(label)})`);
           await until(() => run(`window.__app.copilot?.conversation?.attachments.length===${count} && !window.__app.copilot.busy && window.__app.tabs.includes(window.__app.copilot.panel)`), 'explicit ' + kind + ' attachment');
@@ -398,7 +398,7 @@ async function electronFixture() {
         assert.match(await run('window.__otherAi.libraryStatus.textContent'), /Synthetic index failure/);
         assert.equal(await run('window.__otherAi.libraryStatus.textContent.includes("Local TF-IDF vector index")'), false);
         instance.knowledge.status = realStatus;
-        console.log('AI_UI_PASS: five real provider adapters with synthetic transport, encrypted keys, offline SQLite/vector CRUD, full-source redaction, draft close/update protection, failed/cancelled work retention, escaped answers, citation reading, explicit Copilot evidence routing, 900x560 layout, revision refresh and cancellation');
+        console.log('AI_UI_PASS: five real provider adapters with synthetic transport, encrypted keys, offline SQLite/vector CRUD, full-source redaction, draft close/update protection, failed/cancelled work retention, escaped answers, citation reading, explicit KonX-AI evidence routing, 900x560 layout, revision refresh and cancellation');
         finish(0);
       } catch (error) { finish(1, error); }
     });

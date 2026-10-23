@@ -10,7 +10,7 @@ const SOURCE = path.resolve(__dirname, '../src/renderer/js');
 const KINDS = ['capture-packet', 'capture-stream', 'sip-call', 'rtp-stream', 'capture-compare', 'remote-capture', 'security', 'wifi', 'mist'];
 
 async function runCopilotTrafficTests(test) {
-  await test('traffic Copilot: actual offline capture and assessment views attach explicit bounded parsed facts without collection', async () => {
+  await test('traffic KonX-AI: actual offline capture and assessment views attach explicit bounded parsed facts without collection', async () => {
     const base = fs.realpathSync(os.tmpdir()), root = fs.mkdtempSync(path.join(base, 'konx-copilot-traffic-'));
     let child, output = '';
     try {
@@ -75,8 +75,8 @@ async function fixture() {
       const ps=snap(cap,'selected-packet');check(ps.facts.rows[0].no===6&&ps.facts.rows[0].fields['tcp.srcport'],'Packet identity or decoded fields missing');
       check(!JSON.stringify(ps).includes('data\\":')&&!JSON.stringify(ps).includes('payload'),'Raw packet bytes included');
       const conv=cap.analyzer.streams.find(c=>c.proto==='TCP');const old=cap.copilot.retain(),oldRevision=old.revision;cap.copilot.touch();
-      const pending=cap.follow(conv.id);await wait(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Ask Copilot about this stream'&&!b.disabled));
-      const before=calls.length;click('Ask Copilot about this stream');await pending;check(calls.length===before,'Stream attachment performed IO');
+      const pending=cap.follow(conv.id);await wait(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Ask KonX-AI about this stream'&&!b.disabled));
+      const before=calls.length;click('Ask KonX-AI about this stream');await pending;check(calls.length===before,'Stream attachment performed IO');
       const readable=attached.at(-1);check(readable.kind==='capture-stream'&&readable.facts.rows.some(row=>row.text==='ok'),'Real HTTP reassembly text missing');
       const stream=cap.analyzer.followStream(cap.packets,conv.id,'TCP'),parsed=await parseHttpStream(stream);
       const artificial={...parsed,messages:[{...parsed.messages[0],text:'A'.repeat(30000)+'SyntheticCompleteKey',previewTruncated:false,headers:[{name:'Authorization',value:'HiddenHeader'},{name:'Content-Type',value:'text/plain'}]}]};
@@ -85,9 +85,9 @@ async function fixture() {
       artificial.messages[0].previewTruncated=true;const truncated=streamContext(old,stream,artificial);check(truncated.facts.rows[0].text===undefined&&/truncated text preview/.test(truncated.omissions.join(' ')),'Partial raw message text disclosed');
       artificial.messages[0].previewTruncated=false;artificial.messages[0].text='OpaqueBoundarySecret'.repeat(10000);const bounded=streamContext(old,stream,artificial);check(!JSON.stringify(bounded).includes('OpaqueBoundarySecret')&&/whole-field/.test(bounded.omissions.join(' ')),'Oversize field split');
       const ppcap=cap.captureCopilotContext({choice:'selected-packet'});cap.clear(false);check(cap.copilotContextChoices()[0].disabled&&ppcap.facts.rows[0].no===6,'Clear mutated historical attachment');
-      await cap.loadBytes(rtpDemoCapture(),'synthetic-media.pcapng');const sipPending=cap.openSipCalls();await wait(()=>document.querySelector('.sip-workspace'));click('Ask Copilot about this call');await sipPending;
+      await cap.loadBytes(rtpDemoCapture(),'synthetic-media.pcapng');const sipPending=cap.openSipCalls();await wait(()=>document.querySelector('.sip-workspace'));click('Ask KonX-AI about this call');await sipPending;
       const sip=attached.at(-1);check(sip.kind==='sip-call'&&sip.facts.rows.some(row=>row.sdp?.media.length),'Real SIP/SDP evidence missing');check(!JSON.stringify(sip).includes('rawText'),'Raw SIP attached');
-      const mediaPending=cap.openRtpMedia();await wait(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Ask Copilot about stream quality'&&!b.disabled));click('Ask Copilot about stream quality');await mediaPending;
+      const mediaPending=cap.openRtpMedia();await wait(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Ask KonX-AI about stream quality'&&!b.disabled));click('Ask KonX-AI about stream quality');await mediaPending;
       const rtp=attached.at(-1);check(rtp.kind==='rtp-stream'&&rtp.facts.runSummary.stream.sequenceGaps===3&&rtp.facts.rows[0].frame,'Real RTP gap/frame facts missing');
       check(!JSON.stringify(rtp).includes('payload\\":')&&!JSON.stringify(rtp).includes('audioData'),'Media payload included');
       const massive={...rtp.facts.runSummary.stream,packets:Array.from({length:10000},(_,i)=>({frame:i+1,flags:[]})),packetCount:10000};
@@ -96,7 +96,7 @@ async function fixture() {
       compare.showChange(compare.report.changes.find(row=>row.status==='changed')||compare.report.changes[0]);const cs=snap(compare,'selected-change');check(cs.facts.rows.length===1&&cs.facts.rows[0].sourceId&&cs.facts.runSummary.before.label,'Comparison source references missing');
       const {SecurityTab}=await import('./js/security.js');const sec=make(new SecurityTab(host));sec.report={schemaVersion:1,kind:'ssh',title:'Fixture assessment',target:'old.example',scopeId:'a'.repeat(64),scannedAt:'2026-10-23T12:00:00Z',checks:[{id:'weak',title:'Weak algorithm',status:'warning',severity:'medium',confidence:'high',evidence:'Observed group1',remediation:'Upgrade device',reference:''},{id:'unknown',title:'Unavailable',status:'unknown',severity:'info',confidence:'low',evidence:'Handshake incomplete',remediation:'',reference:''}],limitations:['Only observed handshake']};sec.renderReport();sec.table.selected=new Set(['unknown']);sec.host.value='unsent.example';sec.config.value='NeverAttachConfiguration';
       const ss=snap(sec,'selected-check');check(ss.facts.rows[0].status==='unknown'&&ss.scope.inputs.target==='old.example'&&!JSON.stringify(ss).includes('NeverAttach'),'Security unknown or frozen scope lost');
-      sec.el.querySelector('[aria-label="Ask Copilot about this evidence"]').click();click('Selected security check');check(attached.at(-1).kind==='security','Local evidence menu failed');
+      sec.el.querySelector('[aria-label="Ask KonX-AI about this evidence"]').click();click('Selected security check');check(attached.at(-1).kind==='security','Local evidence menu failed');
       const {WifiTab}=await import('./js/wifi.js');const wifi=make(new WifiTab(host));wifi.report={schemaVersion:1,kind:'wifi',collectedAt:'2026-10-23T12:00:00Z',adapters:[{id:'wlan',name:'Fixture Wi-Fi',state:'connected',connection:{ssid:'Lab',rxMbps:72}}],networks:[{adapterId:'wlan',bssid:'00:11:22:33:44:55',ssid:'Lab',band:'2.4 GHz',channel:6,authentication:'WPA2',encryption:'CCMP',groupEncryption:'TKIP',rssiDbm:null}],channels:[],findings:[],limitations:['Cached only']};wifi.renderReport();wifi.networks.selected=new Set([wifi.networks.rowKey(wifi.report.networks[0])]);const ws=snap(wifi,'selected-network');check(ws.facts.rows[0].groupEncryption==='TKIP'&&ws.facts.rows[0].rssiDbm===null,'Wi-Fi group cipher or unknown RSSI lost');snap(wifi,'survey');
       const {MistTab}=await import('./js/mist.js');const mist=make(new MistTab(host));await mist.ready;mist.report={action:'aps',region:'global',fetchedAt:'2026-10-23T12:00:00Z',scope:{siteId:'fixture-site'},data:[{id:'ap-1',name:'Fixture AP',model:'AP43',status:'connected',token:'NeverAttachToken',arbitrary:'NeverAttachArbitrary'}],limited:false,limitations:[]};mist.renderReport();mist.table.selected=new Set([':ap-1']);mist.token.value='NeverAttachInput';const ms=snap(mist,'selected-entity');check(ms.facts.rows[0].name==='Fixture AP'&&!JSON.stringify(ms).includes('NeverAttach'),'Mist credential or arbitrary value disclosed');
       mist.report={...mist.report,limited:true,limitations:['Cloud response truncated at the local text, record, or nesting limit. Use the Mist portal to inspect the full response.']};mist.renderReport();mist.table.selected=new Set([':ap-1']);check(!snap(mist,'selected-entity').facts.rows.length,'Possibly pretruncated cloud field disclosed');

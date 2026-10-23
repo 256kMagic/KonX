@@ -7,12 +7,12 @@ const clone = value => structuredClone(value);
 
 class CopilotService {
   constructor({ store, ai, now = () => Date.now() }) {
-    if (!store || !ai || typeof ai.prepareConversation !== 'function') throw new TypeError('Copilot requires its store and AI transport owner');
+    if (!store || !ai || typeof ai.prepareConversation !== 'function') throw new TypeError('KonX-AI requires its store and AI transport owner');
     this.store = store; this.ai = ai; this.now = now; this.preparations = new Map(); this.preparing = new Set(); this.running = new Set(); this.finalizations = new Map(); this.lastTest = null; this.closing = null;
   }
   get hasOwnership() { return this.preparing.size > 0 || this.running.size > 0 || this.finalizations.size > 0 || this.store.hasOwnership; }
   get hasPendingCleanup() { return this.finalizations.size > 0 || this.store.hasPendingCleanup; }
-  ready() { if (this.closing) fail('Copilot is closing; wait before starting another operation', 'COPILOT_CLOSING'); }
+  ready() { if (this.closing) fail('KonX-AI is closing; wait before starting another operation', 'COPILOT_CLOSING'); }
   status() { return { config: this.ai.getConfig(), capabilities: this.ai.copilotCapabilities(), lastTest: clone(this.lastTest) }; }
   list() { this.ready(); return this.store.list(); }
   get(id) { this.ready(); return this.store.get(id); }
@@ -71,7 +71,7 @@ class CopilotService {
     const pending = this.finalizations.get(key); if (!pending) return null;
     let value;
     try { value = await this.store.finishTurn(pending.conversationId, pending.turnId, pending.outcome); }
-    catch { fail('The request finished, but its outcome could not be saved. Copilot retains it for cleanup retry; do not repeat the request.', 'COPILOT_CLEANUP'); }
+    catch { fail('The request finished, but its outcome could not be saved. KonX-AI retains it for cleanup retry; do not repeat the request.', 'COPILOT_CLEANUP'); }
     this.finalizations.delete(key); const report = { conversationId: value.id, conversationRevision: value.revision, turn: value.turns.find(t => t.id === pending.turnId) };
     emit?.('report', clone(report)); return report;
   }

@@ -72,6 +72,7 @@ function fixture() {
   const sftp = { sessions: new Map(), pending: new Map(), queue: { active: new Map(), jobs: [] }, closeAll() { calls.push('close-sftp'); } };
   const capture = { sessions: new Map(), startRequests: new Map(), builtin: { sessions: new Map(), startRequests: new Map() }, stopAll() { calls.push('stop-capture'); } };
   const knowledge = { busy: false, close() { calls.push('close-knowledge'); return Promise.resolve(); } };
+  const ai = { hasOwnership: false, getConfig: () => ({}), configure: () => { calls.push('configure-ai'); return {}; }, close: () => { ai.hasOwnership = false; } };
   const remote = {
     hasOpenHandles: false, hasPendingCleanup: false, hasResultPendingCleanup: false, capacityChecks: [],
     run: async () => undefined,
@@ -155,7 +156,7 @@ function fixture() {
       exportFile(id, file) { return runbook.exportFile(id, file); }
       close() { return runbook.close(); }
     } },
-    './mist': { MistClient: class {} }, './ai': { AIClient: class {} },
+    './mist': { MistClient: class {} }, './ai': { AIClient: class { constructor() { return ai; } } },
     './notepad': { NotepadStore: class {}, FileWatcher: class {} },
     './updater': { UpdateManager: class {
       constructor(options) { manager = this; this.options = options; this.state = { supported: true, mode: options.mode, currentVersion: options.version, status: 'idle' }; }
@@ -190,7 +191,7 @@ function fixture() {
   vm.runInContext(fs.readFileSync(filename, 'utf8'), context, { filename });
   ready();
   return {
-    app, calls, sent, manager, behavior, handoff, connections, remote, runbook, sites, events, changes, copilot, actions, incidents, dialogs,
+    app, calls, sent, manager, behavior, handoff, connections, remote, runbook, sites, events, changes, copilot, actions, incidents, dialogs, ai,
     get jobs() { return vm.runInContext('toolJobs', context); },
     get controller() { return vm.runInContext('updates', context); },
     get window() { return window; },
@@ -208,6 +209,28 @@ function fixture() {
 }
 
 async function runUpdateLifecycleTests(test) {
+  await test('AI credential lifecycle: sole pending cleanup blocks installation and native window close; failure keeps window for retry', async () => {
+    const f = fixture(); f.ai.hasOwnership = true;
+    f.ai.close = () => { throw new Error('Synthetic encrypted temporary file cleanup failure'); };
+    await assert.rejects(f.invoke('app:updateInstall'), /encrypted AI settings cleanup/); assert.ok(!f.calls.includes('launch-helper'));
+    const closed = f.nativeClose(); assert.equal(closed.defaultPrevented, true); assert.equal(f.window.destroyed, false);
+    await tick(); assert.equal(f.app.exited, false); assert.equal(f.window.destroyed, false); assert.equal(f.ai.hasOwnership, true); assert.ok(f.calls.includes('shutdown-error'));
+    f.invoke('tools:aiConfigure', { key: null }); assert.ok(f.calls.includes('configure-ai'), 'Admission reopens after failed cleanup');
+    f.ai.close = () => { f.ai.hasOwnership = false; };
+    f.nativeClose(); await tick(); assert.equal(f.app.exited, true); assert.equal(f.window.destroyed, true);
+  });
+  await test('AI credential lifecycle: closing rejects new saved-key mutations during owner cleanup and late updater finalization', async () => {
+    for (const stage of ['owner-cleanup', 'late-finalization']) {
+      const f = fixture(), pending = deferred(); f.ai.hasOwnership = true;
+      if (stage === 'owner-cleanup') f.ai.close = async () => { await pending.promise; f.ai.hasOwnership = false; };
+      else f.behavior.cancel = () => pending.promise;
+      assert.equal(f.nativeClose().defaultPrevented, true); await tick();
+      assert.equal(f.app.exited, false); assert.equal(f.window.destroyed, false);
+      assert.equal(f.ai.hasOwnership, stage === 'owner-cleanup');
+      for (const params of [{ provider: 'nyquest', key: 'Synthetic_Late_Key_123456' }, { provider: 'nyquest', key: null }]) assert.throws(() => f.invoke('tools:aiConfigure', params), /KonX is closing/);
+      assert.ok(!f.calls.includes('configure-ai')); pending.resolve(); await tick(); await tick(); assert.equal(f.app.exited, true);
+    }
+  });
   await test('incident lifecycle: final export write remains owned after the file dialog and quit waits for completion', async () => {
     const f = fixture(), writing = deferred(); let prepared;
     f.incidents.exportJson = async () => 'Exact prepared incident export';
@@ -263,21 +286,21 @@ async function runUpdateLifecycleTests(test) {
       closing.resolve(); await tick(); await tick(); assert.equal(f.app.exited, true);
     }
   });
-  await test('Copilot lifecycle: owned finalization blocks update and quit until persisted, rejects late admission', async () => {
+  await test('KonX-AI lifecycle: owned finalization blocks update and quit until persisted, rejects late admission', async () => {
     const f = fixture(), saving = deferred(); let stopped = false, starts = 0;
     f.copilot.run = async (_params, _emit, signal) => { starts++; f.copilot.hasOwnership = true;
       signal.onStop = () => { stopped = true; }; await saving.promise; f.copilot.hasOwnership = false; };
     await f.invoke('tools:start', 'copilot', {}, 'copilot-fixture'); await tick();
-    await assert.rejects(f.invoke('app:updateInstall'), /running tools|Copilot/);
+    await assert.rejects(f.invoke('app:updateInstall'), /running tools|KonX-AI/);
     f.app.quit(); await tick(); assert.equal(stopped, true); assert.equal(f.app.exited, false);
     await assert.rejects(f.invoke('tools:copilotList'), /closing/);
     assert.throws(() => f.invoke('tools:start', 'copilot', {}, 'copilot-late'), /closing/);
     assert.equal(starts, 1); saving.resolve(); await tick(); await tick(); assert.equal(f.app.exited, true);
   });
-  await test('Copilot lifecycle: failed finalization retains ownership and retry; IPC is limited to primary frame', async () => {
+  await test('KonX-AI lifecycle: failed finalization retains ownership and retry; IPC is limited to primary frame', async () => {
     const f = fixture(); f.copilot.hasOwnership = true;
-    f.copilot.close = async () => { throw new Error('Synthetic Copilot finalization failure'); };
-    await assert.rejects(f.invoke('app:updateInstall'), /Copilot/);
+    f.copilot.close = async () => { throw new Error('Synthetic KonX-AI finalization failure'); };
+    await assert.rejects(f.invoke('app:updateInstall'), /KonX-AI/);
     assert.throws(() => f.invokeFrom({ sender: {}, senderFrame: {} }, 'tools:copilotList'), /primary/);
     f.app.quit(); await tick(); assert.equal(f.app.exited, false); assert.ok(f.calls.includes('shutdown-error'));
     assert.equal(f.copilot.hasOwnership, true);

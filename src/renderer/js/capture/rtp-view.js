@@ -46,7 +46,7 @@ export async function showRtpMedia(packetSnapshot, { sipCalls = [], callKey = nu
   const playButton = h('button.btn.sm', { onclick: () => play(false) }, icon('play'), 'Play stream');
   const pairButton = h('button.btn.sm', { onclick: () => play(true) }, 'Play both directions');
   const stopButton = h('button.btn.sm', { disabled: true, onclick: () => stop() }, 'Stop');
-  const copilotButton = h('button.btn.sm', { disabled: true, onclick: () => close({ action: 'copilot', stream: selected, analysis }) }, 'Ask Copilot about stream quality');
+  const copilotButton = h('button.btn.sm', { disabled: true, onclick: () => close({ action: 'copilot', stream: selected, analysis }) }, 'Ask KonX-AI about stream quality');
   const exportButton = h('button.btn.sm', { onclick: () => exportAudio() }, icon('download'), 'Export WAV');
 
   function reanalyze() {

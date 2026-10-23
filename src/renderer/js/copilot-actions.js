@@ -4,15 +4,15 @@ import { captureEditorActionTarget } from './copilot-editor-actions.mjs';
 const labels = { 'diagnostic.ping': 'Ping', 'diagnostic.dns': 'DNS lookup', 'diagnostic.traceroute': 'Traceroute', 'editor.replaceSelection': 'Replace editor selection', 'note.saveAnswer': 'Save answer as local note' };
 const defaults = kind => kind === 'diagnostic.ping' ? { host: '', count: 4, interval: 1000, timeout: 1000, size: 32 }
   : kind === 'diagnostic.dns' ? { name: '', type: 'A', server: '' } : kind === 'diagnostic.traceroute' ? { host: '', maxHops: 15, timeout: 1000 }
-  : kind === 'editor.replaceSelection' ? { replacement: '' } : { title: 'Copilot answer' };
+  : kind === 'editor.replaceSelection' ? { replacement: '' } : { title: 'KonX-AI answer' };
 const actionButton = (action, label, onclick, primary = false) => h(`button.btn${primary ? '.primary' : '.sm'}`, { 'data-action': action, onclick }, label);
 const field = (label, input) => h('label.field', h('span', label), input);
 const excerpt = value => typeof value === 'string' ? value : '';
 
-/** One action owner attached to the app-owned Copilot controller, never a model tool bridge. */
+/** One action owner attached to the app-owned KonX-AI controller, never a model tool bridge. */
 export class CopilotReviewedActions {
   constructor(controller) {
-    this.controller = controller; this.app = controller.app; this.id = 'copilot-reviewed-actions'; this.title = 'Reviewed Copilot action';
+    this.controller = controller; this.app = controller.app; this.id = 'copilot-reviewed-actions'; this.title = 'Reviewed KonX-AI action';
     this.draft = null; this.preview = null; this.candidates = []; this.issues = []; this.message = ''; this.generation = 0;
     this.discards = new Set(); this.cleanupError = ''; this.busy = false; this.jobId = null; this.sequence = 0; this.turnButtons = new Map(); this.disposed = false;
     this.kind = h('select.input', { 'aria-label': 'Reviewed action kind', onchange: () => this.setKind(this.kind.value) }, ...Object.entries(labels).map(([value, label]) => h('option', { value }, label)));
@@ -60,7 +60,7 @@ export class CopilotReviewedActions {
       h('p.hint', 'Choose a suggestion or fill in one bounded action. Opening this form and preparing a review do not run it. Terminal commands are not supported.'),
       this.suggestions, this.candidateIssues, field('Action', this.kind), this.diagnosticFields, this.editorFields, this.noteFields,
       h('div.copilot-actions', this.prepareButton, this.clearButton));
-    this.el = h('section.copilot-reviewed-actions.hidden', { 'aria-label': 'Reviewed Copilot actions' }, this.heading, this.formEl, this.stopButton, this.status, this.retryButton, this.reviewEl);
+    this.el = h('section.copilot-reviewed-actions.hidden', { 'aria-label': 'Reviewed KonX-AI actions' }, this.heading, this.formEl, this.stopButton, this.status, this.retryButton, this.reviewEl);
   }
   number(label, name, min, max, optional = false) {
     let input; input = h('input.input', { type: 'number', min, max, 'aria-label': label, oninput: () => this.setParam(name, optional && input.value === '' ? undefined : Number(input.value)) }); return input;

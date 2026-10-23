@@ -338,7 +338,7 @@ class App {
       h('button.tb-btn', { title: 'Open an SFTP tab for the current SSH tab or a saved session', onclick: () => this.sftpForActive() }, icon('file-transfer'), 'SFTP'),
       h('button.tb-btn', { title: 'Notepad++-style editor', onclick: () => this.openNotepad() }, icon('edit'), 'Notepad'),
       toolsBtn,
-      h('button.tb-btn.copilot-toolbar', { title: 'Open contextual Copilot', 'aria-label': 'Open contextual Copilot', onclick: () => this.openCopilot() }, icon('insight'), h('span.copilot-toolbar-label', 'Copilot')),
+      h('button.tb-btn.copilot-toolbar', { title: 'Open contextual KonX-AI', 'aria-label': 'Open contextual KonX-AI', onclick: () => this.openCopilot() }, icon('insight'), h('span.copilot-toolbar-label', 'KonX-AI')),
       h('div.tb-spacer'),
       this.themeHeader,
       this.buttonBarToggle,
@@ -794,7 +794,7 @@ class App {
     if (kind !== 'ai' && kind !== 'events') {
       const heading = tab.el.querySelector('.tool-title') || tab.el.querySelector('.tool-head') || tab.el.querySelector('.cap-frow');
       const contextual = copilotContextSupport(tab).supported;
-      if (!tab.copilotButton) heading?.append(h('button.btn.sm', { title: contextual ? 'Attach selected observations to Copilot for review' : 'Preview these results in AI & Knowledge', onclick: () => this.explainTool(tab) }, icon('insight'), contextual ? 'Ask Copilot' : 'Explain with AI'));
+      if (!tab.copilotButton) heading?.append(h('button.btn.sm', { title: contextual ? 'Attach selected observations to KonX-AI for review' : 'Preview these results in AI & Knowledge', onclick: () => this.explainTool(tab) }, icon('insight'), contextual ? 'Ask KonX-AI' : 'Explain with AI'));
       if (kind !== 'incidents' && kind !== 'change-validation') heading?.append(h('button.btn.sm', { title: 'Choose an incident for a snapshot of this evidence', onclick: () => this.addToIncident(tab) }, icon('file'), 'Add to incident'));
     }
     return this.addTab(tab);
