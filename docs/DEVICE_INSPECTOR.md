@@ -2,6 +2,8 @@
 
 Available from KonX 0.7.0 under **Network Tools → Device Inspector**.
 
+From 0.20.0, choose **View topology** to open these observations in [Visual Topology](TOPOLOGY.md). The map reuses captured evidence and does not collect or connect automatically.
+
 ## Try it without a switch
 
 Choose **Load demo** to inspect two synthetic Cisco-style switches and a connected endpoint. The demo uses documentation addresses and does not connect to a network. Search for `192.0.2.100` or the endpoint MAC shown in the ARP table to explore the observed switch-port candidates.

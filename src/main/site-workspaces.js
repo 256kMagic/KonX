@@ -10,7 +10,7 @@ const { TextDecoder } = require('node:util');
 const LIMITS = Object.freeze({ workspaces: 100, fileBytes: 1024 * 1024, listBytes: 16 * 1024 * 1024,
   sessions: 128, captures: 64, incidents: 64, panels: 32, notesBytes: 128 * 1024 });
 const LAYOUTS = Object.freeze(['classic', 'workbench', 'incident-desk', 'operations-wall', 'focus']);
-const PASSIVE_TOOLS = Object.freeze(['capture', 'capture-compare', 'runbook', 'remote-capture', 'incidents', 'snapshots', 'device',
+const PASSIVE_TOOLS = Object.freeze(['capture', 'capture-compare', 'runbook', 'remote-capture', 'incidents', 'snapshots', 'device', 'topology',
   'security', 'ai', 'ping', 'sweep', 'portscan', 'traceroute', 'dns', 'whois', 'subnet', 'wol']);
 const SPLITS = ['workbench', 'incident-desk', 'operations-wall'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;

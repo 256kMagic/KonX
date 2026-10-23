@@ -103,6 +103,7 @@ function fixture() {
     './incidents': { IncidentStore: class {} },
     './site-workspaces': { SiteWorkspaceStore: class { constructor() { return sites; } } },
     './site-workspace-ipc': load('./site-workspace-ipc'),
+    './topology-ipc': load('./topology-ipc'),
     './remote-capture': { run: (...args) => remote.run(...args), closePending: () => remote.closePending(), get hasPendingCleanup() { return remote.hasPendingCleanup; } },
     './remote-results': { RemoteCaptureResults: class {
       get hasOpenHandles() { return remote.hasOpenHandles; }

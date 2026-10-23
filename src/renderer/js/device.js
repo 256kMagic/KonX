@@ -28,6 +28,7 @@ export class DeviceTab {
     this.exportButton = h('button.btn', { disabled: true, onclick: () => this.export() }, icon('download'), 'Export JSON');
     this.snapshotButton = h('button.btn', { disabled: true, onclick: () => this.saveSnapshot() }, icon('download'), 'Save snapshot');
     this.historyButton = h('button.btn', { onclick: () => this.app.openTool('snapshots') }, icon('columns'), 'Snapshot history');
+    this.topologyButton = h('button.btn', { disabled: true, onclick: () => this.app.openTool('topology', { report: this.report, deviceId: this.deviceSelect.value }) }, icon('link'), 'View topology');
     this.includeConfig = h('input', { type: 'checkbox', checked: params.profile === 'snapshot', 'aria-label': 'Include configuration and routes' });
     this.connectionList = h('div.device-connections');
     this.connectionSummary = h('summary', 'Connected SSH devices');
@@ -63,7 +64,7 @@ export class DeviceTab {
     this.el = h('div.view.device-view', h('div.tool-head',
       h('div.tool-title', icon('server'), h('h2', 'Device Inspector'), h('span.sub', 'Cisco interfaces, VLANs, neighbors and endpoint paths')),
       h('p.notice', 'Collection uses separate SSH channels for read-only show commands. Incomplete output and uncertain endpoint paths remain visible.'),
-      h('div.device-actions', this.collectButton, this.importButton, this.demoButton, this.exportButton, this.snapshotButton, this.historyButton),
+      h('div.device-actions', this.collectButton, this.importButton, this.demoButton, this.exportButton, this.snapshotButton, this.historyButton, this.topologyButton),
       h('label.device-connection', this.includeConfig, 'Include configuration and routes'),
       h('p.hint', 'Running configuration can contain credentials. Snapshot files and exports retain the captured configuration locally.'),
       this.status, this.connectionDetails), this.content);
@@ -102,6 +103,7 @@ export class DeviceTab {
     this.collectButton.disabled = !!this.loading || (!this.jobId && !this.selectedConnections.size);
     this.importButton.disabled = busy; this.demoButton.disabled = busy; this.refreshButton.disabled = busy;
     this.exportButton.disabled = busy || !this.report;
+    this.topologyButton.disabled = busy || !this.report;
     this.snapshotButton.disabled = busy || !this.report; this.includeConfig.disabled = busy;
     this.findButton.disabled = !this.report || busy || !!this.tracing;
     this.connectionSummary.textContent = `Connected SSH devices · ${this.selectedConnections.size} selected`;

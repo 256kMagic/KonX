@@ -27,6 +27,7 @@ async function main() {
     ['docs/SERIAL_AUTO_BAUD.md', 'SERIAL_AUTO_BAUD.md'],
     ['docs/TESTER_SUPPORT.md', 'TESTER_SUPPORT.md'],
     ['docs/SITE_WORKSPACES.md', 'SITE_WORKSPACES.md'],
+    ['docs/TOPOLOGY.md', 'TOPOLOGY.md'],
     ['CHANGELOG.md', 'CHANGELOG.md'], [`docs/releases/${version}.md`, 'RELEASE_NOTES.md'],
   ];
   for (const file of [...binaries.map((name) => `dist/${name}`), ...documents.map(([source]) => source)]) {

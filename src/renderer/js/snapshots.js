@@ -57,7 +57,8 @@ export class SnapshotTab {
     this.renderRows(); this.ready = this.refresh();
   }
 
-  selector(label, select, open, remove) { return h('div.snapshot-choice', h('label.field', h('span', label), select), h('div.snapshot-actions', open, remove)); }
+  selector(label, select, open, remove) { return h('div.snapshot-choice', h('label.field', h('span', label), select), h('div.snapshot-actions', open,
+    h('button.btn.sm', { onclick: () => this.open(select.value, 'topology') }, icon('link'), 'View topology'), remove)); }
 
   updateButtons() {
     this.refreshButton.disabled = this.demoButton.disabled = this.busy; this.before.disabled = this.busy; this.after.disabled = this.busy;
@@ -197,13 +198,14 @@ export class SnapshotTab {
       h('pre', lines.slice(start, start + 120).map((line, index) => h('span', { class: start + index + 1 === source.line ? 'snapshot-source-line' : '' }, `${start + index + 1}  ${line}\n`))));
   }
 
-  async open(id) {
+  async open(id, kind = 'device') {
     if (!id || this.busy || this.disposed) return;
     const request = ++this.seq; this.busy = true; this.updateButtons();
     try {
       const record = await api.invoke('tools:snapshotGet', id);
       if (this.disposed || request !== this.seq) return;
       if (!record) throw new Error('Snapshot no longer available. Refresh history.');
+      if (kind === 'topology') { this.app.openTool('topology', { report: record.report }); return; }
       const tab = this.app.openTool('device'); tab.acceptReport(record.report);
       tab.status.textContent = `Saved snapshot “${record.label}” · ${date(record.savedAt)}. Collection times remain recorded per device.`;
     } catch (error) { if (!this.disposed && request === this.seq) this.status.textContent = errMsg(error); }

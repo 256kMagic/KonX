@@ -28,6 +28,7 @@
     if (workspaceWindows) checks.workspaceWindows = workspaceWindows;
     if (supportReport) checks.supportReport = supportReport;
     if (siteWorkspaces) checks.siteWorkspaces = siteWorkspaces;
+    if (visualTopology) checks.visualTopology = visualTopology;
     // Portable launchers do not necessarily forward their app's stdout. Write
     // test evidence only to the parent-provided private artifact file.
     await api.invoke('np:write', options.resultPath, new TextEncoder().encode(JSON.stringify(checks, null, 2)));
@@ -75,6 +76,8 @@
   const supportsWorkspaceWindows = versionParts[0] > 0 || versionParts[1] >= 18;
   const supportsSupport = versionParts[0] > 0 || versionParts[1] > 18 || (versionParts[1] === 18 && versionParts[2] >= 1);
   const supportsSites = versionParts[0] > 0 || versionParts[1] >= 19;
+  const supportsTopology = versionParts[0] > 0 || versionParts[1] >= 20;
+  let visualTopology = null;
   let siteWorkspaces = null;
   let supportReport = null;
   if (supportsSupport) {
@@ -361,6 +364,22 @@
       assert(device.trace?.matches.length >= 2 && device.trace.paths.length >= 1, 'Packaged endpoint trace did not connect the synthetic switches');
       assert(device.traceResults.querySelector('.device-match button'), 'Packaged endpoint evidence controls are missing');
       deviceInspector = { demoDevices: device.report.devices.length, endpointMatches: device.trace.matches.length, paths: device.trace.paths.length, noNetworkCollection: !device.jobId };
+      if (supportsTopology) {
+        device.topologyButton.click();
+        const map = app.tabs.find(tab => tab.toolKind === 'topology'); assert(map, 'Device Inspector topology action is missing'); await map.ready;
+        assert(map.report?.nodes.length === 2 && map.report.links.length === 2 && app.jobs.size === 0, 'Topology did not reuse captured device evidence');
+        map.query.value = '192.0.2.100'; await map.rebuild();
+        assert(map.report.endpoint.matches.length >= 2 && map.report.nodes.some(node => node.kind === 'endpoint'), 'Topology endpoint overlay is missing');
+        const link = map.report.links.find(link => link.kind === 'neighbor'); map.select('link', link.id);
+        assert(map.detail.textContent.includes('Source evidence') && map.detail.querySelector('button'), 'Topology selection evidence is missing');
+        map.openInspector(link.evidence[0].deviceId, link.evidence[0]);
+        const inspector = app.tabs.find(tab => tab.toolKind === 'device' && tab !== device);
+        assert(inspector?.evidence.open && inspector.raw.textContent.includes('Device ID'), 'Topology command evidence did not open in Device Inspector');
+        const { toolContext } = await import('./js/tool-context.mjs');
+        assert(!toolContext(map).includes('192.0.2.100') && toolContext(map).includes('nodeCount'), 'Topology AI context leaked raw evidence');
+        visualTopology = { reusedInspectorEvidence: true, clickableLinks: true, endpointOverlay: true, sourceInspector: true, summaryOnlyAI: true, noNetworkCollection: app.jobs.size === 0 };
+        await app.closeTab(inspector); await app.closeTab(map);
+      }
       await app.closeTab(device);
       assert(!app.byId.has(device.id) && app.jobs.size === 0, 'Device Inspector smoke did not close cleanly');
     }
@@ -376,6 +395,11 @@
       assert(snapshots.aiContext?.summary && !Object.hasOwn(snapshots.aiContext, 'changes'), 'Snapshot AI context must contain a summary without changed values');
       const saved = await api.invoke('tools:snapshotList');
       assert(saved.snapshots.length === 2 && saved.issues.length === 0, 'Demo snapshots were not stored correctly');
+      if (supportsTopology) {
+        await snapshots.open(saved.snapshots[0].id, 'topology'); const map = app.tabs.find(tab => tab.toolKind === 'topology'); await map.ready;
+        assert(map.report.nodes.length >= 2 && !map.report.sourceReport, 'Saved snapshot topology is missing or embeds raw evidence in the graph');
+        visualTopology.savedSnapshotOpened = true; await app.closeTab(map);
+      }
       deviceSnapshots = { savedSnapshots: saved.snapshots.length, comparedDevices: snapshots.report.devices.length, changes: snapshots.report.changes.length,
         configurationAndRoutesCompared: true, aiSummaryOnly: true, noNetworkCollection: app.jobs.size === 0 };
       await app.closeTab(snapshots);

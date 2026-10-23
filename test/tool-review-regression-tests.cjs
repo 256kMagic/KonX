@@ -34,7 +34,7 @@ function tools(runner, replyGate) {
         ipcMain: { handle: (name, fn) => handlers.set(name, fn), on() {} },
       };
       if (name === './nettools') return nettools;
-      if (['./workspace-windows', './site-workspace-ipc'].includes(name)) return localRequire(name);
+      if (['./workspace-windows', './site-workspace-ipc', './topology-ipc'].includes(name)) return localRequire(name);
       if (name.startsWith('./')) return {};
       return localRequire(name);
     },

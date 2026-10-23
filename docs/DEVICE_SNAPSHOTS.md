@@ -2,6 +2,8 @@
 
 Available from KonX 0.8.0 under **Network Tools → Device Snapshots**.
 
+From 0.20.0, choose **View topology** to open these observations in [Visual Topology](TOPOLOGY.md). The map reuses captured evidence and does not collect or connect automatically.
+
 ## Capture before and after a change
 
 1. Open the relevant SSH terminals and collect observations in **Device Inspector**.

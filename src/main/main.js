@@ -25,6 +25,7 @@ const { SnapshotStore, compareSnapshots } = require('./device-snapshots');
 const { IncidentStore } = require('./incidents');
 const { SiteWorkspaceStore } = require('./site-workspaces');
 const { registerSiteWorkspaces } = require('./site-workspace-ipc');
+const { registerTopology } = require('./topology-ipc');
 const { MistClient } = require('./mist');
 const { AIClient } = require('./ai');
 const { KnowledgeLibrary } = require('./knowledge');
@@ -217,6 +218,7 @@ function registerIpc() {
     return updates ? updates.invoke(ch, () => fn(...args)) : fn(...args);
   });
   registerSiteWorkspaces(handle, { sites, dialog, dialogOwner, isClosing: () => toolsShuttingDown || updateShutdownPending });
+  registerTopology(handle, { dialog, dialogOwner, isClosing: () => toolsShuttingDown || updateShutdownPending });
   handle('app:popoutPrepare', () => {
     if (toolsShuttingDown || updateShutdownPending) throw new Error('KonX is closing. Wait before opening another window.');
     return workspaceWindows.prepare();

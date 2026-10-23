@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.20.0 — 2026-10-23
+
+- Add interactive Visual Topology from canonical CDP/LLDP, interface, ARP, and MAC observations with clickable source evidence.
+- Reuse Device Inspector reports and saved snapshots; show stale, unknown, ambiguous, and omitted observations explicitly.
+- Add candidate endpoint overlays, drag/keyboard arrangement, zoom/fit, bounded incident evidence, and JSON export/import with original command evidence.
+- Keep device connections explicit and offer only a count/coverage summary to AI.
+
+See the [topology guide](docs/TOPOLOGY.md) and [release notes](docs/releases/0.20.0.md).
+
 ## 0.19.0 — 2026-10-23
 
 - Add Saved Site Workspaces with grouped session references, notes, capture paths, incident links, and named panel arrangements.

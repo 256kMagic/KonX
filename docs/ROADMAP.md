@@ -38,7 +38,7 @@ The next approved sequence ships each phase with its own tested release, notes, 
 | --- | --- | --- |
 | 0.18.1 | Tester diagnostics, incident-save reliability, display-scale and window recovery checks | Complete; 900 tests and packaged checks passed |
 | 0.19.0 | Saved site workspaces with session references, panel arrangements, notes, capture references, and explicit connection actions | Complete; 923 tests and packaged checks passed |
-| 0.20.0 | Interactive topology from observed device neighbors and forwarding evidence | Planned |
+| 0.20.0 | Interactive topology from observed device neighbors and forwarding evidence | Complete; 936 tests and packaged checks passed |
 | 0.21.0 | Explicitly started local syslog and SNMP trap event console | Planned |
 | 0.22.0 | Guided before/after change validation using existing snapshots, runbooks, comparisons, and incident reports | Planned |
 

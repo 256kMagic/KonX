@@ -793,6 +793,14 @@ class App {
     return this.addTab(tab);
   }
 
+  openDeviceInspector(report, { deviceId, source } = {}) {
+    const tab = this.openTool('device');
+    tab.acceptReport(report);
+    const device = tab.report.devices.find(item => item.id === deviceId);
+    if (device) { tab.deviceSelect.value = device.id; tab.renderDevice(); if (source) tab.showSource(device, source); }
+    return tab;
+  }
+
   async explainTool(tab) {
     if (tab.disposed) return;
     try {
