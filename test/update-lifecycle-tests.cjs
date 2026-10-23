@@ -93,6 +93,10 @@ function fixture() {
     list: async () => ({ records: [], issues: [] }),
     close: async () => { changes.hasOwnership = false; changes.hasPendingCleanup = false; },
   };
+  const copilot = { hasOwnership: false, hasPendingCleanup: false,
+    list: async () => ({ conversations: [], issues: [] }), run: async () => {},
+    close: async () => { copilot.hasOwnership = false; copilot.hasPendingCleanup = false; },
+  };
   const handoff = {
     async commit() { calls.push('commit-helper'); },
     async cancel() { calls.push('cancel-helper'); },
@@ -112,6 +116,9 @@ function fixture() {
     './events-ipc': load('./events-ipc'),
     './events': { EventConsole: class { constructor() { return events; } } },
     './change-validation-ipc': load('./change-validation-ipc'),
+    './copilot-ipc': load('./copilot-ipc'),
+    './copilot-store': { CopilotStore: class {} },
+    './copilot': { CopilotService: class { constructor() { return copilot; } } },
     './change-validation': { ChangeValidationStore: class { constructor(profile, dependencies) { changes.profile = profile; changes.dependencies = dependencies; return changes; } } },
     './remote-capture': { run: (...args) => remote.run(...args), closePending: () => remote.closePending(), get hasPendingCleanup() { return remote.hasPendingCleanup; } },
     './remote-results': { RemoteCaptureResults: class {
@@ -169,7 +176,7 @@ function fixture() {
   vm.runInContext(fs.readFileSync(filename, 'utf8'), context, { filename });
   ready();
   return {
-    app, calls, sent, manager, behavior, handoff, connections, remote, runbook, sites, events, changes, dialogs,
+    app, calls, sent, manager, behavior, handoff, connections, remote, runbook, sites, events, changes, copilot, dialogs,
     get jobs() { return vm.runInContext('toolJobs', context); },
     get controller() { return vm.runInContext('updates', context); },
     get window() { return window; },
@@ -187,6 +194,28 @@ function fixture() {
 }
 
 async function runUpdateLifecycleTests(test) {
+  await test('Copilot lifecycle: owned finalization blocks update and quit until persisted, rejects late admission', async () => {
+    const f = fixture(), saving = deferred(); let stopped = false, starts = 0;
+    f.copilot.run = async (_params, _emit, signal) => { starts++; f.copilot.hasOwnership = true;
+      signal.onStop = () => { stopped = true; }; await saving.promise; f.copilot.hasOwnership = false; };
+    await f.invoke('tools:start', 'copilot', {}, 'copilot-fixture'); await tick();
+    await assert.rejects(f.invoke('app:updateInstall'), /running tools|Copilot/);
+    f.app.quit(); await tick(); assert.equal(stopped, true); assert.equal(f.app.exited, false);
+    await assert.rejects(f.invoke('tools:copilotList'), /closing/);
+    assert.throws(() => f.invoke('tools:start', 'copilot', {}, 'copilot-late'), /closing/);
+    assert.equal(starts, 1); saving.resolve(); await tick(); await tick(); assert.equal(f.app.exited, true);
+  });
+  await test('Copilot lifecycle: failed finalization retains ownership and retry; IPC is limited to primary frame', async () => {
+    const f = fixture(); f.copilot.hasOwnership = true;
+    f.copilot.close = async () => { throw new Error('Synthetic Copilot finalization failure'); };
+    await assert.rejects(f.invoke('app:updateInstall'), /Copilot/);
+    assert.throws(() => f.invokeFrom({ sender: {}, senderFrame: {} }, 'tools:copilotList'), /primary/);
+    f.app.quit(); await tick(); assert.equal(f.app.exited, false); assert.ok(f.calls.includes('shutdown-error'));
+    assert.equal(f.copilot.hasOwnership, true);
+    assert.deepEqual(await f.invoke('tools:copilotList'), { conversations: [], issues: [] });
+    f.copilot.close = async () => { f.copilot.hasOwnership = false; };
+    f.app.quit(); await tick(); assert.equal(f.app.exited, true);
+  });
   await test('change validation lifecycle: active operations and retained cleanup block the updater', async () => {
     for (const pendingCleanup of [false, true]) {
       const f = fixture(); f.changes.hasOwnership = true; f.changes.hasPendingCleanup = pendingCleanup;

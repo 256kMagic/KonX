@@ -1,5 +1,6 @@
 // Network tool tabs: ping monitor, sweep, port scanner, traceroute, DNS, whois,
 // subnet calculator, Wake-on-LAN and interface / ARP info.
+import { BasicToolContext, contextRows } from './copilot-context.mjs';
 import { h, icon, api, DataTable, contextMenu, toast, errMsg, fmtMs, csv, buildFields } from './ui.js';
 import { CaptureTab } from './capture.js';
 import { createSecurityTool } from './security.js';
@@ -18,6 +19,7 @@ import { EventsTab } from './events.js';
 import { ChangeValidationTab } from './change-validation.js';
 
 export const TOOLS = [
+  { kind: 'copilot', label: 'KonX Copilot', icon: 'insight', desc: 'Review selected evidence and exact requests before asking your configured AI' },
   { kind: 'change-validation', label: 'Guided Change Validation', icon: 'route', desc: 'Plan a manual change, retain before and after evidence, and record reviewed outcomes' },
   { kind: 'sites', label: 'Saved Site Workspaces', icon: 'folder', desc: 'Save site session groups, notes, capture and incident references, and panel arrangements' },
   { kind: 'topology', label: 'Visual Topology', icon: 'link', desc: 'Explore observed device links, command evidence, and candidate endpoint paths' },
@@ -104,6 +106,8 @@ class ToolView {
     this.jobSeq = 0;
     this.disposed = false;
     this.el = h('div.view');
+    this.copilot = new BasicToolContext(def.kind, this.id, def.label, { onChange: () => this.app.copilot?.sourceChanged(this) });
+    this.contextResult = null;
   }
 
   header(form, opts = {}) {
@@ -135,6 +139,8 @@ class ToolView {
     // before the tools:start IPC reply reaches this window.
     const id = `${this.id}:${++this.jobSeq}`;
     this.jobId = id;
+    this.copilot.begin(params, id);
+    this.table?.selected.clear();
     this.app.registerJob(id, this);
     this.started = Date.now();
     this.setRunning(true);
@@ -145,6 +151,7 @@ class ToolView {
       this.app.unregisterJob(id);
       this.jobId = null;
       this.setRunning(false);
+      this.copilot.finish('error', errMsg(e), id);
       toast(errMsg(e), 'err');
     }
   }
@@ -154,7 +161,7 @@ class ToolView {
   }
 
   onJobEvent(type, data) {
-    if (this.disposed) return;
+    if (this.disposed || !this.jobId) return;
     if (type === 'done' || type === 'error') {
       this.app.unregisterJob(this.jobId);
       this.jobId = null;
@@ -162,9 +169,61 @@ class ToolView {
       if (type === 'error') toast(data.message, 'err');
     }
     this.onEvent(type, data);
+    if (type === 'done') this.copilot.finish(data?.stopped ? 'stopped' : 'complete');
+    else if (type === 'error') this.copilot.finish('error', data?.message || 'Tool failed');
+    else if (type !== 'line') this.copilot.touch();
   }
 
   onEvent() {}
+
+  captureCopilotContext(options) {
+    const base = { rows: [], summary: {}, observed: null, total: null, complete: false, omissions: [] };
+    const describe = (rows, fields, table = this.table, prefix = 'row') => ({ rows: contextRows(rows, table, fields, prefix), hasSelection: Boolean(table?.selected.size) });
+    let data = base;
+    if (this.toolKind === 'ping') {
+      const rows = [...this.stats.values()];
+      const sent = rows.reduce((n, r) => n + r.sent, 0), received = rows.reduce((n, r) => n + r.recv, 0);
+      data = { ...base, ...describe(rows, ['host', 'ip', 'sent', 'recv', 'loss', 'last', 'lastOk', 'min', 'avg', 'max', 'jitter', 'lastError']), observed: sent,
+        summary: { coverageUnit: 'probe replies', hosts: rows.length, sent, received },
+        omissions: ['Reply statistics are retained; individual historical probe events are not attached. A missing reply or DNS failure does not establish its cause.'] };
+    } else if (this.toolKind === 'sweep' || this.toolKind === 'portscan') {
+      const sweep = this.toolKind === 'sweep', p = this.progress;
+      const rows = sweep ? this.hosts.values() : this.results;
+      data = { ...base, ...describe(rows, sweep ? ['ip', 'alive', 'ms', 'ttl', 'method', 'name', 'mac'] : ['host', 'ip', 'port', 'state', 'service', 'banner', 'ms']),
+        observed: p.done ?? null, total: p.total || null,
+        summary: { coverageUnit: sweep ? 'hosts examined' : 'TCP probes', done: p.done ?? null, total: p.total || null, alive: p.alive ?? null, open: p.open ?? null, closed: p.closed ?? null, filtered: p.filtered ?? null },
+        complete: Boolean(p.total && p.done === p.total), omissions: sweep ? ['Only discovered live-host rows are retained; absent hosts are not proof of being offline.'] :
+          this.copilot.inputs.showAll === false ? ['Closed and filtered rows were excluded when this run started; aggregate probe counts remain available.'] : [] };
+    } else if (this.toolKind === 'traceroute') {
+      data = { ...base, ...describe(this.hops, ['hop', 'ip', 'host', 'rtts']), observed: this.hops.length,
+        summary: { coverageUnit: 'parsed hops', destinationReached: null }, omissions: ['Only parsed hop observations are attached; raw process lines are excluded. Completion does not establish that the destination was reached.'] };
+    } else if (this.toolKind === 'dns') {
+      const r = this.contextResult;
+      data = { ...base, ...describe(r?.records || [], ['type', 'name', 'value', 'ttl']), observed: r?.records.length ?? null, total: r?.records.length ?? null,
+        summary: { coverageUnit: 'returned records', server: r?.server ?? null, elapsedMs: r?.ms ?? null, errors: r?.errors || [] }, complete: Boolean(r && !r.errors?.length),
+        omissions: r?.errors?.length ? ['Some DNS queries failed; returned records are partial evidence.'] : [] };
+    } else if (this.toolKind === 'whois') {
+      data = { ...base, ...describe(this.contextResult === null ? [] : [{ response: this.contextResult }], ['response'], null), observed: this.contextResult === null ? null : 1,
+        omissions: ['Whois text is an unparsed registry response. Referral and upstream response limits may leave coverage incomplete.'] };
+    } else if (this.toolKind === 'subnet') {
+      const r = this.contextResult;
+      data = { ...base, ...describe(r?.subnets || [], ['n', 'net', 'range', 'bc'], this.subnets), observed: r ? 1 : null, total: r ? 1 : null,
+        summary: { coverageUnit: 'local calculation', addressFamily: r?.family ?? null, properties: r?.properties || [], subnetCount: r?.subnets.length ?? 0 }, complete: Boolean(r) };
+    } else if (this.toolKind === 'wol') {
+      data = { ...base, ...describe(this.contextResult ? [this.contextResult] : [], ['bytes'], null), observed: this.contextResult ? 1 : null, total: this.contextResult ? 1 : null,
+        summary: { coverageUnit: 'UDP send acknowledgements', deviceAwake: null }, omissions: ['A successful local UDP send does not confirm delivery or that the device woke up.'] };
+    } else if (this.toolKind === 'netinfo') {
+      const r = this.contextResult;
+      const rows = function* () {
+        yield* contextRows(r?.interfaces || [], this.ifaces, ['name', 'family', 'address', 'netmask', 'cidr', 'network', 'mac', 'internal'], 'interface');
+        yield* contextRows(r?.arp || [], this.arp, ['ip', 'mac'], 'arp');
+      }.bind(this);
+      data = { ...base, rows: rows(), hasSelection: Boolean(this.ifaces.selected.size || this.arp.selected.size), observed: r ? (r.interfaces?.length || 0) + (r.arp?.length || 0) : null,
+        summary: { coverageUnit: 'local interface and ARP entries', interfaces: r?.interfaces?.length ?? null, arp: r?.arp?.length ?? null, errors: r?.errors || [] },
+        omissions: ['ARP is a point-in-time local cache, not a complete inventory of reachable hosts.', ...(r?.errors?.length ? ['One local data source failed; its evidence is unavailable.'] : []), ...(r?.excludedInterfaces ? ['Internal non-IPv4 interfaces hidden by this view are excluded.'] : [])] };
+    }
+    return this.copilot.capture(data, options);
+  }
 
   show() {
     this.active = true;
@@ -190,6 +249,7 @@ class ToolView {
 
   dispose() {
     this.disposed = true;
+    if (this.copilot.state === 'running') this.copilot.finish('stopped');
     this.stop().catch(() => {});
     if (this.jobId) this.app.unregisterJob(this.jobId);
     this.jobId = null;
@@ -277,7 +337,7 @@ class PingTool extends ToolView {
 
   newStat(host) {
     const canvas = h('canvas.spark', { width: 320, height: 40 });
-    return { host, ip: '', status: '…', sent: 0, recv: 0, loss: 0, last: null, lastOk: false, min: null, max: null, avg: null, sum: 0, jitter: null, jsum: 0, prev: null, hist: [], canvas };
+    return { host, ip: '', status: '…', sent: 0, recv: 0, loss: 0, last: null, lastOk: false, min: null, max: null, avg: null, sum: 0, jitter: null, jsum: 0, prev: null, hist: [], canvas, lastError: null };
   }
 
   onEvent(type, d) {
@@ -287,6 +347,7 @@ class PingTool extends ToolView {
     } else if (type === 'reply') {
       const s = this.stats.get(d.host);
       if (!s) return;
+      s.lastError = d.ok ? null : d.error || 'Request timed out';
       if (d.seq > 0) s.sent++;
       if (d.ok) {
         s.recv++;
@@ -699,12 +760,18 @@ class DnsTool extends ToolView {
   }
 
   async start() {
+    if (this.disposed) return;
     const name = this.name.value.trim();
     if (!name) return toast('Enter a name');
+    const params = { name, type: this.type.value, server: this.server.value.trim() };
+    const token = this.copilot.begin(params);
+    this.contextResult = null; this.table.setRows([]);
     this.summary.replaceChildren(h('span', 'Looking up…'));
     this.app.setTabTitle(this, 'DNS ' + name);
     try {
-      const r = await api.invoke('tools:dns', { name, type: this.type.value, server: this.server.value.trim() });
+      const r = await api.invoke('tools:dns', params);
+      if (this.disposed || !this.copilot.current(token)) return;
+      this.contextResult = r; this.copilot.finish('complete', null, token);
       this.table.setRows(r.records);
       this.summary.replaceChildren(
         h('span', h('b', r.records.length), ' records'),
@@ -713,6 +780,8 @@ class DnsTool extends ToolView {
         r.errors && r.errors.length ? h('span', { style: { color: 'var(--err)' } }, r.errors.join(' · ')) : null
       );
     } catch (e) {
+      if (this.disposed || !this.copilot.current(token)) return;
+      this.copilot.finish('error', errMsg(e), token);
       this.table.setRows([]);
       this.summary.replaceChildren(h('span', { style: { color: 'var(--err)' } }, errMsg(e)));
     }
@@ -731,13 +800,21 @@ class WhoisTool extends ToolView {
   }
 
   async start() {
+    if (this.disposed) return;
     const q = this.query.value.trim();
     if (!q) return;
+    const token = this.copilot.begin({ query: q });
+    this.contextResult = null;
     this.out.textContent = 'Querying…';
     this.app.setTabTitle(this, 'Whois ' + q);
     try {
-      this.out.textContent = await api.invoke('tools:whois', { query: q });
+      const response = await api.invoke('tools:whois', { query: q });
+      if (this.disposed || !this.copilot.current(token)) return;
+      this.contextResult = response; this.copilot.finish('complete', null, token);
+      this.out.textContent = response;
     } catch (e) {
+      if (this.disposed || !this.copilot.current(token)) return;
+      this.copilot.finish('error', errMsg(e), token);
       this.out.textContent = 'Error: ' + errMsg(e);
     }
   }
@@ -885,6 +962,8 @@ class SubnetTool extends ToolView {
 
   calc() {
     const raw = this.input.value.trim();
+    const token = this.copilot.begin({ address: raw, requestedSplit: this.split.value || null });
+    this.contextResult = null; this.current = null; this.subnets.setRows([]);
     this.err.replaceChildren();
     try {
       if (raw.includes(':')) {
@@ -895,6 +974,8 @@ class SubnetTool extends ToolView {
         this.kv.replaceChildren(...info.rows.flatMap(([k, v]) => [h('div', k), h('div', v)]));
         this.subnets.setRows([]);
         this.subnets.el.classList.add('hidden');
+        this.contextResult = { family: 'IPv6', properties: info.rows, subnets: [] };
+        this.copilot.finish('complete', null, token);
         return;
       }
       let ip;
@@ -918,6 +999,7 @@ class SubnetTool extends ToolView {
       this.split.replaceChildren(h('option', { value: '' }, 'Split into…'));
       for (let b = bits + 1; b <= Math.min(32, bits + 12); b++) this.split.append(h('option', { value: b, selected: String(b) === keep }, `/${b} — ${2 ** (b - bits)} subnets of ${2 ** (32 - b)}`));
       const sb = Number(this.split.value);
+      this.contextResult = { family: 'IPv4', properties: info.rows, subnets: [] };
       this.subnets.el.classList.toggle('hidden', !sb);
       if (sb) {
         const size = 2 ** (32 - sb);
@@ -932,8 +1014,11 @@ class SubnetTool extends ToolView {
           });
         }
         this.subnets.setRows(rows);
+        this.contextResult.subnets = rows;
       }
+      this.copilot.finish('complete', null, token);
     } catch (e) {
+      this.contextResult = null; this.copilot.finish('error', errMsg(e), token);
       this.kv.replaceChildren();
       this.subnets.el.classList.add('hidden');
       this.err.replaceChildren(h('span', { style: { color: 'var(--err)' } }, e.message));
@@ -963,11 +1048,17 @@ class WolTool extends ToolView {
   }
 
   async send() {
+    if (this.disposed) return;
     const v = this.read();
+    const token = this.copilot.begin(v); this.contextResult = null;
     try {
       const r = await api.invoke('tools:wol', v);
+      if (this.disposed || !this.copilot.current(token)) return;
+      this.contextResult = r; this.copilot.finish('complete', null, token);
       this.log.append(h('div.ok', `${new Date().toLocaleTimeString()}  Sent ${r.bytes}-byte magic packet for ${v.mac} to ${v.broadcast}:${v.port}`));
     } catch (e) {
+      if (this.disposed || !this.copilot.current(token)) return;
+      this.copilot.finish('error', errMsg(e), token);
       this.log.append(h('div.err', `${new Date().toLocaleTimeString()}  ${errMsg(e)}`));
     }
   }
@@ -1013,9 +1104,20 @@ class NetInfoTool extends ToolView {
   }
 
   async load() {
-    const [ifs, arp] = await Promise.all([api.invoke('tools:interfaces'), api.invoke('tools:arp')]);
-    this.ifaces.setRows(ifs.filter((i) => !i.internal || i.family === 'IPv4'));
-    this.arp.setRows(arp);
+    if (this.disposed) return;
+    const token = this.copilot.begin({ sources: ['local interfaces', 'local ARP cache'] });
+    this.contextResult = null; this.ifaces.setRows([]); this.arp.setRows([]);
+    const [ifs, arp] = await Promise.allSettled([api.invoke('tools:interfaces'), api.invoke('tools:arp')]);
+    if (this.disposed || !this.copilot.current(token)) return;
+    const errors = [];
+    if (ifs.status === 'rejected') errors.push('Interfaces: ' + errMsg(ifs.reason));
+    if (arp.status === 'rejected') errors.push('ARP: ' + errMsg(arp.reason));
+    const interfaces = ifs.status === 'fulfilled' ? ifs.value.filter(i => !i.internal || i.family === 'IPv4') : null;
+    this.contextResult = { interfaces, excludedInterfaces: ifs.status === 'fulfilled' ? ifs.value.length - interfaces.length : null, arp: arp.status === 'fulfilled' ? arp.value : null, errors };
+    this.ifaces.setRows(interfaces || []);
+    this.arp.setRows(this.contextResult.arp || []);
+    this.copilot.finish(errors.length === 2 ? 'error' : 'complete', errors.length === 2 ? errors.join('; ') : null, token);
+    if (errors.length) toast(errors.join('; '), 'err');
   }
 }
 

@@ -7,6 +7,7 @@ const modeLabel = (mode) => mode === 'portable' ? 'Portable application' : mode 
 
 export function updateBlockers(app) {
   const reasons = [];
+  if (app.copilot && !(app.tabs || []).includes(app.copilot.panel)) reasons.push(...app.copilot.updateBlockers());
   for (const tab of app.tabs || []) {
     if (typeof tab.updateBlockers === 'function') reasons.push(...tab.updateBlockers());
     if (tab.kind === 'notepad') {

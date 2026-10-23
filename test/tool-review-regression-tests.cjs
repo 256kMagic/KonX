@@ -6,6 +6,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { createRequire } = require('node:module');
 const { spawnSync } = require('node:child_process');
+let contextModule;
 
 const turn = () => new Promise((resolve) => setImmediate(resolve));
 function deferred() {
@@ -34,7 +35,7 @@ function tools(runner, replyGate) {
         ipcMain: { handle: (name, fn) => handlers.set(name, fn), on() {} },
       };
       if (name === './nettools') return nettools;
-      if (['./workspace-windows', './site-workspace-ipc', './topology-ipc', './events-ipc', './change-validation-ipc'].includes(name)) return localRequire(name);
+      if (['./workspace-windows', './site-workspace-ipc', './topology-ipc', './events-ipc', './change-validation-ipc', './copilot-ipc'].includes(name)) return localRequire(name);
       if (name.startsWith('./')) return {};
       return localRequire(name);
     },
@@ -55,7 +56,7 @@ function tools(runner, replyGate) {
   const source = fs.readFileSync(renderer, 'utf8').replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');
   const module = { exports: {} };
   vm.runInNewContext(source + '\nmodule.exports = { ToolView, PingTool, SweepTool, PortScanTool, TraceTool };', {
-    module, api, CaptureTab: class {}, h: (tag, ...children) => ({ tag, children }),
+    module, api, ...contextModule, CaptureTab: class {}, h: (tag, ...children) => ({ tag, children }),
     toast: (message) => messages.push(message), errMsg: (error) => error.message,
   }, { filename: renderer });
   const app = {
@@ -68,6 +69,7 @@ function tools(runner, replyGate) {
 }
 
 async function runToolReviewRegressionTests(test) {
+  contextModule = await import(require('node:url').pathToFileURL(path.join(__dirname, '../src/renderer/js/copilot-context.mjs')).href);
   console.log('network tools: lifecycle and large scans');
   await test('tool validation errors arriving before the start reply leave the tab idle', async () => {
     const { tab, jobs, messages } = tools(() => { throw new Error('No targets'); });
@@ -152,7 +154,7 @@ async function runToolReviewRegressionTests(test) {
     const summaries = [];
     Object.assign(tab, {
       host: { value: '127.0.0.1' }, maxHops: { value: 1 }, timeout: { value: 100 }, names: { checked: false },
-      table: { setRows() {} }, log: { replaceChildren() {} },
+      table: { selected: new Set(), setRows() {} }, log: { replaceChildren() {} },
       summary: { replaceChildren(...nodes) { summaries.push(JSON.stringify(nodes)); } },
     });
     await tab.start();

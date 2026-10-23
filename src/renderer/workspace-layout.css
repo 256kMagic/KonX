@@ -42,6 +42,7 @@
   #app[data-layout] #toolbar .workspace-layout-select { width:125px; min-width:88px; flex-basis:125px; padding-inline:5px; font-size:12px; }
   #app[data-layout] #toolbar .theme-header { gap:0; margin-left:2px; }
   #app[data-layout] #toolbar .theme-motion-toggle { padding-inline:5px; font-size:10.5px; }
+  #app[data-layout] #toolbar .copilot-toolbar-label { display:none; }
 }
 .workspace-bar { flex:none; min-width:0; display:flex; align-items:center; gap:7px; padding:6px 8px; border-bottom:1px solid var(--border); background:var(--panel); overflow-x:auto; overflow-y:hidden; }
 .workspace-bar>.btn,.workspace-bar>.tb-btn { flex:none; }

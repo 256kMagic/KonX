@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.23.0 — 2026-10-23
+
+- Add a contextual Copilot using existing companion panes, floating panels, and native pop-outs.
+- Save bounded local conversations with immutable selected evidence, retained sources, and explicit follow-up history.
+- Require exact request review before provider calls; validate revision, expiry, and single-use review at send.
+- Add explicit provider connection tests, actual reported token usage, cancellation, interrupted-request handling, and shutdown ownership.
+- Capture typed basic network tool facts from their original run inputs and selections, with coverage and omission notices.
+
+See the [Copilot guide](docs/COPILOT.md) and [release notes](docs/releases/0.23.0.md).
+
 ## 0.22.1 — 2026-10-23
 
 - Redact complete bounded AI context before shortening it; disclose omitted fields, records, and excerpts instead of silently losing evidence.

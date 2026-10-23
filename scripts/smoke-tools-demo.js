@@ -32,6 +32,7 @@
     if (liveEvents) checks.liveEvents = liveEvents;
     if (changeValidation) checks.changeValidation = changeValidation;
     if (aiContextSafety) checks.aiContextSafety = aiContextSafety;
+    if (copilotChecks) checks.copilot = copilotChecks;
     // Portable launchers do not necessarily forward their app's stdout. Write
     // test evidence only to the parent-provided private artifact file.
     await api.invoke('np:write', options.resultPath, new TextEncoder().encode(JSON.stringify(checks, null, 2)));
@@ -85,6 +86,8 @@
   const supportsChangeValidation = versionParts[0] > 0 || versionParts[1] >= 22;
   const supportsAiContextSafety = versionParts[0] > 0 || versionParts[1] > 22 || (versionParts[1] === 22 && versionParts[2] >= 1);
   let aiContextSafety = null;
+  const supportsCopilot = versionParts[0] > 0 || versionParts[1] >= 23;
+  let copilotChecks = null;
   let liveEvents = null;
   let changeValidation = null;
   const changeName = 'Synthetic package smoke change validation';
@@ -627,11 +630,53 @@
       aiContextSafety = { wholeTextRedaction: true, explicitOmissions: true, draftUpdateBlocker: true, cancelledCloseRetainsInput: true, explicitDiscard: true, noProviderRequests: true };
       app.activate(ai);
     }
+    if (supportsCopilot) {
+      const priorLayout = app.workspaceLayout.model.layout;
+      await app.saveSettings({ uiLayout: 'workbench' });
+      const source = app.openTool('subnet', { input: '192.0.2.37/26' });
+      const panel = await app.explainTool(source), controller = app.copilot;
+      assert(panel && app.byId.get(panel.id) === panel && controller.conversation?.attachments.length === 1, 'Copilot did not attach typed source evidence');
+      assert(app.workspaceLayout.get().primaryId === source.id && app.workspaceLayout.get().companionId === panel.id, 'Copilot replaced the source instead of using the companion pane');
+      controller.applyConversation(await api.invoke('tools:copilotRename', controller.conversation.id, controller.conversation.revision, 'Synthetic package Copilot'), { retainDraft: true });
+      controller.selectKnowledge(true); await controller.prepare();
+      const preparation = controller.prepared;
+      assert(preparation && panel.requestBody.textContent === preparation.body && preparation.body.includes('192.0.2.37/26'), 'Exact request preview omitted source facts');
+      assert(!preparation.body.includes(options.token) && app.jobs.size === 0, 'Preparation exposed credentials or started a provider request');
+      source.input.value = '198.51.100.1/24'; source.calc();
+      assert(controller.prepared === preparation && preparation.body.includes('192.0.2.37/26') && !preparation.body.includes('198.51.100.1/24'), 'Source changes silently rewrote the reviewed request');
+      assert(controller.changedSources.size === 1, 'Changed source did not mark the saved evidence stale');
+      const node = panel.el;
+      for (const layout of ['classic', 'workbench', 'incident-desk', 'operations-wall', 'focus']) {
+        await app.saveSettings({ uiLayout: layout }); app.workspaceLayout.float(panel); app.activate(source); app.activate(panel);
+        assert(app.workspaceLayout.visible.has(source) && panel.el === node && controller.prepared === preparation, 'Layout movement replaced the source, conversation, or request');
+      }
+      assert(await app.popouts.open(panel), 'Copilot native pop-out failed');
+      assert(panel.el === node && panel.el.ownerDocument !== document && controller.prepared === preparation, 'Pop-out replaced the conversation view');
+      await app.popouts.dock(panel); assert(panel.el === node && node.ownerDocument === document, 'Dock back lost the canonical Copilot view');
+      assert(controller.updateBlockers().length > 0, 'Unsent Copilot draft did not block updates');
+      const closing = app.closeTab(panel); await until(() => !!document.querySelector('.modal'), 'Copilot close review'); serialFooter('Keep draft'); await closing;
+      assert(app.byId.has(panel.id) && controller.prepared === preparation, 'Cancelled close discarded the reviewed request');
+      const discard = app.closeTab(panel); await until(() => !!document.querySelector('.modal'), 'Copilot explicit discard'); serialFooter('Discard draft'); await discard;
+      assert(!app.byId.has(panel.id) && app.jobs.size === 0, 'Copilot close retained a tab or started work');
+      await app.closeTab(source); await app.saveSettings({ uiLayout: priorLayout }); app.activate(ai);
+      copilotChecks = { typedSource: true, companionPreservesSource: true, exactRequestReview: true, immutableStaleSnapshot: true, fiveLayouts: true, nativePopoutAndDock: true,
+        canonicalViewRetained: true, draftGuard: true, conversationSaved: true, noProviderRequests: true };
+    }
     const article = await api.invoke('tools:knowledgeSave', { title: noteTitle, vendor: 'Synthetic fixture', content: 'Wireless RSSI observations are cached evidence. Verify the adapter and collection time.' });
     await ai.readDocument(article.id);
     assert(ai.documentContent.textContent.includes('cached evidence'), 'Packaged local article did not render');
     await complete({ phase: options.phase, version: info.version, tools: supportsComparison ? 11 : supportsRunbooks ? 10 : supportsRemoteCapture ? 9 : supportsIncidents ? 8 : supportsRtp ? 7 : supportsSnapshots ? 6 : supportsDeviceInspector ? 5 : 4, ...(deviceInspector ? { deviceInspector } : {}), ...(deviceSnapshots ? { deviceSnapshots } : {}), ...(rtpMedia ? { rtpMedia } : {}), ...(incidentWorkspace ? { incidentWorkspace } : {}), ...(remoteCapture ? { remoteCapture } : {}), ...(runbooks ? { runbooks } : {}), ...(captureComparison ? { captureComparison } : {}), assessments: 8, mistRegions: 12, aiProviders: 5, knowledgeDocuments: knowledge.documents, vectorIndexReady: true, customNoteSaved: true, configChecks: report.checks.length, redactedExports: true, contextPreviewRedacted: true, encryptedTokenSaved: true, encryptedAiKeySaved: true, noAutomaticJobs: app.jobs.size === 0 });
   } else if (options.phase === 'forget') {
+    if (supportsCopilot) {
+      const list = await api.invoke('tools:copilotList'), record = list.conversations.find(item => item.name === 'Synthetic package Copilot');
+      assert(record && list.issues.length === 0 && !app.copilot && app.jobs.size === 0, 'Copilot conversation was lost or automatically opened/sent after restart');
+      const conversation = await api.invoke('tools:copilotGet', record.id);
+      assert(conversation.attachments.length === 1 && conversation.attachments[0].snapshot.scope.inputs.address === '192.0.2.37/26' && conversation.turns.length === 0, 'Immutable source evidence changed after restart');
+      const panel = await app.openCopilot(); await app.copilot.selectConversation(record.id);
+      assert(app.copilot.conversation.id === record.id && app.jobs.size === 0 && !app.copilot.prepared, 'Opening a saved conversation started work');
+      await api.invoke('tools:copilotRemove', record.id, conversation.revision); app.copilot.applyConversation(null); await app.closeTab(panel);
+      copilotChecks = { persistedAcrossRestart: true, immutableEvidenceRetained: true, noAutomaticRequests: true, localConversationReopened: true, removed: true };
+    }
     if (supportsEvents) {
       assert((await api.invoke('tools:eventsList')).listeners.length === 0, 'Event sockets/history were automatically restored');
       liveEvents = { noAutomaticListenersAfterRestart: true, historyIsMemoryOnly: true };

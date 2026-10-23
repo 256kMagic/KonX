@@ -1,6 +1,8 @@
 # AI & Knowledge
 
-This guide covers AI & Knowledge in KonX 0.22.1. Open **AI & Knowledge** from Home, the sidebar, or Network Tools. The assistant explains findings, terminology, and possible next steps. It does not run commands or tools, change device settings, or connect to sessions on your behalf.
+This guide covers AI & Knowledge in KonX 0.23.0. Open **AI & Knowledge** from Home, the sidebar, or Network Tools. The assistant explains findings, terminology, and possible next steps. It does not run commands or tools, change device settings, or connect to sessions on your behalf.
+
+The new [Copilot](COPILOT.md) keeps conversations beside supported tools and previews the complete outbound request. **AI & Knowledge** remains the place to configure providers and manage the offline reference library. Its existing standalone assistant remains available.
 
 ## Connect a provider
 

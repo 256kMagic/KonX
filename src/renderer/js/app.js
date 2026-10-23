@@ -13,6 +13,8 @@ import { incidentEvidence } from './incident-evidence.mjs';
 import { WorkspaceLayout } from './workspace-layout.js';
 import { WorkspacePopouts } from './workspace-popouts.js';
 import { supportDialog } from './support.js';
+import { CopilotController } from './copilot.js';
+import { captureCopilotContext, copilotContextSupport } from './copilot-context.mjs';
 
 const RECENT_KEY = 'konx.recent';
 
@@ -335,6 +337,7 @@ class App {
       h('button.tb-btn', { title: 'Open an SFTP tab for the current SSH tab or a saved session', onclick: () => this.sftpForActive() }, icon('file-transfer'), 'SFTP'),
       h('button.tb-btn', { title: 'Notepad++-style editor', onclick: () => this.openNotepad() }, icon('edit'), 'Notepad'),
       toolsBtn,
+      h('button.tb-btn.copilot-toolbar', { title: 'Open contextual Copilot', 'aria-label': 'Open contextual Copilot', onclick: () => this.openCopilot() }, icon('insight'), h('span.copilot-toolbar-label', 'Copilot')),
       h('div.tb-spacer'),
       this.themeHeader,
       this.buttonBarToggle,
@@ -531,6 +534,7 @@ class App {
     this.workspaceLayout.activate(tab);
     this.renderTabs(true);
     this.updateStatus(tab);
+    if (tab.toolKind !== 'copilot') this.copilot?.focusedTabChanged(tab);
     if (focus) {
       this.popouts.focus(tab);
       this.workspaceLayout.focusTarget(tab);
@@ -784,10 +788,12 @@ class App {
   }
 
   openTool(kind, params = {}) {
+    if (kind === 'copilot') return this.openCopilot(params.sourceTab, params);
     const tab = createTool(this, kind, params);
     if (kind !== 'ai' && kind !== 'events') {
       const heading = tab.el.querySelector('.tool-title') || tab.el.querySelector('.tool-head') || tab.el.querySelector('.cap-frow');
-      heading?.append(h('button.btn.sm', { title: 'Preview these results in AI & Knowledge', onclick: () => this.explainTool(tab) }, icon('insight'), 'Explain with AI'));
+      const contextual = copilotContextSupport(tab).supported;
+      heading?.append(h('button.btn.sm', { title: contextual ? 'Attach selected observations to Copilot for review' : 'Preview these results in AI & Knowledge', onclick: () => this.explainTool(tab) }, icon('insight'), contextual ? 'Ask Copilot' : 'Explain with AI'));
       if (kind !== 'incidents' && kind !== 'change-validation') heading?.append(h('button.btn.sm', { title: 'Choose an incident for a snapshot of this evidence', onclick: () => this.addToIncident(tab) }, icon('file'), 'Add to incident'));
     }
     return this.addTab(tab);
@@ -804,11 +810,33 @@ class App {
   async explainTool(tab) {
     if (tab.disposed) return;
     try {
+      if (copilotContextSupport(tab).supported) return this.openCopilot(tab, { snapshot: captureCopilotContext(tab),
+        question: `Explain these ${tab.title} results. Distinguish observed facts, unknowns, and possible causes, then suggest the next diagnostic check.` });
       const preview = await api.invoke('tools:aiPreview', { context: toolContext(tab) });
       if (tab.disposed) return;
       return this.openTool('ai', { label: tab.title, context: preview.context,
         question: `Explain these ${tab.title} results in plain language. Distinguish observed facts, unknowns, and possible causes, then suggest which KonX tool to use next.` });
     } catch (error) { toast(errMsg(error), 'err'); }
+  }
+
+  async openCopilot(sourceTab, options = {}) {
+    const source = sourceTab || (this.active?.toolKind !== 'copilot' ? this.active : this.copilot?.focusedTab);
+    try {
+      this.copilot ||= new CopilotController(this);
+      const panel = await this.copilot.open({ ...options, sourceTab: source });
+      const alreadyOpen = this.tabs.includes(panel);
+      if (!alreadyOpen) this.addTab(panel);
+      const placement = this.workspaceLayout.placement(panel);
+      if (!alreadyOpen && this.workspaceLayout.model.layout === 'workbench') {
+        this.workspaceLayout.pin('companion', panel.id);
+        if (source && this.tabs.includes(source) && this.workspaceLayout.placement(source) === 'docked') this.workspaceLayout.pin('primary', source.id);
+      } else if (!alreadyOpen && placement === 'docked') {
+        this.workspaceLayout.float(panel);
+        if (source && this.tabs.includes(source)) this.activate(source, { focus: false });
+      }
+      this.activate(panel);
+      return panel;
+    } catch (error) { toast(errMsg(error), 'err'); return null; }
   }
 
   addToIncident(tab) {

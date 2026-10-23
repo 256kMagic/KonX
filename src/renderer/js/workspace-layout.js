@@ -414,11 +414,12 @@ export class WorkspaceLayout {
     if (this.app.cmdTarget) { this.app.cmdTarget.textContent = target; this.app.cmdTarget.title = target; }
     this.contextTitle.textContent = tab?.title || 'No focused view';
     this.contextStatus.textContent = tab ? [tab.toolKind || tab.kind, tab.state, ...(tab.statusSegments?.() || []).map(s => s.text)].filter(Boolean).join('\n') : '';
-    const jobs = [...new Set([...this.app.jobs.values(), ...this.app.tabs.filter(t => t.state === 'running' || t.jobId || t.busy)])].filter(t => this.app.tabs.includes(t));
+    const jobs = [...new Set([...this.app.jobs.values(), ...this.app.tabs.filter(t => t.state === 'running' || t.jobId || t.busy)].map(owner => owner.panel || owner))]
+      .filter(t => this.app.tabs.includes(t) || t === this.app.copilot?.panel);
     const signature = JSON.stringify(jobs.map(t => [t.id, t.title, t.state]));
     if (signature !== this.jobSignature) {
       this.jobSignature = signature;
-      this.jobs.replaceChildren(...(jobs.length ? jobs.map(t => h('button.workspace-job', { onclick: () => this.app.activate(t) }, icon(t.icon || 'activity'), h('span', t.title))) : [h('p.hint', 'No running work.')]));
+      this.jobs.replaceChildren(...(jobs.length ? jobs.map(t => h('button.workspace-job', { onclick: () => this.app.tabs.includes(t) ? this.app.activate(t) : this.app.openCopilot() }, icon(t.icon || 'activity'), h('span', t.title))) : [h('p.hint', 'No running work.')]));
     }
   }
   _applyGeometry() {

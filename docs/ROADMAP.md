@@ -51,7 +51,7 @@ Each phase is tested and published separately with updated release notes and use
 | Version | Deliverable | Status |
 | --- | --- | --- |
 | 0.22.1 | Complete-context redaction, omission notices, and AI draft protection | Complete; 983 tests and packaged checks passed |
-| 0.23.0 | Dockable copilot, conversations, complete request review, provider setup, and basic network context | Planned |
+| 0.23.0 | Dockable copilot, conversations, complete request review, provider setup, and basic network context | Complete; 1,012 tests and packaged checks passed |
 | 0.24.0 | Terminal, sessions, serial, forwarding, logging, SFTP, and editor assistance | Planned |
 | 0.25.0 | Packet streams, SIP/RTP, capture comparison, security, Wi-Fi, and Mist assistance | Planned |
 | 0.26.0 | Device, topology, events, sites, incidents, runbooks, and change-validation investigations | Planned |
