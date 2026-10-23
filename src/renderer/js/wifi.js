@@ -1,3 +1,4 @@
+import { installTrafficContext, trafficCopilotButton } from './copilot-traffic-ui.js';
 import { h, icon, api, DataTable, toast, errMsg } from './ui.js';
 
 const shown = (value, suffix = '') => value == null || value === '' ? 'Unknown' : String(value) + suffix;
@@ -8,6 +9,7 @@ export class WifiTab {
     this.app = app; this.kind = 'tool'; this.toolKind = 'wifi'; this.icon = 'wifi'; this.title = 'Wi-Fi Tools';
     this.id = 'wifi-' + Math.random().toString(36).slice(2); this.state = 'idle'; this.jobId = null; this.seq = 0;
     this.disposed = false; this.report = null;
+    installTrafficContext(this);
     this.runButton = h('button.btn.primary', { onclick: () => this.jobId ? this.stop() : this.start() }, icon('refresh'), 'Refresh Wi-Fi snapshot');
     this.jsonButton = h('button.btn', { disabled: true, onclick: () => this.export() }, icon('download'), 'Export JSON');
     this.status = h('div.wireless-status', { role: 'status', 'aria-live': 'polite' }, 'Ready. Refresh to read this PC’s wireless adapters and nearby network cache.');
@@ -38,7 +40,7 @@ export class WifiTab {
     this.el = h('div.view.wireless-view.wifi-view',
       h('div.tool-head', h('div.tool-title', icon('wifi'), h('h2', 'Wi-Fi Tools'), h('span.sub', 'Adapters, nearby BSSIDs, channel counts and security observations')),
         h('p.notice', 'Windows cached radio observations. Refresh reads the current cache; it does not force a radio scan. Windows location permission may be required.'),
-        h('div.wireless-actions', this.runButton, this.jsonButton), this.status),
+        h('div.wireless-actions', trafficCopilotButton(this), this.runButton, this.jsonButton), this.status),
       h('div.wireless-content', this.heading, h('h3', 'Wireless adapters'), this.adapters.el,
         h('div.wireless-actions', h('h3', 'Nearby networks'), this.search, this.band), this.networks.el, this.detail,
         h('h3', 'Observed BSSIDs per channel'), h('p.hint', 'Counts describe visible access-point radios, not measured airtime utilization or interference. Overlapping channels can still compete.'), this.channelRows,
@@ -83,6 +85,7 @@ export class WifiTab {
   }
 
   renderReport() {
+    this.copilot.acceptReport(this.report);
     const report = this.report;
     this.jsonButton.disabled = !report;
     this.heading.textContent = report ? `Cache retrieved ${new Date(report.collectedAt).toLocaleString()} · ${report.adapters.length} adapters · ${report.networks.length} BSSID observations` : 'Wi-Fi survey';

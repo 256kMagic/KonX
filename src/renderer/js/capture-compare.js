@@ -1,3 +1,4 @@
+import { installTrafficContext, trafficCopilotButton } from './copilot-traffic-ui.js';
 import { h, icon, api, DataTable, toast, errMsg, modal } from './ui.js';
 import { readCapture } from './capture/pcapfile.mjs';
 import { compareCaptures, COMPARE_LIMITS } from './capture/capture-compare.mjs';
@@ -18,6 +19,7 @@ export class CaptureComparisonTab {
     this.app = app; this.kind = 'tool'; this.toolKind = 'capture-compare'; this.title = 'Capture Comparison'; this.icon = 'columns';
     this.id = 'capture-compare-' + Math.random().toString(36).slice(2); this.state = 'idle'; this.busy = false; this.disposed = false; this.seq = 0;
     this.sources = { before: null, after: null }; this.sourceControls = {}; this.pairs = []; this.report = null; this.page = 0; this.selectedChange = null;
+    installTrafficContext(this);
     this.status = h('div.compare-status', { role: 'status', 'aria-live': 'polite' }, 'Choose two offline captures or load the synthetic working / failing demo.');
     this.demoButton = h('button.btn', { onclick: () => this.loadDemo() }, icon('play'), 'Load demo comparison');
     this.compareButton = h('button.btn.primary', { disabled: true, onclick: () => this.compare() }, icon('columns'), 'Compare captures');
@@ -49,7 +51,7 @@ export class CaptureComparisonTab {
     this.sourcePanel = h('details.compare-source-panel', { open: true }, this.sourceSummary, h('div.compare-source-grid', sides.map(side => this.sourceChoice(side))));
     this.el = h('div.view.compare-view', h('div.tool-head',
       h('div.tool-title', icon('columns'), h('h2', 'Capture Comparison'), h('span.sub', 'Compare observed DNS, TCP and plaintext HTTP/1 behavior')),
-      h('div.compare-actions', this.demoButton, this.compareButton, this.exportButton),
+      h('div.compare-actions', trafficCopilotButton(this), this.demoButton, this.compareButton, this.exportButton),
       this.sourcePanel, this.status), this.content);
     this.ready = Promise.resolve(); this.renderRows(); this.renderPairing(); this.updateButtons();
   }
@@ -72,7 +74,7 @@ export class CaptureComparisonTab {
     for (const button of this.pairHost.querySelectorAll('button')) button.disabled = this.busy;
   }
   clearReport() {
-    this.report = null; this.aiContext = null; this.pairs = []; this.page = 0; this.selectedChange = null; this.table.selected.clear();
+    this.report = null; this.copilot.acceptReport(null); this.aiContext = null; this.pairs = []; this.page = 0; this.selectedChange = null; this.table.selected.clear();
     this.summary.replaceChildren(); this.coverage.replaceChildren(); this.service.replaceChildren(h('option', { value: '' }, 'All services'));
     this.detail.replaceChildren(h('p.hint', 'Select an observation to inspect values and original source frames.'));
     this.renderRows(); this.renderPairing(); this.updateButtons(); this.app.updateStatus(this);
@@ -161,6 +163,7 @@ export class CaptureComparisonTab {
     finally { if (!this.disposed && seq === this.seq) { this.busy = false; this.updateButtons(); this.app.updateStatus(this); } }
   }
   renderReport() {
+    this.copilot.acceptReport(this.report);
     const report = this.report;
     this.summary.replaceChildren(h('h3', `${report.summary.changed} changed · ${report.summary.unknown} unknown · ${report.summary.same} same observations`),
       h('p.hint', `${report.summary.matchedServices} matched services · ${report.summary.unmatchedBefore} before-only · ${report.summary.unmatchedAfter} after-only`));

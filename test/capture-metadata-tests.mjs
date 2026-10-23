@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { readCapture, writePcapng } from '../src/renderer/js/capture/pcapfile.mjs';
 import { decode } from '../src/renderer/js/capture/decode.mjs';
 import { Analyzer } from '../src/renderer/js/capture/analyze.mjs';
+import { TrafficEvidenceOwner } from '../src/renderer/js/copilot-traffic.mjs';
 
 function captureHarness() {
   const module = { exports: {} }, saved = [], notices = [];
@@ -13,10 +14,11 @@ function captureHarness() {
     toast: (...args) => notices.push(args), errMsg: error => error.message,
     api: { invoke: async (...args) => { saved.push(args); return 'chosen-capture.pcapng'; } } });
   const tab = Object.create(module.exports.prototype);
-  Object.assign(tab, { packets: [], view: [], analyzer: new Analyzer(), state: 'idle', filter: null, disposed: false,
+  Object.assign(tab, { id: 'capture-metadata-fixture', kind: 'capture', packets: [], view: [], analyzer: new Analyzer(), state: 'idle', filter: null, disposed: false,
     stop: async () => {}, clear() { this.packets = []; this.view = []; this.analyzer.reset(); this.captureCoverage = null; },
     app: { setTabTitle() {} }, statsEl: {}, notice: { classList: { add() {} } },
     list: { setCount() {}, scrollTo() {}, render() {} }, refreshSide() {}, renderStats() {}, scheduleRender() {} });
+  tab.copilot = new TrafficEvidenceOwner(tab);
   return { tab, saved, notices };
 }
 function incidentHelper() {

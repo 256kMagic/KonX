@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.24.0 — 2026-10-23
+## 0.24.0 ï¿½ 2026-10-23
 
 - Add explicit terminal selection/viewport and connection diagnostics, including serial detection, logging and configured forwards.
 - Add saved-session context, SFTP listing/selection/transfer metadata, and current editor selections or documents.

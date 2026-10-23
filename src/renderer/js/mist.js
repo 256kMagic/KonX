@@ -1,3 +1,4 @@
+import { installTrafficContext, trafficCopilotButton } from './copilot-traffic-ui.js';
 import { h, icon, api, DataTable, toast, errMsg } from './ui.js';
 
 const shown = (value, suffix = '') => value == null || value === '' ? 'Unknown' : String(value) + suffix;
@@ -8,6 +9,7 @@ export class MistTab {
     this.app = app; this.kind = 'tool'; this.toolKind = 'mist'; this.icon = 'insight'; this.title = 'Mist & Marvis';
     this.id = 'mist-' + Math.random().toString(36).slice(2); this.state = 'idle'; this.jobId = null; this.seq = 0; this.disposed = false;
     this.report = null; this.config = null; this.configBusy = true; this.identity = null; this.siteRows = [];
+    installTrafficContext(this);
     this.region = h('select.input', { 'aria-label': 'Mist cloud region', onchange: () => { this.clearReport(); this.updateControls(); } });
     this.token = h('input.input', { type: 'password', autocomplete: 'off', spellcheck: false, placeholder: 'Paste Mist API token', 'aria-label': 'Mist API token' });
     this.saveButton = h('button.btn', { onclick: () => this.configure(false) }, icon('save'), 'Save token');
@@ -37,7 +39,7 @@ export class MistTab {
         h('div.mist-config', h('div.wireless-form', h('label.field', h('span', 'Mist cloud region'), this.region),
           h('label.field.wireless-key', h('span', 'API token'), this.token), this.saveButton, this.forgetButton),
           this.tokenStatus, h('p.notice', 'Tokens are encrypted for this Windows user and stay in the main process after saving. Requests use the selected Mist cloud.')),
-        h('div.wireless-actions', this.testButton, this.cancelButton, this.jsonButton), this.status),
+        h('div.wireless-actions', trafficCopilotButton(this), this.testButton, this.cancelButton, this.jsonButton), this.status),
       h('div.wireless-content', h('div.wireless-form', h('label.field', h('span', 'Organization'), this.org), this.sitesButton,
         h('label.field', h('span', 'Site'), this.site), this.apsButton, this.clientsButton),
         h('details.mist-manual', h('summary', 'Use known organization or site IDs'),
@@ -133,7 +135,7 @@ export class MistTab {
   }
 
   clearReport(message = 'Choose a request to retrieve information for this scope.') {
-    this.report = null; this.table = null; this.heading.textContent = 'Cloud results'; this.tableSlot.replaceChildren();
+    this.report = null; this.copilot.acceptReport(null); this.table = null; this.heading.textContent = 'Cloud results'; this.tableSlot.replaceChildren();
     this.detail.replaceChildren(h('p.hint', message)); this.limitations.replaceChildren(); this.jsonButton.disabled = true;
   }
 
@@ -211,6 +213,7 @@ export class MistTab {
   }
 
   renderReport() {
+    this.copilot.acceptReport(this.report);
     const report = this.report;
     const scope = report.scope ? Object.entries(report.scope).filter(([, value]) => value != null && value !== '').map(([key, value]) => `${key}: ${value}`).join(' · ') : '';
     this.heading.textContent = `${names[report.action]} · ${report.region} · ${new Date(report.fetchedAt).toLocaleString()}${scope ? ' · ' + scope : ''}${report.limited ? ' · limited results' : ''}`;

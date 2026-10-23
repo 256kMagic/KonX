@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+let TrafficEvidenceOwner;
 
 function deferred() {
   let resolve, reject;
@@ -40,6 +41,7 @@ function harness({ showTraffic, reconstruct } = {}) {
     { no: 900, ann: { stream: 7 }, d: { tcp: {} } },
   ];
   Object.assign(tab, {
+    id: 'capture-fixture', kind: 'capture', app: {},
     packets,
     view: [0, 1, 2],
     analyzer: {
@@ -59,10 +61,12 @@ function harness({ showTraffic, reconstruct } = {}) {
     select: (index) => events.push(['select', index]),
     list: { ensureVisible: (index) => events.push(['visible', index]) },
   });
+  tab.copilot = new TrafficEvidenceOwner(tab);
   return { tab, stream, packets, events, notices, counts: () => ({ reconstructions, dialogs }) };
 }
 
 async function runTrafficUiTests(test) {
+  ({ TrafficEvidenceOwner } = await import('../src/renderer/js/copilot-traffic.mjs'));
   console.log('packet capture: readable traffic navigation');
 
   await test('packet evidence navigation uses the exact original packet number and stream', async () => {

@@ -1,6 +1,6 @@
 # KonX User Guide
 
-This guide covers KonX 0.24.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one application. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
+This guide covers KonX 0.25.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one application. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
 
 Version 0.24.0 adds explicit terminal text, connection diagnostics, SFTP metadata, and editor selections to [Copilot](COPILOT.md#workspace-evidence). See [release validation](releases/0.24.0.md).
 
@@ -797,3 +797,5 @@ Open a [GitHub issue](https://github.com/256kMagic/KonX/issues) with:
 Remove credentials, private keys, host inventories, personal paths, sensitive command output, and packet payloads before posting publicly. Review redaction yourself even when using **Copy config without secrets**. Developer-tools output from **F12** can help with a reproducible UI failure, but inspect it for sensitive values before sharing it.
 
 JavaScript diagnostic logs are local and contain the application/runtime version, timestamp, error message, and stack trace. They can include file paths or target details from the error. Review them before sharing. No automatic error uploads are performed. The logger observes failures and preserves the original error handling; it does not recover a failed process or diagnose an earlier dismissed error retroactively.
+
+Version 0.25.0 adds packet, readable stream, SIP/RTP, capture comparison, security and wireless evidence to Copilot. See the [Copilot guide](COPILOT.md) and [release validation](releases/0.25.0.md).

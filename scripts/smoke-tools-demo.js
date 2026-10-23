@@ -675,6 +675,14 @@
         for (const item of editor.docs) item.dirty = false;
         await app.closeTab(editor);
       }
+      if (versionParts[1] >= 25) {
+        await app.openCopilot(security);
+        assert(security.copilotButton && !panel.attachButton.disabled, 'Packaged traffic Copilot entry is unavailable');
+        const snapshot = security.captureCopilotContext({ choice: 'assessment' });
+        await controller.attach(snapshot); const attachment = controller.conversation.attachments.at(-1);
+        assert(attachment.snapshot.kind === 'security' && attachment.snapshot.facts.rows.length === security.report.checks.length && app.jobs.size === 0, 'Retained assessment facts were not attached passively');
+        await controller.detach(attachment.id); await app.closeTab(panel);
+      }
       await app.closeTab(source); await app.saveSettings({ uiLayout: priorLayout }); app.activate(ai);
       copilotChecks = { typedSource: true, companionPreservesSource: true, exactRequestReview: true, immutableStaleSnapshot: true, fiveLayouts: true, nativePopoutAndDock: true,
         canonicalViewRetained: true, draftGuard: true, conversationSaved: true, noProviderRequests: true };

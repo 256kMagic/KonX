@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+let trafficContext;
 
 function element(selector, ...args) {
   const handlers = new Map();
@@ -35,14 +36,17 @@ function harness({ running = true, following = true } = {}) {
     .replace(/^import .*;\r?\n/gm, '')
     .replace('export class CaptureTab', 'class CaptureTab');
   const module = { exports: {} };
-  vm.runInNewContext(source + '\nmodule.exports = CaptureTab;', { module, h: element, icon: () => element('svg') }, { filename });
+  const trafficUi = fs.readFileSync(path.join(__dirname, '../src/renderer/js/copilot-traffic-ui.js'), 'utf8')
+    .replace(/^import .*;\r?\n/gm, '').replaceAll('export function ', 'function ');
+  vm.runInNewContext(trafficUi + '\n' + source + '\nmodule.exports = CaptureTab;', { module, ...trafficContext, h: element, icon: () => element('svg') }, { filename });
   const tab = Object.create(module.exports.prototype);
   Object.assign(tab, {
-    id: 'test-capture', state: running ? 'running' : 'idle', autoScroll: following,
+    id: 'test-capture', kind: 'capture', app: {}, state: running ? 'running' : 'idle', autoScroll: following,
     packets: [], view: [], selected: -1,
     dragSplit() {}, renderSideTabs() {}, setupDrop() {},
     select(index) { this.selected = index; },
   });
+  tab.copilot = new trafficContext.TrafficEvidenceOwner(tab);
   tab.build({});
   const scroller = tab.list.scroller;
   scroller.clientHeight = 220;
@@ -51,6 +55,7 @@ function harness({ running = true, following = true } = {}) {
 }
 
 async function runCaptureAutoScrollTests(test) {
+  trafficContext = await import('../src/renderer/js/copilot-traffic.mjs');
   console.log('packet capture: auto-scroll controls');
   await test('manual upward packet scrolling updates both following state and checkbox', () => {
     const { tab, scroller, checkbox } = harness();

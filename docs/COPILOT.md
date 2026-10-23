@@ -35,6 +35,24 @@ Version 0.24.0 adds explicit choices from the current view:
 
 Use the view's context menu or open Copilot and choose **Attach from current view**. Capture is explicit and stays local until you prepare and send a request. SFTP attachments never fetch file contents. Terminal attachments do not execute commands or read log files. Wrapped lines cut by the viewport and oversized text are omitted as whole values, with notices; choose a smaller selection when needed. Retained directory entries keep the last successful path and observation time even when a later navigation fails.
 
+## Traffic and wireless evidence
+
+Version 0.25.0 adds **Ask Copilot** in capture and assessment views. Use **Attach from current view** for the available explicit choices.
+
+| View | How to choose evidence |
+| --- | --- |
+| Packet capture | Select a decoded packet, then Ask Copilot; only its parsed fields and frame reference are attached |
+| Readable traffic | Open an analyzed stream and use its Copilot action; existing readable messages, directions and gaps are retained |
+| SIP | Select a call in the ladder view; attach its messages and parsed SDP details |
+| RTP | Select an analyzed stream; attach quality observations and packet gaps, without audio |
+| Capture comparison | Select changes in the completed comparison; retain both source capture references |
+| Remote capture | Attach the retained report; this does not read the capture file or start tcpdump |
+| Security | Choose selected findings or retained checks from the existing report |
+| Wi-Fi | Choose retained observations; no new adapter scan starts |
+| Mist | Choose supported retained entities; arbitrary response bodies and credentials are excluded |
+
+Open the normal analysis view first when its parsed result is required. Attachments use that result rather than starting another analysis. Parser limits, missing directions, frame coverage and source truncation remain visible. Already truncated source text is omitted as a whole value; an incomplete stream is not proof of packet loss on the network. Raw packet bytes, audio and unparsed payloads are excluded.
+
 ## Requests and storage
 
 Conversations are local to the Windows profile. Rename or delete them from Copilot. Deletion removes the local conversation; it does not delete information already sent to a provider. The conversation list reports unreadable records rather than silently replacing them.

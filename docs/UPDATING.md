@@ -1,18 +1,18 @@
 # Updating KonX
 
-**Installed 0.6.0 and 0.6.1 need one manual upgrade to 0.24.0.** Their update button misidentifies the installed app and reads the installation location from the wrong registry key. The fixes introduced in 0.6.2 are retained in 0.24.0. Installed 0.6.2 and portable 0.6.0 or later copies can use **Update KonX** to obtain 0.24.0.
+**Installed 0.6.0 and 0.6.1 need one manual upgrade to 0.25.0.** Their update button misidentifies the installed app and reads the installation location from the wrong registry key. The fixes introduced in 0.6.2 are retained in 0.25.0. Installed 0.6.2 and portable 0.6.0 or later copies can use **Update KonX** to obtain 0.25.0.
 
-This guide covers KonX 0.24.0 for Windows x64. **Update KonX** checks for newer stable releases, downloads the correct file, verifies it, and restarts when work is safe. It is available for installed copies from 0.6.2 and portable copies from 0.6.0.
+This guide covers KonX 0.25.0 for Windows x64. **Update KonX** checks for newer stable releases, downloads the correct file, verifies it, and restarts when work is safe. It is available for installed copies from 0.6.2 and portable copies from 0.6.0.
 
-| Current copy | Upgrade to 0.24.0 |
+| Current copy | Upgrade to 0.25.0 |
 | --- | --- |
-| Installed 0.6.0 or 0.6.1 | Save work, close KonX, and run `KonX-Setup-0.24.0.exe` manually using the existing installation folder and per-user/all-users mode. |
-| Installed 0.6.2 through 0.23.0 | Choose **Update KonX** and finish any work listed before restart. Approve Windows elevation if requested for an all-users installation. |
-| Portable 0.6.0 through 0.23.0 | Choose **Update KonX**, or replace the portable executable manually after closing KonX. |
-| Version 0.5.0 or earlier | Save work, close KonX, and run the 0.24.0 installer or replace the portable executable manually. |
-| Installed or portable 0.24.0 | Use **Update KonX** for future stable releases. If no newer release exists, KonX reports that it is up to date. |
+| Installed 0.6.0 or 0.6.1 | Save work, close KonX, and run `KonX-Setup-0.25.0.exe` manually using the existing installation folder and per-user/all-users mode. |
+| Installed 0.6.2 through 0.24.0 | Choose **Update KonX** and finish any work listed before restart. Approve Windows elevation if requested for an all-users installation. |
+| Portable 0.6.0 through 0.24.0 | Choose **Update KonX**, or replace the portable executable manually after closing KonX. |
+| Version 0.5.0 or earlier | Save work, close KonX, and run the 0.25.0 installer or replace the portable executable manually. |
+| Installed or portable 0.25.0 | Use **Update KonX** for future stable releases. If no newer release exists, KonX reports that it is up to date. |
 
-Download [KonX-Setup-0.24.0.exe](https://github.com/256kMagic/KonX/releases/download/v0.24.0/KonX-Setup-0.24.0.exe), [KonX-0.24.0-portable.exe](https://github.com/256kMagic/KonX/releases/download/v0.24.0/KonX-0.24.0-portable.exe), and [SHA256SUMS.txt](https://github.com/256kMagic/KonX/releases/download/v0.24.0/SHA256SUMS.txt) from the same release. Compare the file's SHA-256 hash with the manifest before running a manual download. Do not uninstall the existing copy or delete its profile to upgrade.
+Download [KonX-Setup-0.25.0.exe](https://github.com/256kMagic/KonX/releases/download/v0.25.0/KonX-Setup-0.25.0.exe), [KonX-0.25.0-portable.exe](https://github.com/256kMagic/KonX/releases/download/v0.25.0/KonX-0.25.0-portable.exe), and [SHA256SUMS.txt](https://github.com/256kMagic/KonX/releases/download/v0.25.0/SHA256SUMS.txt) from the same release. Compare the file's SHA-256 hash with the manifest before running a manual download. Do not uninstall the existing copy or delete its profile to upgrade.
 
 ## One-press update
 
@@ -28,7 +28,7 @@ The updater does not need a GitHub account or key. It does not check on startup,
 
 Starting with 0.16.1, KonX stages installed updates as `KonX-Setup-<version>.exe` and portable updates as `KonX-<version>-portable.exe`, using the target version. Windows prompts that show the installer filename can identify the application and version. The helper still checks the file size and SHA-256 checksum before installation. The executable remains unsigned, so this filename does not establish a verified publisher identity.
 
-**An update started by 0.16.0 or earlier may still show `payload.exe` once when installing 0.16.1 or later.** The older running application supplies that filename. Once 0.16.1 or later is installed, its updater uses the branded name for future updates. A manual download of `KonX-Setup-0.24.0.exe` uses the new filename immediately.
+**An update started by 0.16.0 or earlier may still show `payload.exe` once when installing 0.16.1 or later.** The older running application supplies that filename. Once 0.16.1 or later is installed, its updater uses the branded name for future updates. A manual download of `KonX-Setup-0.25.0.exe` uses the new filename immediately.
 
 ## Installed and portable copies
 
@@ -52,7 +52,7 @@ Version 0.18.0 adds floating panels, split resizing, and native pop-out windows.
 
 From 0.18.1, use **Report a problem** on Home or Settings → Support to preview and save a diagnostic report. Logs are optional and no report is uploaded automatically. See [Tester support](TESTER_SUPPORT.md).
 
-- **Installed 0.6.0/0.6.1 says unsupported or cannot identify its installation:** run the 0.24.0 installer manually once. These older buttons cannot install their own fix.
+- **Installed 0.6.0/0.6.1 says unsupported or cannot identify its installation:** run the 0.25.0 installer manually once. These older buttons cannot install their own fix.
 - **No newer release:** the installed version is at least as new as the published stable release. Nothing is downloaded or replaced.
 - **Network or GitHub rate limit:** retry later. No token is required.
 - **Missing file or checksum mismatch:** the release cannot be installed through the updater. Retry after the release is corrected; KonX never runs an incomplete or unverified download.

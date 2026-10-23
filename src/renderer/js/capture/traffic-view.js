@@ -14,7 +14,7 @@ const warningList = (items) => {
 const bytesIn = (dir) => dir.ranges.reduce((n, r) => n + (r.kind === 'data' ? r.data.length : 0), 0);
 
 /** A local, text-only view. Captured HTML and links are never rendered or fetched. */
-export async function showTraffic(stream) {
+export async function showTraffic(stream, { allowCopilot = false } = {}) {
   const rawPreview = buildStreamPreview(stream);
   let close;
   let mode = 'readable';
@@ -22,6 +22,7 @@ export async function showTraffic(stream) {
   let parsed = null;
   let parseError = '';
   let alive = true;
+  const copilotButton = h('button.btn.sm', { disabled: true, onclick: () => close({ action: 'copilot', parsed }) }, 'Ask Copilot about this stream');
   const out = h('div.traffic-content', h('div.hint', 'Reconstructing messages…'));
   const summary = h('div.traffic-summary');
   const notices = h('div');
@@ -37,7 +38,7 @@ export async function showTraffic(stream) {
     icon: 'route', width: 1100,
     body: h('div.traffic', h('div.follow-head', stream.directions.map(endpoint)),
       h('div.hint', 'Captured traffic snapshot. Packet buttons return to the original evidence.'),
-      h('div.traffic-toolbar', modes, search), summary, notices, out),
+      h('div.traffic-toolbar', modes, search, allowCopilot ? copilotButton : null), summary, notices, out),
     footerLeft: h('button.btn.sm', {
       onclick: async () => {
         try { await api.invoke('clipboard:write', out.innerText); toast('Visible traffic copied'); }
@@ -159,7 +160,7 @@ export async function showTraffic(stream) {
       ...(d.conflicts.length ? ['Conflicting retransmissions: reconstructed bytes are ambiguous. See packet evidence.'] : []),
       ...(!d.startKnown && stream.conv.proto === 'TCP' ? ['The start of this TCP direction was not captured.'] : []),
     ]), ...(parsed.warnings || [])];
-    if (alive) notices.replaceChildren(warningList(details));
+    if (alive) { notices.replaceChildren(warningList(details)); copilotButton.disabled = false; }
     render();
   } catch (e) {
     parseError = errMsg(e);

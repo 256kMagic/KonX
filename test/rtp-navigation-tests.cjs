@@ -1,5 +1,6 @@
 'use strict';
 const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
+let TrafficEvidenceOwner;
 function harness(show) {
   const filename = path.join(__dirname, '../src/renderer/js/capture.js');
   const source = fs.readFileSync(filename, 'utf8').replace(/^import .*;\r?\n/gm, '').replace('export class CaptureTab', 'class CaptureTab');
@@ -14,14 +15,16 @@ function harness(show) {
   }, { filename });
   const tab = Object.create(module.exports.prototype);
   const packets = [{no:11},{no:33}];
-  Object.assign(tab, { packets, view:[0], rtpButton:{disabled:false},
+  Object.assign(tab, { id:'rtp-navigation-fixture',kind:'capture',app:{},packets, view:[0], rtpButton:{disabled:false},
     setAutoScroll: v => events.push(['scroll',v]), setFilter: v => {events.push(['filter',v]);tab.view=[0,1];},
     select: v => events.push(['select',v]), list:{ensureVisible:v=>events.push(['visible',v])},
     openSipCalls: async key => events.push(['sip',key]),
   });
+  tab.copilot = new TrafficEvidenceOwner(tab);
   return {tab,packets,events,snapshots,exports,get options(){return options;},get dialogs(){return dialogs;},async paint(){assert(pending.length);pending.shift()();await Promise.resolve();}};
 }
 async function runRtpNavigationTests(test) {
+  ({TrafficEvidenceOwner}=await import('../src/renderer/js/copilot-traffic.mjs'));
   await test('RTP navigation selects original source frames and clears only an excluding filter', async()=>{
     const h=harness(()=>({action:'packet',frame:33})), p=h.tab.openRtpMedia();await h.paint();await p;
     assert.deepEqual(h.events,[['scroll',false],['filter',''],['select',1],['visible',1]]);

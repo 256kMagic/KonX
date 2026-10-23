@@ -1,5 +1,7 @@
 // Packet capture tab: live capture (Npcap, or Windows' built-in capture driver when Npcap is
 // not installed) or capture files (.pcap, .pcapng, Windows .etl), decoded and analyzed.
+import { installTrafficContext, trafficCopilotButton } from './copilot-traffic-ui.js';
+import { streamContext, sipContext, rtpContext } from './copilot-traffic.mjs';
 import { h, icon, api, DataTable, contextMenu, modal, toast, errMsg, fmtBytes, confirmDialog } from './ui.js';
 import { decode, Node, LINKTYPES } from './capture/decode.mjs';
 import { compileFilter } from './capture/filter.mjs';
@@ -56,6 +58,7 @@ export class CaptureTab {
     this.lastBytes = 0;
     this.fileName = '';
     this.sideTab = 'Insights';
+    installTrafficContext(this);
     this.build(params);
     this.loadStatus();
   }
@@ -99,7 +102,7 @@ export class CaptureTab {
     const names = h('input', { type: 'checkbox', checked: true, onchange: (e) => ((this.resolveNames = e.target.checked), this.list.render()) });
     this.sipButton = h('button.btn.sm', { title: 'Reconstruct SIP calls from all captured packets', onclick: () => this.openSipCalls() }, icon('route'), 'SIP Calls');
     this.rtpButton = h('button.btn.sm', { title: 'Inspect RTP streams, jitter and G.711 audio', onclick: () => this.openRtpMedia() }, icon('activity'), 'RTP Media');
-    const frow = h('div.cap-frow', this.filterBox, ...chips, this.sipButton, this.rtpButton, h('label.check', this.autoScrollCheckbox, 'Auto-scroll'), h('label.check', names, 'Names'));
+    const frow = h('div.cap-frow', this.filterBox, ...chips, this.sipButton, this.rtpButton, trafficCopilotButton(this), h('label.check', this.autoScrollCheckbox, 'Auto-scroll'), h('label.check', names, 'Names'));
 
     this.list = new PacketList(this);
     this.notice = h('div.cap-notice.hidden');
@@ -332,6 +335,7 @@ export class CaptureTab {
     this.clear(false);
     this.acceptLivePackets = true;
     this.captureFilter = capFilter;
+    this.copilot.begin({ source: 'live', device, filter: this.bpf.value.trim(), engine: builtin ? 'builtin' : 'npcap' });
     this.capFiltered = 0;
     this.engine = builtin ? 'builtin' : 'npcap';
     this.cancelStart = false;
@@ -353,6 +357,7 @@ export class CaptureTab {
     } catch (e) {
       if (this.disposed || generation !== this.captureGeneration) return;
       this.acceptLivePackets = false;
+      this.copilot.finish('error');
       this.setState('idle');
       this.renderStats();
       const msg = errMsg(e);
@@ -371,7 +376,7 @@ export class CaptureTab {
     if (!this.disposed && ['running', 'starting'].includes(this.state)) this.setState('stopping');
     this.stopPromise = api.invoke('cap:stop', this.id).then(() => {
       this.acceptLivePackets = false;
-      if (!this.disposed) this.setState('idle');
+      if (!this.disposed) { if (this.copilot.first.state === 'running') this.copilot.finish('complete'); this.setState('idle'); }
     }).finally(() => { this.stopPromise = null; });
     return this.stopPromise;
   }
@@ -396,6 +401,7 @@ export class CaptureTab {
   onCapState(st) {
     if (st.stats) this.stats = st.stats;
     if (st.state === 'stopped') {
+      this.copilot.finish(st.error ? 'error' : 'complete');
       this.acceptLivePackets = false;
       this.setState(this.stopPromise ? 'stopping' : 'idle');
       if (st.error) toast(st.error, 'err');
@@ -433,6 +439,7 @@ export class CaptureTab {
       this.packets.push(pkt);
       if (!this.filter || this.filter.test(pkt)) this.view.push(this.packets.length - 1);
     }
+    this.copilot.touch();
     this.scheduleRender();
   }
 
@@ -510,6 +517,9 @@ export class CaptureTab {
     const go = () => {
       this.rtpAbort?.abort();
       this.packets = [];
+      this.selectedDecoded = null;
+      if (this.acceptLivePackets) this.copilot.begin({ ...this.copilot.first.inputs, retainedPacketsCleared: true });
+      else { this.copilot.begin({ source: 'cleared' }); this.copilot.finish('idle'); }
       this.captureCoverage = null;
       this.view = [];
       this.analyzer.reset();
@@ -585,6 +595,7 @@ export class CaptureTab {
     destination = this.packets;
     this.captureCoverage = { ...(coverage || {}), examinedAllRecords: false, warnings: [...(coverage?.warnings || []), 'Capture loading is in progress; only a retained prefix is available.'] };
     this.fileName = name;
+    this.copilot.begin({ source: 'file', name, format });
     this.app.setTabTitle(this, name);
     // Decode in slices so the window stays responsive on big files.
     for (let i = 0; i < packets.length; i += 4000) {
@@ -595,6 +606,7 @@ export class CaptureTab {
     }
     if (!current()) return;
     this.captureCoverage = coverage || null;
+    this.copilot.finish('complete');
     this.notice.classList.add('hidden');
     this.list.setCount(this.view.length);
     this.list.scrollTo(0);
@@ -676,6 +688,7 @@ export class CaptureTab {
     const p = this.packets[pktIndex];
     if (!p) return;
     const full = decode(p.lt, p.data, { tree: true });
+    this.selectedDecoded = full;
     const frame = new Node(`Frame ${p.no}: ${p.len} bytes on wire (${p.len * 8} bits), ${p.caplen} bytes captured`, 0, p.caplen);
     frame.add(`Arrival Time: ${p.timestampKnown === false ? 'Unknown (not recorded in source)' : new Date(p.ts * 1000).toISOString().replace('T', ' ').replace('Z', ' UTC')}`);
     frame.add(`Time since first packet: ${p.rel == null ? 'Unknown' : p.rel.toFixed(6) + ' s'}`);
@@ -782,13 +795,15 @@ export class CaptureTab {
   async follow(streamId, proto = 'TCP') {
     if (this.followOpen) return;
     this.followOpen = true;
+    const evidence = this.copilot.retain();
     const packets = this.packets;
     try {
       const stream = this.analyzer.followStream(packets, streamId, proto);
       if (!stream) return;
-      const result = await showTraffic(stream);
+      const result = await showTraffic(stream, { allowCopilot: true });
       // A different capture may have been loaded while the dialog was open.
       if (!result || this.disposed || this.packets !== packets) return;
+      if (result.action === 'copilot') this.app.openCopilot(this, { snapshot: streamContext(evidence, stream, result.parsed) });
       if (result.action === 'filter') this.setFilter(`${proto.toLowerCase()}.stream == ${streamId}`);
       if (result.action === 'packet') {
         const index = packets.findIndex((p) => p.no === result.frame);
@@ -808,6 +823,7 @@ export class CaptureTab {
   async openSipCalls(callKey = null) {
     if (this.sipOpen) return;
     this.sipOpen = true;
+    const evidence = this.copilot.retain();
     this.sipButton.disabled = true;
     const packets = this.packets;
     const snapshot = packets.slice();
@@ -824,12 +840,13 @@ export class CaptureTab {
       };
       const result = await showSipCalls(analysis, {
         initialCallKey: callKey,
-        allowMedia: true,
+        allowMedia: true, allowCopilot: true,
         onExportCall: (call) => save('pcapng', buildSipCallCapture(snapshot, call)),
         onExportReport: (call) => save('json', buildSipCallReport(call, { ...analysis, sourceName })),
       });
       if (!result || this.disposed || this.packets !== packets) return;
-      if (result.action === 'media') media = { callKey: result.callKey, packets, snapshot, sipCalls: analysis.calls };
+      if (result.action === 'copilot') this.app.openCopilot(this, { snapshot: sipContext(evidence, result.call, analysis) });
+      if (result.action === 'media') media = { callKey: result.callKey, packets, snapshot, sipCalls: analysis.calls, evidence };
       if (result.action === 'packet') {
         const index = packets.findIndex((packet) => packet.no === result.frame);
         if (index < 0) return;
@@ -851,6 +868,7 @@ export class CaptureTab {
   async openRtpMedia(callKey = null, context = null) {
     if (this.rtpOpen || this.disposed) return;
     this.rtpOpen = true;
+    const evidence = context?.evidence || this.copilot.retain();
     this.rtpButton.disabled = true;
     const packets = context?.packets || this.packets;
     const snapshot = context?.snapshot || packets.slice();
@@ -863,13 +881,14 @@ export class CaptureTab {
       if (!current()) return;
       const sipCalls = context?.sipCalls || analyzeSipCalls(snapshot).calls;
       const result = await showRtpMedia(snapshot, {
-        sipCalls, callKey, signal: controller.signal, allowDemo: true,
+        sipCalls, callKey, signal: controller.signal, allowDemo: true, allowCopilot: true,
         onExportWav: (name, bytes) => {
           if (!current()) throw new Error('The source capture was replaced or closed.');
           return api.invoke('cap:saveBody', name, bytes);
         },
       });
       if (!result || !current()) return;
+      if (result.action === 'copilot') this.app.openCopilot(this, { snapshot: rtpContext(evidence, result.stream, result.analysis) });
       if (result.action === 'packet') {
         const index = packets.findIndex(packet => packet.no === result.frame);
         if (index < 0) return;

@@ -793,7 +793,7 @@ class App {
     if (kind !== 'ai' && kind !== 'events') {
       const heading = tab.el.querySelector('.tool-title') || tab.el.querySelector('.tool-head') || tab.el.querySelector('.cap-frow');
       const contextual = copilotContextSupport(tab).supported;
-      heading?.append(h('button.btn.sm', { title: contextual ? 'Attach selected observations to Copilot for review' : 'Preview these results in AI & Knowledge', onclick: () => this.explainTool(tab) }, icon('insight'), contextual ? 'Ask Copilot' : 'Explain with AI'));
+      if (!tab.copilotButton) heading?.append(h('button.btn.sm', { title: contextual ? 'Attach selected observations to Copilot for review' : 'Preview these results in AI & Knowledge', onclick: () => this.explainTool(tab) }, icon('insight'), contextual ? 'Ask Copilot' : 'Explain with AI'));
       if (kind !== 'incidents' && kind !== 'change-validation') heading?.append(h('button.btn.sm', { title: 'Choose an incident for a snapshot of this evidence', onclick: () => this.addToIncident(tab) }, icon('file'), 'Add to incident'));
     }
     return this.addTab(tab);

@@ -26,7 +26,7 @@ const codecLabel = (stream) => stream.payloadTypes.map((codec) => codec.name || 
 
 /** Owns only a fixed capture snapshot. Nothing plays or exports until explicitly requested.
  * signal must be aborted when the owner replaces/clears its capture or disposes. */
-export async function showRtpMedia(packetSnapshot, { sipCalls = [], callKey = null, onExportWav, allowDemo = false, signal } = {}) {
+export async function showRtpMedia(packetSnapshot, { sipCalls = [], callKey = null, onExportWav, allowDemo = false, allowCopilot = false, signal } = {}) {
   if (signal?.aborted) return null;
   let analysis, selected, filtered = [], streamPage = 0, packetPage = 0, close;
   let alive = true, busy = false, audio = null, audioError = '', playback = null, playEpoch = 0;
@@ -46,6 +46,7 @@ export async function showRtpMedia(packetSnapshot, { sipCalls = [], callKey = nu
   const playButton = h('button.btn.sm', { onclick: () => play(false) }, icon('play'), 'Play stream');
   const pairButton = h('button.btn.sm', { onclick: () => play(true) }, 'Play both directions');
   const stopButton = h('button.btn.sm', { disabled: true, onclick: () => stop() }, 'Stop');
+  const copilotButton = h('button.btn.sm', { disabled: true, onclick: () => close({ action: 'copilot', stream: selected, analysis }) }, 'Ask Copilot about stream quality');
   const exportButton = h('button.btn.sm', { onclick: () => exportAudio() }, icon('download'), 'Export WAV');
 
   function reanalyze() {
@@ -93,6 +94,7 @@ export async function showRtpMedia(packetSnapshot, { sipCalls = [], callKey = nu
     return candidates.length === 1 ? candidates[0] : null;
   }
   function controls() {
+    copilotButton.disabled = !selected || busy;
     const supported = selected?.audioSupported && (selected.identification !== 'heuristic candidate' || heuristicAudio.checked);
     previewButton.disabled = !supported || busy;
     playButton.disabled = !supported || busy || Boolean(playback);
@@ -248,7 +250,7 @@ export async function showRtpMedia(packetSnapshot, { sipCalls = [], callKey = nu
           ['Delay since sender report (1/65536 s)', entry.delaySinceLastSenderReportUnits65536]])))),
       reports.length > PAGE ? h('div.hint', 'Showing the first ' + PAGE + ' RTCP reports.') : null);
   }
-  const body = h('div.rtp-workspace', h('div.rtp-toolbar', search, callFilter, count),
+  const body = h('div.rtp-workspace', h('div.rtp-toolbar', search, callFilter, count, allowCopilot ? copilotButton : null),
     h('label.check', heuristic, 'Find possible RTP without SDP (heuristic)'), warningBox,
     h('div.rtp-columns', h('aside.rtp-stream-panel', streams, streamPager), details));
   const done = modal({ title: 'RTP media · Captured audio', icon: 'route', width: 1320, body,

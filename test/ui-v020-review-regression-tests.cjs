@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+let TrafficEvidenceOwner;
 
 function captureHarness(result, globals = {}) {
   const filename = path.join(__dirname, '../src/renderer/js/capture.js');
@@ -20,6 +21,7 @@ function captureHarness(result, globals = {}) {
   const packets = [{ no: 1 }, { no: 2 }, { no: 3 }];
   let scrollsToEnd = 0;
   Object.assign(tab, {
+    id: 'capture-review-fixture', kind: 'capture', app: {},
     packets, view: [0, 1, 2], state: 'running', autoScroll: true,
     autoScrollCheckbox: { checked: true },
     analyzer: { followStream: () => ({ conv: { proto: 'TCP', id: 7 } }) },
@@ -32,10 +34,12 @@ function captureHarness(result, globals = {}) {
     notice: { classList: { contains: () => true } },
     renderStats() {}, refreshSide() {},
   });
+  tab.copilot = new TrafficEvidenceOwner(tab);
   return { tab, frames, scrollsToEnd: () => scrollsToEnd };
 }
 
 async function runUiV020ReviewRegressionTests(test) {
+  ({ TrafficEvidenceOwner } = await import('../src/renderer/js/copilot-traffic.mjs'));
   await test('Follow Stream evidence stays visible when the next live packet batch renders', async () => {
     const { tab, frames, scrollsToEnd } = captureHarness({ action: 'packet', frame: 2 });
     await tab.follow(7);

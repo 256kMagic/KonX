@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+let TrafficEvidenceOwner;
 
 function deferred() {
   let resolve;
@@ -39,12 +40,14 @@ function harness({ analyze, show, buildCapture, buildReport } = {}) {
   const tab = Object.create(module.exports.prototype);
   const packets = [20, 101, 900].map((no, i) => ({ no, ts: i + 0.5, len: 3, caplen: 3, lt: 1, data: new Uint8Array([i, 10, 20]) }));
   Object.assign(tab, {
+    id: 'sip-navigation-fixture', kind: 'capture', app: {},
     packets, view: [0, 1, 2], fileName: 'original.pcapng', sipButton: { disabled: false },
     setAutoScroll: (enabled) => events.push(['auto-scroll', enabled]),
     setFilter: (filter) => { events.push(['filter', filter]); tab.view = tab.packets.map((_packet, i) => i); },
     select: (index) => events.push(['select', index]),
     list: { ensureVisible: (index) => events.push(['visible', index]) },
   });
+  tab.copilot = new TrafficEvidenceOwner(tab);
   return {
     tab, packets, call, analysis, events, notices, invocations, snapshots,
     get actions() { return actions; },
@@ -54,6 +57,7 @@ function harness({ analyze, show, buildCapture, buildReport } = {}) {
 }
 
 async function runSipNavigationTests(test) {
+  ({ TrafficEvidenceOwner } = await import('../src/renderer/js/copilot-traffic.mjs'));
   await test('SIP source packet navigation pauses scrolling and clears only an excluding display filter', async () => {
     for (const visible of [true, false]) {
       const h = harness({ show: () => ({ action: 'packet', frame: 900 }) });

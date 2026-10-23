@@ -1,3 +1,4 @@
+import { installTrafficContext, trafficCopilotButton } from './copilot-traffic-ui.js';
 import { h, icon, api, DataTable, toast, errMsg } from './ui.js';
 import { validateReport, summary, compareReports, exportReport } from './security-report.mjs';
 
@@ -19,6 +20,7 @@ export class SecurityTab {
     this.id = 'security-' + Math.random().toString(36).slice(2); this.title = 'Security Suite';
     this.state = 'idle'; this.jobId = null; this.seq = 0; this.disposed = false;
     this.report = null; this.filePath = null; this.comparison = null;
+    installTrafficContext(this);
     this.audit = h('select.input', { 'aria-label': 'Security assessment' }, AUDITS.map(([value, label]) => h('option', { value }, label)));
     this.audit.value = AUDITS.some(([kind]) => kind === params.audit) ? params.audit : params.host ? 'exposure' : 'windows';
     this.host = h('input.input', { value: params.host || '', placeholder: 'Hostname or IP', spellcheck: false, 'aria-label': 'Assessment host or configuration label' });
@@ -61,7 +63,7 @@ export class SecurityTab {
         h('div.tool-form', h('label.field', h('span', 'Assessment'), this.audit), this.runButton), this.description,
         this.inputs, this.config, this.status),
       h('div.security-results', this.reportHeading, this.counts,
-        h('div.security-actions', this.filter, this.baselineButton, this.compareButton, this.jsonButton, this.htmlButton),
+        h('div.security-actions', trafficCopilotButton(this), this.filter, this.baselineButton, this.compareButton, this.jsonButton, this.htmlButton),
         this.baselineStatus, h('div.security-split', this.table.el, this.detail), this.limitations));
     this.audit.addEventListener('change', () => { this.filePath = null; this.fileLabel.textContent = 'No file selected'; this.updateInputs(); });
     this.config.addEventListener('input', () => { if (this.config.value) { this.filePath = null; this.fileLabel.textContent = 'Using pasted configuration'; } });
@@ -155,6 +157,7 @@ export class SecurityTab {
   }
 
   renderReport() {
+    this.copilot.acceptReport(this.report);
     for (const button of [this.baselineButton, this.compareButton, this.jsonButton, this.htmlButton]) button.disabled = !this.report;
     for (const button of [this.baselineButton, this.compareButton]) button.disabled = !this.report?.scopeId;
     this.reportHeading.textContent = this.report ? `${this.report.title} · ${this.report.target} · ${new Date(this.report.scannedAt).toLocaleString()}` : 'Assessment results';

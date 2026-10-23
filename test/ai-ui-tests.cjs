@@ -17,7 +17,7 @@ async function runAiUiTests(test) {
   await test('real AI renderer, main IPC, encrypted credentials, local vector library, explicit context, five providers, cancellation and responsive layout', async () => {
     const tempRoot = path.resolve(os.tmpdir());
     const fixtureRoot = fs.mkdtempSync(path.join(tempRoot, 'konx-ai-ui-test-'));
-    let child, output = '';
+    let child, output = '', passed = false;
     try {
       const env = { ...process.env, KONX_USERDATA: path.join(fixtureRoot, 'profile'), KONX_AI_TEST_ROOT: fixtureRoot, KONX_CAPTURE: '', KONX_DEMO: '' };
       delete env.ELECTRON_RUN_AS_NODE;
@@ -32,9 +32,19 @@ async function runAiUiTests(test) {
         child.once('error', (error) => { clearTimeout(timer); reject(error); });
         child.once('exit', (value) => { clearTimeout(timer); resolve(value); });
       });
-      assert.equal(code, 0, output); assert.match(output, /AI_UI_PASS/);
+      const failure = path.join(fixtureRoot, 'failure.txt');
+      assert.equal(code, 0, (fs.existsSync(failure) ? fs.readFileSync(failure, 'utf8') + '\n\nFixture output:\n' : '') + output);
+      assert.match(output, /AI_UI_PASS/); passed = true;
     } finally {
       if (child && child.exitCode == null) child.kill();
+      if (!passed) {
+        const diagnostics = path.join(__dirname, '..', 'review', 'ai-ui-failure');
+        fs.mkdirSync(diagnostics, { recursive: true });
+        fs.writeFileSync(path.join(diagnostics, 'fixture.log'), output);
+        const failure = path.join(fixtureRoot, 'failure.txt');
+        if (fs.existsSync(failure)) fs.copyFileSync(failure, path.join(diagnostics, 'failure.txt'));
+        console.error('AI UI failure diagnostics: ' + diagnostics);
+      }
       assert.equal(path.dirname(path.resolve(fixtureRoot)), tempRoot);
       assert.ok(path.basename(fixtureRoot).startsWith('konx-ai-ui-test-'));
       fs.rmSync(fixtureRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -95,7 +105,7 @@ async function electronFixture() {
   dialog.showOpenDialog = async () => { throw new Error('The AI fixture must not open user files'); };
   const finish = (code, error) => {
     if (finished) return; finished = true;
-    if (error) console.error(error.stack || error);
+    if (error) { fs.writeFileSync(path.join(fixtureRoot, 'failure.txt'), String(error.stack || error)); console.error('AI_UI_FAILURE: ' + (error.stack || error)); }
     for (const req of [...pending]) req.destroy();
     for (const win of BrowserWindow.getAllWindows()) win.destroy();
     app.exit(code);
@@ -295,27 +305,30 @@ async function electronFixture() {
         await close('__draftAi', 'Discard drafts and close');
         await run('window.__app.activate(window.__ai);void 0;'); await ready();
 
-        // The real tool result button offers a preview; it never starts a job.
-        await run('window.__wifi=window.__app.openTool("wifi");window.__wifi.report={kind:"wifi",findings:[{title:"Fixture weak signal",rssi:-75}],password:"DO_NOT_SHARE"};void 0;');
-        await click('window.__wifi.el.querySelector(".tool-title button")');
-        await until(() => run('window.__app.activeTab?.toolKind==="ai" || window.__app.tabs.at(-1)?.toolKind==="ai"'), 'explain result AI tab');
-        await run('window.__explained=window.__app.tabs.at(-1);void 0;'); await ready('__explained');
-        assert.match(await run('window.__explained.context.value'), /Fixture weak signal/);
-        assert.equal(await run('window.__explained.context.value.includes("DO_NOT_SHARE")'), false);
-        assert.equal(await run('window.__explained.shareContext.checked'), false); assert.equal(await run('window.__app.jobs.size'), 0);
-        assert.equal(requests.length, requestCount);
-        await run('window.__security=window.__app.openTool("security");window.__security.report={kind:"windows",checks:[{title:"Fixture firewall finding",status:"unknown"}]};void 0;');
-        await click('window.__security.el.querySelector(".tool-title button")');
-        await until(() => run('window.__app.tabs.at(-1).toolKind==="ai"'), 'Security Explain result tab');
-        assert.match(await run('window.__app.tabs.at(-1).context.value'), /Fixture firewall finding/);
-        await run('window.__capture=window.__app.openTool("capture");window.__capture.statsEl.textContent="Fixture packet statistics: 12 packets";window.__capture.sideBody.textContent="Fixture retransmission observation";window.__capture.packets=[{data:"PRIVATE_PACKET_BYTES_MUST_NOT_BE_READ"}];void 0;');
-        assert.equal(await run('window.__capture.el.querySelectorAll("button[title]").length>0'), true);
-        const captureExplain = 'Array.from(window.__capture.el.querySelectorAll("button")).find(el=>el.textContent.includes("Explain with AI"))';
-        await click(captureExplain);
-        await until(() => run('window.__app.tabs.at(-1).toolKind==="ai"'), 'Packet Capture Explain result tab');
-        assert.match(await run('window.__app.tabs.at(-1).context.value'), /Fixture packet statistics/);
-        assert.equal(await run('window.__app.tabs.at(-1).context.value.includes("PRIVATE_PACKET_BYTES_MUST_NOT_BE_READ")'), false);
-        assert.equal(requests.length, requestCount); assert.equal(await run('window.__app.jobs.size'), 0);
+        // Supported tools now attach explicitly selected evidence to Copilot.
+        // Standalone AI provider/draft coverage above remains independent.
+        const attachEvidence = async (tab, label, kind, count) => {
+          await click(`window.${tab}.el.querySelector('[aria-label="Ask Copilot about this evidence"]')`);
+          assert.equal(requests.length, requestCount, 'opening an evidence chooser must not send anything');
+          await click(`Array.from(document.querySelectorAll('.ctx .item')).find(el=>el.textContent.trim()===${JSON.stringify(label)})`);
+          await until(() => run(`window.__app.copilot?.conversation?.attachments.length===${count} && !window.__app.copilot.busy && window.__app.tabs.includes(window.__app.copilot.panel)`), 'explicit ' + kind + ' attachment');
+          const snapshot = await run('window.__app.copilot.conversation.attachments.at(-1).snapshot');
+          assert.equal(snapshot.kind, kind); assert.equal(snapshot.source.tabId, await run(`window.${tab}.id`));
+          assert.equal(requests.length, requestCount); assert.equal(await run('window.__app.jobs.size'), 0);
+          assert.equal(await run('window.__app.copilot.prepared'), null);
+          return snapshot;
+        };
+        await run('window.__wifi=window.__app.openTool("wifi");window.__wifi.report={schemaVersion:1,kind:"wifi",collectedAt:"2026-10-23T12:00:00Z",adapters:[],networks:[],channels:[],findings:[{id:"weak",title:"Fixture weak signal",status:"warning",evidence:"Observed -75 dBm",remediation:"Check coverage"}],limitations:["Synthetic cached survey"],password:"DO_NOT_SHARE"};window.__wifi.renderReport();void 0;');
+        const wifiSnapshot = await attachEvidence('__wifi', 'Retained Wi-Fi survey', 'wifi', 1);
+        assert.match(JSON.stringify(wifiSnapshot), /Fixture weak signal/); assert.ok(!JSON.stringify(wifiSnapshot).includes('DO_NOT_SHARE'));
+        await run('window.__security=window.__app.openTool("security");window.__security.report={schemaVersion:1,kind:"windows",title:"Fixture assessment",target:"Fixture host",scannedAt:"2026-10-23T12:00:00Z",checks:[{id:"firewall",title:"Fixture firewall finding",status:"unknown",severity:"info",confidence:"low",evidence:"Unavailable",remediation:"",reference:""}],limitations:["Synthetic assessment"]};window.__security.renderReport();void 0;');
+        const securitySnapshot = await attachEvidence('__security', 'Retained assessment checks', 'security', 2);
+        assert.equal(securitySnapshot.facts.rows[0].status, 'unknown'); assert.match(JSON.stringify(securitySnapshot), /Fixture firewall finding/);
+        await run('(async()=>{window.__capture=window.__app.openTool("capture");const {createComparisonDemo}=await import("./js/capture/sample-compare.mjs");const demo=createComparisonDemo();await window.__capture.loadBytes(demo.before.bytes,demo.before.name);window.__capture.select(5);window.__capture.sideBody.append(document.createTextNode("DOM_TEXT_MUST_NOT_BE_READ"));})()');
+        const packetSnapshot = await attachEvidence('__capture', 'Selected packet · decoded fields', 'capture-packet', 3);
+        assert.equal(packetSnapshot.facts.rows[0].no, 6); assert.ok(packetSnapshot.facts.rows[0].fields['tcp.srcport']);
+        assert.ok(!JSON.stringify(packetSnapshot).includes('DOM_TEXT_MUST_NOT_BE_READ')); assert.equal(Object.hasOwn(packetSnapshot.facts.rows[0], 'data'), false);
+        await run('window.__copilotPanel=window.__app.copilot.panel;void 0;'); await close('__copilotPanel', 'Discard draft');
 
         // Re-activating another AI tab reloads the revision and invalidates previews.
         await run('window.__app.activate(window.__ai);void 0;'); await ready();
@@ -385,7 +398,7 @@ async function electronFixture() {
         assert.match(await run('window.__otherAi.libraryStatus.textContent'), /Synthetic index failure/);
         assert.equal(await run('window.__otherAi.libraryStatus.textContent.includes("Local TF-IDF vector index")'), false);
         instance.knowledge.status = realStatus;
-        console.log('AI_UI_PASS: five real provider adapters with synthetic transport, encrypted keys, offline SQLite/vector CRUD, full-source redaction, draft close/update protection, failed/cancelled work retention, escaped answers, citation reading, Explain with AI, 900x560 layout, revision refresh and cancellation');
+        console.log('AI_UI_PASS: five real provider adapters with synthetic transport, encrypted keys, offline SQLite/vector CRUD, full-source redaction, draft close/update protection, failed/cancelled work retention, escaped answers, citation reading, explicit Copilot evidence routing, 900x560 layout, revision refresh and cancellation');
         finish(0);
       } catch (error) { finish(1, error); }
     });

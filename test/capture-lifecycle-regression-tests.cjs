@@ -7,6 +7,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 const pipe = require('../src/main/capture/pipe');
+let TrafficEvidenceOwner;
 
 const deferred = () => {
   let resolve, reject;
@@ -56,7 +57,7 @@ function renderer(api, globals = {}) {
   }, { filename });
   const tab = Object.create(module.exports.prototype);
   Object.assign(tab, {
-    id: 'capture', state: 'running', acceptLivePackets: true, packets: [], view: [],
+    id: 'capture', kind: 'capture', state: 'running', acceptLivePackets: true, packets: [], view: [],
     app: { setTabTitle() {} }, status: { available: true },
     ifaceSel: { value: 'test' }, bpf: { value: '' }, selectedDevice: () => ({ engine: 'npcap' }),
     statsEl: {}, notice: { classList: { add() {} } },
@@ -65,12 +66,14 @@ function renderer(api, globals = {}) {
     ingest(items) { this.packets.push(...items.map((item) => item.data[0])); },
     refreshSide() {}, renderStats() {},
   });
+  tab.copilot = new TrafficEvidenceOwner(tab);
   return tab;
 }
 
 const batch = (byte) => ({ buf: new Uint8Array([byte]).buffer, meta: new Float64Array([0, 1, 1, 0]).buffer });
 
 async function runCaptureLifecycleRegressionTests(test) {
+  ({ TrafficEvidenceOwner } = await import('../src/renderer/js/copilot-traffic.mjs'));
   console.log('packet capture: lifecycle regressions');
   await test('Npcap stop drains the final batch and waits for worker exit', async () => {
     const { manager, workers, events } = nativeManager();

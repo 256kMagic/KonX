@@ -1,3 +1,4 @@
+import { installTrafficContext, trafficCopilotButton } from './copilot-traffic-ui.js';
 import { h, icon, api, toast, errMsg, fmtBytes, confirmDialog } from './ui.js';
 
 const time = (value) => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : 'Unknown';
@@ -9,6 +10,7 @@ export class RemoteCaptureTab {
     this.app = app; this.kind = 'tool'; this.toolKind = 'remote-capture'; this.title = 'Remote Capture'; this.icon = 'capture';
     this.id = 'remote-capture-' + Math.random().toString(36).slice(2); this.state = 'idle'; this.disposed = false;
     this.jobId = null; this.seq = 0; this.requestSeq = 0; this.connectionSeq = 0; this.busy = false; this.report = null; this.connections = [];
+    installTrafficContext(this);
     this.connection = h('select.input', { 'aria-label': 'Connected SSH capture session', onchange: () => this.updateButtons() }, h('option', { value: '' }, 'Choose a connected SSH session'));
     this.refreshButton = h('button.btn', { onclick: () => this.refreshConnections() }, icon('refresh'), 'Refresh sessions');
     this.terminalButton = h('button.btn', { disabled: true, onclick: () => this.openTerminal() }, icon('terminal'), 'Open terminal');
@@ -32,7 +34,7 @@ export class RemoteCaptureTab {
       h('details.remote-capture-requirements', h('summary', 'Remote requirements and collection scope'), h('p', 'The selected Linux host needs tcpdump, GNU timeout and existing capture permission for the connected account. Starting runs a bounded capture command; KonX does not install tools or request sudo.'),
         h('p', 'Traffic is streamed through SSH into a local capture, up to 64 MiB. Stop signals the capture channel. The existing SSH terminal remains available.'),
         h('p', 'Use a duration and packet limit appropriate for the traffic you are authorized to collect. Capture results describe this observation point, not all network traffic.')),
-      h('div.remote-capture-actions', this.startButton, this.stopButton, this.openButton, this.exportButton, this.deleteButton), this.status), this.content);
+      h('div.remote-capture-actions', trafficCopilotButton(this), this.startButton, this.stopButton, this.openButton, this.exportButton, this.deleteButton), this.status), this.content);
     this.ready = this.refreshConnections(params.connectionId);
   }
   field(label, input) { return h('label.field', h('span', label), input); }
@@ -100,6 +102,7 @@ export class RemoteCaptureTab {
     }
   }
   renderReport() {
+    this.copilot.acceptReport(this.report);
     const report = this.report; if (!report) return;
     this.summary.replaceChildren(h('h3', 'Last retained capture'),
       metadata([['Host', report.host], ['Interface', report.interface], ['Capture filter', report.filter || 'All packets visible on the selected interface'],

@@ -36,7 +36,7 @@ const messageLabel = (message) => message.type === 'response'
   : message.method || message.startLine || 'Unknown SIP message';
 
 /** Display only the supplied capture snapshot. Captured text is never markup. */
-export async function showSipCalls(analysis, { onExportCall, onExportReport, initialCallKey = null, allowMedia = false } = {}) {
+export async function showSipCalls(analysis, { onExportCall, onExportReport, initialCallKey = null, allowMedia = false, allowCopilot = false } = {}) {
   let close;
   let alive = true;
   let exporting = false;
@@ -59,6 +59,7 @@ export async function showSipCalls(analysis, { onExportCall, onExportReport, ini
   const ladder = h('div.sip-ladder-scroll');
   const detail = h('div.sip-message-detail', { 'aria-live': 'polite' });
   const count = h('span.hint');
+  const copilotButton = h('button.btn.sm', { disabled: !selectedCall, onclick: () => close({ action: 'copilot', call: selectedCall }) }, 'Ask Copilot about this call');
   const search = h('input.input', {
     type: 'search', placeholder: 'Search Call-ID, parties, outcome, or method',
     'aria-label': 'Search SIP calls',
@@ -87,6 +88,7 @@ export async function showSipCalls(analysis, { onExportCall, onExportReport, ini
   }
   function chooseCall(call) {
     selectedCall = call;
+    copilotButton.disabled = !call;
     messagePage = 0; endpointPage = 0; selectedIndex = 0; mediaPage = 0; framePage = 0;
     focusedEndpoints = null;
     endpoints = call ? [...new Set(call.messages.flatMap((message) => [source(message), destination(message)]))] : [];
@@ -300,7 +302,7 @@ export async function showSipCalls(analysis, { onExportCall, onExportReport, ini
   const body = h('div.sip-workspace',
     h('div.hint', 'Captured traffic snapshot. Outcomes and timing describe observed signaling; missing packets can leave call state unknown.'),
     warningList([...(analysis.warnings || []), ...(analysis.limited ? ['Analysis limits were reached. Additional SIP traffic may be omitted.'] : [])]),
-    h('div.sip-toolbar', search, count),
+    h('div.sip-toolbar', search, count, allowCopilot ? copilotButton : null),
     h('div.sip-columns',
       h('div.sip-call-panel', list, listPager),
       h('div.sip-investigation', callSummary, ladderPager, endpointPager, ladder, detail)));
