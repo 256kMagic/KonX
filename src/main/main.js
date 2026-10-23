@@ -76,7 +76,7 @@ let toolsShuttingDown = false;
 let ownedConnectionQuitApproved = false;
 
 function ownedToolJobs() { return [...toolJobs.values()].filter(signal => ['remote-capture', 'runbook', 'events', 'copilot'].includes(signal.kind)); }
-function hasToolOwnership() { return remoteReservations > 0 || ownedToolJobs().length > 0 || !!remoteResults?.hasOpenHandles || !!remoteCapture.hasPendingCleanup || !!runbookStore?.hasOwnership || !!sites?.hasOwnership || !!events?.hasOwnership || !!changes?.hasOwnership || !!copilot?.hasOwnership; }
+function hasToolOwnership() { return remoteReservations > 0 || ownedToolJobs().length > 0 || !!remoteResults?.hasOpenHandles || !!remoteCapture.hasPendingCleanup || !!runbookStore?.hasOwnership || !!sites?.hasOwnership || !!events?.hasOwnership || !!changes?.hasOwnership || !!incidents?.hasOwnership || !!copilot?.hasOwnership; }
 function hasSerialOwnership() { return !!connections?.hasSerialOwnership; }
 function hasPopoutOwnership() { return !!workspaceWindows?.hasOwnership; }
 function dialogOwner() { return workspaceWindows?.dialogOwner() || (win && !win.isDestroyed() ? win : undefined); }
@@ -474,30 +474,37 @@ function registerIpc() {
     return runbookStore.exportFile(id, result.filePath);
   }));
   handle('tools:snapshotSave', (params) => snapshots.save(params));
-  handle('tools:incidentCreate', (params) => incidents.create(params));
-  handle('tools:incidentList', () => incidents.list());
-  handle('tools:incidentGet', (id) => incidents.get(id));
-  handle('tools:incidentRemove', (id) => incidents.remove(id));
-  handle('tools:incidentAddText', (id, params) => incidents.addText(id, params));
-  handle('tools:incidentAddCapture', (id, params) => incidents.addBytes(id, { ...params, kind: 'capture' }));
-  handle('tools:incidentCapture', (id, evidenceId) => incidents.readCapture(id, evidenceId));
-  handle('tools:incidentImport', async (id, params) => {
+  const requireIncidentReady = () => {
+    if (toolsShuttingDown || updateShutdownPending || !win || win.isDestroyed()) throw new Error('KonX is closing. Wait before using incident evidence.');
+  };
+  const incidentOperation = operation => (...args) => { requireIncidentReady(); return operation(...args); };
+  handle('tools:incidentCreate', incidentOperation((params) => incidents.create(params)));
+  handle('tools:incidentList', incidentOperation(() => incidents.list()));
+  handle('tools:incidentGet', incidentOperation((id) => incidents.get(id)));
+  handle('tools:incidentRemove', incidentOperation((id) => incidents.remove(id)));
+  handle('tools:incidentAddText', incidentOperation((id, params) => incidents.addText(id, params)));
+  handle('tools:incidentAddCapture', incidentOperation((id, params) => incidents.addBytes(id, { ...params, kind: 'capture' })));
+  handle('tools:incidentCapture', incidentOperation((id, evidenceId) => incidents.readCapture(id, evidenceId)));
+  handle('tools:incidentImport', incidentOperation(async (id, params) => {
     if (!['capture', 'terminal', 'tool', 'syslog', 'other'].includes(params?.kind)) throw new Error('Choose a supported evidence type.');
     await incidents.get(id);
+    requireIncidentReady();
     const result = await dialog.showOpenDialog(dialogOwner(), { title: 'Add incident evidence', properties: ['openFile'],
       filters: params.kind === 'capture' ? [{ name: 'Packet captures', extensions: ['pcap', 'pcapng', 'cap'] }] : [{ name: 'Evidence files', extensions: ['*'] }] });
     if (result.canceled || !result.filePaths[0]) return null;
+    requireIncidentReady();
     return incidents.addFile(id, { ...params, sourcePath: result.filePaths[0] });
-  });
-  handle('tools:incidentExport', async (id, format) => {
+  }));
+  handle('tools:incidentExport', incidentOperation(async (id, format) => {
     if (!['html', 'json'].includes(format)) throw new Error('Choose HTML or JSON incident export.');
     const content = format === 'html' ? await incidents.exportHtml(id) : await incidents.exportJson(id);
+    requireIncidentReady();
     const result = await dialog.showSaveDialog(dialogOwner(), { title: 'Export incident report', defaultPath: `konx-incident.${format}`,
       filters: [{ name: format === 'html' ? 'HTML report' : 'JSON report', extensions: [format] }] });
     if (result.canceled || !result.filePath) return null;
-    await fs.promises.writeFile(result.filePath, content, 'utf8');
-    return result.filePath;
-  });
+    requireIncidentReady();
+    return incidents.writeExport(result.filePath, content);
+  }));
   handle('tools:snapshotList', () => snapshots.list());
   handle('tools:snapshotGet', (id) => snapshots.get(id));
   handle('tools:snapshotRemove', (id) => snapshots.remove(id));
@@ -725,6 +732,7 @@ app.whenReady().then(() => {
       if (runbookStore.hasPendingCleanup) reasons.push('Quit KonX to retry pending runbook file cleanup before updating.');
       if (events.hasOwnership) reasons.push('Stop event listeners and retry pending socket cleanup before updating.');
       if (changes.hasOwnership) reasons.push('Wait for change validation operations or quit KonX to retry pending file cleanup before updating.');
+      if (incidents.hasOwnership) reasons.push('Wait for incident evidence operations or quit KonX to retry pending file cleanup before updating.');
       if (sites.hasOwnership) reasons.push('Wait for saved workspace operations or quit KonX to retry pending file cleanup before updating.');
       if (pendingPrompts.size) reasons.push('Finish the open connection prompts before updating.');
       if (knowledge.busy) reasons.push('Wait for the knowledge library to finish its current operation.');
@@ -778,13 +786,14 @@ app.on('before-quit', (event) => {
     const cleanupErrors = [];
     const popoutError = await popoutCleanup;
     if (popoutError) cleanupErrors.push(popoutError);
-    for (const cleanup of [() => remoteCapture.closePending(), () => remoteResults?.close(), () => runbookStore?.close(), () => sites?.close(), () => events?.close(), () => changes?.close(), () => copilot?.close(),
+    for (const cleanup of [() => remoteCapture.closePending(), () => remoteResults?.close(), () => runbookStore?.close(), () => sites?.close(), () => events?.close(), () => changes?.close(), () => incidents?.close(), () => copilot?.close(),
       () => hasSerialOwnership() ? connections.waitForSerialCleanup() : undefined]) {
       try { await cleanup(); } catch (error) { cleanupErrors.push(error.message); }
     }
     if (remoteResults?.hasOpenHandles || remoteCapture.hasPendingCleanup || runbookStore?.hasOwnership) cleanupErrors.push('Capture or runbook resources still require cleanup.');
     if (events?.hasOwnership) cleanupErrors.push('Event listener sockets still require cleanup.');
     if (changes?.hasOwnership) cleanupErrors.push('Change validation resources still require cleanup.');
+    if (incidents?.hasOwnership) cleanupErrors.push('Incident evidence resources still require cleanup.');
     if (sites?.hasOwnership) cleanupErrors.push('Saved workspace resources still require cleanup.');
     if (copilot?.hasOwnership) cleanupErrors.push('Copilot resources still require cleanup.');
     if (hasSerialOwnership()) cleanupErrors.push('Serial port resources still require cleanup.');

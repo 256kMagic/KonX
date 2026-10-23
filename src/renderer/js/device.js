@@ -1,3 +1,4 @@
+import { installInvestigationContext, investigationChanged } from './copilot-investigations.mjs';
 import { h, icon, api, DataTable, toast, errMsg, promptText } from './ui.js';
 
 const shown = (value) => value == null || value === '' ? 'Unknown' : Array.isArray(value) ? value.join(', ') : String(value);
@@ -68,7 +69,7 @@ export class DeviceTab {
       h('label.device-connection', this.includeConfig, 'Include configuration and routes'),
       h('p.hint', 'Running configuration can contain credentials. Snapshot files and exports retain the captured configuration locally.'),
       this.status, this.connectionDetails), this.content);
-    this.createTable(); this.updateButtons(); this.ready = this.refreshConnections();
+    installInvestigationContext(this); this.createTable(); this.updateButtons(); this.ready = this.refreshConnections();
   }
 
   async refreshConnections() {
@@ -162,7 +163,7 @@ export class DeviceTab {
   acceptReport(report) {
     if (report?.kind !== 'device' || report.schemaVersion !== 1 || !Array.isArray(report.devices) || !Array.isArray(report.limitations)) throw new Error('Invalid device report.');
     for (const device of report.devices) if (!device.facts || !Array.isArray(device.commands) || !Array.isArray(device.warnings)) throw new Error('Invalid device observations.');
-    this.report = report; this.trace = null; ++this.traceSeq; this.tracing = false;
+    this.report = report; this.trace = null; ++this.traceSeq; this.tracing = false; investigationChanged(this);
     this.traceResults.replaceChildren(); this.traceStatus.textContent = 'Search across all devices in this report.';
     this.deviceSelect.replaceChildren(...report.devices.map((device) => h('option', { value: device.id }, `${device.label || device.host || device.id} · ${device.host || 'Unknown address'}`)));
     this.heading.textContent = `${report.devices.length} device(s) · report collected ${date(report.collectedAt)}`;
@@ -235,8 +236,8 @@ export class DeviceTab {
     try {
       const result = await api.invoke('tools:deviceTrace', report.devices, this.query.value.trim());
       if (this.disposed || request !== this.traceSeq || report !== this.report) return;
-      this.trace = result; this.renderTrace(result);
-    } catch (error) { if (!this.disposed && request === this.traceSeq) { this.trace = null; this.traceResults.replaceChildren(); this.traceStatus.textContent = errMsg(error); } }
+      this.trace = result; investigationChanged(this); this.renderTrace(result);
+    } catch (error) { if (!this.disposed && request === this.traceSeq) { this.trace = null; investigationChanged(this); this.traceResults.replaceChildren(); this.traceStatus.textContent = errMsg(error); } }
     finally { if (!this.disposed && request === this.traceSeq) { this.tracing = false; this.updateButtons(); } }
   }
 

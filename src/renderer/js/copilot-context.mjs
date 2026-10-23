@@ -4,6 +4,7 @@
 export const BASIC_COPILOT_KINDS = Object.freeze(['ping', 'sweep', 'portscan', 'traceroute', 'dns', 'whois', 'subnet', 'wol', 'netinfo']);
 export const WORKSPACE_COPILOT_KINDS = Object.freeze(['terminal', 'connection', 'sftp', 'notepad']);
 export const TRAFFIC_COPILOT_KINDS = Object.freeze(["capture-packet","capture-stream","sip-call","rtp-stream","capture-compare","remote-capture","security","wifi","mist"]);
+export const INVESTIGATION_COPILOT_KINDS = Object.freeze(['device', 'snapshots', 'topology', 'events', 'sites', 'incidents', 'runbook', 'change-validation']);
 export const COPILOT_SNAPSHOT_BYTES = 64 * 1024;
 const MAX_ROWS = 200, MAX_NODES = 3500;
 const bytes = value => new TextEncoder().encode(value).length;
@@ -11,7 +12,7 @@ const frozen = value => { if (value && typeof value === 'object') { for (const c
 
 export function copilotContextSupport(tab) {
   const kind = tab?.toolKind || tab?.kind || 'unknown';
-  const supported = (kind === 'capture' || [...BASIC_COPILOT_KINDS, ...WORKSPACE_COPILOT_KINDS, ...TRAFFIC_COPILOT_KINDS].includes(kind)) && typeof tab?.captureCopilotContext === 'function';
+  const supported = (kind === 'capture' || [...BASIC_COPILOT_KINDS, ...WORKSPACE_COPILOT_KINDS, ...TRAFFIC_COPILOT_KINDS, ...INVESTIGATION_COPILOT_KINDS].includes(kind)) && typeof tab?.captureCopilotContext === 'function';
   return { supported, kind, reason: supported ? '' : 'Typed evidence for this view is not available yet. Ask a general question without attaching its data.' };
 }
 
@@ -77,7 +78,7 @@ function boundedCopy(input, budget, notices) {
 /** One owner per tool tab. Tokens prevent late one-shot replies replacing a new run. */
 export class EvidenceContext {
   constructor(kind, tabId, title, { now = () => new Date().toISOString(), onChange = () => {} } = {}) {
-    if (![...BASIC_COPILOT_KINDS, ...WORKSPACE_COPILOT_KINDS, ...TRAFFIC_COPILOT_KINDS].includes(kind)) throw new Error('Unsupported evidence context');
+    if (![...BASIC_COPILOT_KINDS, ...WORKSPACE_COPILOT_KINDS, ...TRAFFIC_COPILOT_KINDS, ...INVESTIGATION_COPILOT_KINDS].includes(kind)) throw new Error('Unsupported evidence context');
     this.kind = kind; this.tabId = tabId; this.title = title; this.now = now; this.onChange = onChange;
     this.revision = 0; this.sequence = 0; this.runId = null; this.state = 'idle'; this.inputs = {};
     this.startedAt = null; this.updatedAt = null; this.completedAt = null; this.error = null; this.inputOmissions = [];

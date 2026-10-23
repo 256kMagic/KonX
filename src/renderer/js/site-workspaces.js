@@ -1,3 +1,4 @@
+import { installInvestigationContext, investigationChanged } from './copilot-investigations.mjs';
 import { h, icon, api, modal, toast, errMsg } from './ui.js';
 import { APP_LAYOUTS } from './workspace-layouts.mjs';
 import { normalizeWorkspaceGeometry, contractFloatBounds, expandFloatBounds } from './workspace-panels-model.mjs';
@@ -177,14 +178,14 @@ export class SiteWorkspacesTab {
         this.button('duplicate', 'Duplicate', () => this.duplicate()), this.button('import', 'Import', () => this.import()),
         this.button('export', 'Export', () => this.export()), this.button('delete', 'Delete', () => this.remove()), this.button('refresh', 'Refresh', () => this.refresh())), this.status),
       h('div.site-columns', h('aside', this.search, this.list), this.editor));
-    this.renderDraft(); this.ready = this.refresh(params.workspaceId);
+    installInvestigationContext(this); this.renderDraft(); this.ready = this.refresh(params.workspaceId);
   }
   button(action, label, handler, primary = false) {
     const button = h('button.btn', { class: primary ? 'primary' : '', 'data-site-action': action, onclick: handler }, label);
     this.buttons.set(action, button); return button;
   }
   isDirty() { return JSON.stringify(fields(this.draft)) !== this.baseline; }
-  changed() { this.updateButtons(); this.app.updateStatus(this); }
+  changed() { investigationChanged(this); this.updateButtons(); this.app.updateStatus(this); }
   updateButtons() {
     const blocked = this.busy || this.prompting;
     for (const button of this.el?.querySelectorAll('button') || []) button.disabled = blocked;
@@ -223,7 +224,7 @@ export class SiteWorkspacesTab {
     if (id && !this.disposed) await this.select(id);
   }
   accept(record) {
-    this.saved = copy(record); this.draft = fields(record); this.baseline = JSON.stringify(this.draft);
+    this.saved = copy(record); this.draft = fields(record); this.baseline = JSON.stringify(this.draft); investigationChanged(this);
     const index = this.workspaces.findIndex(w => w.id === record.id); if (index < 0) this.workspaces.unshift(record); else this.workspaces[index] = record;
     this.renderDraft(); this.renderList();
   }
@@ -233,7 +234,7 @@ export class SiteWorkspacesTab {
   }
   async newWorkspace(capture = false) {
     if (this.busy || this.disposed || !await this.discardChanges() || this.disposed) return;
-    this.saved = null; this.draft = empty(); this.baseline = JSON.stringify(this.draft);
+    this.saved = null; this.draft = empty(); this.baseline = JSON.stringify(this.draft); investigationChanged(this);
     if (capture) { this.draft.name = 'New site workspace'; this.captureLayout(); }
     this.renderDraft(); this.renderList(); this.name.focus();
   }
@@ -334,7 +335,7 @@ export class SiteWorkspacesTab {
     const id = this.saved.id;
     if (!await this.confirm('Delete this saved workspace definition? Existing sessions, captures, incidents and open tabs are kept.', { title: 'Delete workspace', okLabel: 'Delete workspace', danger: true }) || this.disposed) return;
     await this.request(() => api.invoke('tools:siteRemove', id), () => {
-      this.workspaces = this.workspaces.filter(w => w.id !== id); this.saved = null; this.draft = empty(); this.baseline = JSON.stringify(fields(this.draft)); this.renderDraft(); this.renderList(); this.status.textContent = 'Workspace definition deleted. Referenced data and open tabs were kept.';
+      this.workspaces = this.workspaces.filter(w => w.id !== id); this.saved = null; this.draft = empty(); this.baseline = JSON.stringify(fields(this.draft)); investigationChanged(this); this.renderDraft(); this.renderList(); this.status.textContent = 'Workspace definition deleted. Referenced data and open tabs were kept.';
     }, 'Deleting workspace definition…');
   }
   updateBlockers() { return [...(this.busy || this.prompting ? ['Wait for the saved workspace operation.'] : []), ...(this.isDirty() ? ['Save or discard the unsaved workspace definition.'] : [])]; }

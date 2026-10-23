@@ -480,6 +480,8 @@ const fakeCrypt = {
   await require('./copilot-ui-tests.cjs').runCopilotUiTests(test);
   await require('./copilot-workspace-tests.cjs').runCopilotWorkspaceTests(test);
   await require('./copilot-traffic-tests.cjs').runCopilotTrafficTests(test);
+  await require('./copilot-investigation-tests.cjs').runCopilotInvestigationTests(test);
+  await require('./atomic-evidence-tests.cjs').runAtomicEvidenceTests(test);
   await require('./theme-tests.cjs').runThemeTests(test);
   await require('./theme-ui-tests.cjs').runThemeUiTests(test);
   await require('./updater-tests.cjs').runUpdaterTests(test);

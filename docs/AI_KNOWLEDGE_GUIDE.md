@@ -1,6 +1,6 @@
 # AI & Knowledge
 
-This guide covers AI & Knowledge in KonX 0.25.0. Open **AI & Knowledge** from Home, the sidebar, or Network Tools. The assistant explains findings, terminology, and possible next steps. It does not run commands or tools, change device settings, or connect to sessions on your behalf.
+This guide covers AI & Knowledge in KonX 0.26.0. Open **AI & Knowledge** from Home, the sidebar, or Network Tools. The assistant explains findings, terminology, and possible next steps. It does not run commands or tools, change device settings, or connect to sessions on your behalf.
 
 The new [Copilot](COPILOT.md) keeps conversations beside supported tools and previews the complete outbound request. **AI & Knowledge** remains the place to configure providers and manage the offline reference library. Its existing standalone assistant remains available.
 
@@ -24,11 +24,13 @@ Nyquest personal API keys carry the account's privileges, as described in its [P
 
 ## Ask about tools and results
 
-1. Run a KonX tool and review its results.
-2. Choose **Explain with AI** in that tool's heading. This prepares a bounded snapshot in a new AI tab; it does not contact a provider. Packet-capture snapshots use displayed statistics and analysis, not raw packet bytes. Saved sessions and editor documents are not gathered.
-3. Edit the question. Open **Optional context**, choose **Preview context**, and review the redacted text. Select **Send this context** if you want it included. Editing the context invalidates the preview and clears that selection.
-4. Choose **Ask AI**. Your question and up to five matching local reference excerpts are sent to the selected provider. Optional tool context is included only when selected. Hostnames, addresses, and other operational details can remain in a preview; remove anything you do not want to send.
-5. Read the answer alongside its reference list. Open a referenced article to inspect the guidance. **Open source** opens its HTTPS documentation link in your browser. References indicate the context supplied to the model; they are not independent verification that every generated claim is correct.
+1. Review the existing result, terminal selection or editor document in its normal view.
+2. Choose **Ask Copilot** (or an existing **Explain with AI** entry point). Basic tool results attach directly; views with several evidence types offer **Attach from current view** choices. Opening the panel alone does not gather data or contact a provider.
+3. Inspect the retained evidence and omission notices. Select the attachments and completed turns to include, enter your question, and opt into local knowledge references if useful.
+4. Choose **Prepare request** and inspect the destination, model and complete request. Choose **Send reviewed request** to send exactly that prepared request. Changes require a fresh review.
+5. Read the answer alongside its source references and original tool evidence. References show the material supplied to the model; they do not independently verify generated claims. See the [Copilot guide](COPILOT.md) for each tool's evidence choices and storage limits.
+
+The standalone assistant in **AI & Knowledge** still supports **Optional context → Preview context → Send this context**, followed by **Ask AI**. Each standalone question is independent, with up to five matching library excerpts; its open-tab answers are not saved as Copilot conversations. Library **Ask about this** prepares the selected article for this standalone flow. Hostnames, addresses and other operational details can remain in previews; remove anything you do not want to send.
 
 Recognized credentials and saved AI keys are redacted from previews, requests, reference excerpts, and answers. Redaction is best effort. Provider responses and library articles are displayed as text. Instructions embedded in reports or reference notes are treated as evidence rather than instructions to run commands. AI recommendations still need review against the actual device model, software version, permissions, and evidence.
 
@@ -54,7 +56,7 @@ The library uses a real local SQLite database at `%APPDATA%\KonX\knowledge\libra
 
 Retrieval uses **local TF-IDF cosine vectors**, with limited terminology expansion. This is word-based vector retrieval, not neural semantic embeddings. It requires no embedding API key, model download, separate database server, or background cloud traffic. Queries retrieve relevant excerpts for the assistant; an answer without local matches is marked as relying on the model's general knowledge. As the library grows, neural embeddings and a larger-scale vector index can be added without changing the user-facing library workflow.
 
-AI connection settings are in `%APPDATA%\KonX\ai.json`. Library notes and the index stay local unless relevant excerpts are sent in an explicit **Ask AI** request. KonX does not automatically index sessions, terminal output, captures, editor files, Mist credentials, or diagnostic logs. AI questions and answers are held in the open tab and are not saved as a conversation history.
+AI connection settings are in `%APPDATA%\KonX\ai.json`. Library notes and the index stay local unless relevant excerpts are included in an explicit request. KonX does not automatically index sessions, terminal output, captures, editor files, Mist credentials, or diagnostic logs. Standalone AI questions and answers are held in the open tab. Copilot separately saves local conversations, explicitly attached evidence, exact reviewed requests and completed answers.
 
 ## Troubleshooting
 

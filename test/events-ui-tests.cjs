@@ -111,6 +111,7 @@ async function fixture() {
   app.setPath('userData', path.join(root, 'profile'));
   const js = path.join(root, 'js'); fs.mkdirSync(js);
   fs.copyFileSync(path.join(repo, 'src/renderer/js/ui.js'), path.join(js, 'ui.js')); fs.copyFileSync(own('src/renderer/js/events.js'), path.join(js, 'events.js'));
+  for (const file of ['copilot-context.mjs', 'copilot-investigations.mjs']) fs.copyFileSync(path.join(repo, 'src/renderer/js', file), path.join(js, file));
   fs.copyFileSync(own('src/renderer/css/events.css'), path.join(root, 'events.css'));
   fs.copyFileSync(path.join(repo, 'src/renderer/styles.css'), path.join(root, 'styles.css'));
   fs.writeFileSync(path.join(root, 'preload.cjs'), `const{contextBridge,ipcRenderer}=require('electron');contextBridge.exposeInMainWorld('api',{invoke:(...args)=>ipcRenderer.invoke('events-fixture',...args),on:(channel,fn)=>ipcRenderer.on(channel,(_e,...args)=>fn(...args))});`);

@@ -8,6 +8,7 @@ const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 const { createRequire } = require('node:module');
 
+const REPO = path.resolve(__dirname, '..');
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 function deferred() {
   let resolve, reject;
@@ -22,7 +23,7 @@ function cancellableEvent() {
 // IPC/window/application lifecycle handlers. Only Electron and external-resource
 // owners are replaced. No app, network request, filesystem write or installer runs.
 function fixture() {
-  const filename = path.join(__dirname, '../src/main/main.js');
+  const filename = path.join(REPO, 'src/main/main.js');
   const load = createRequire(filename), handlers = new Map(), sendHandlers = new Map(), calls = [], sent = [];
   const behavior = { cancel: async () => {}, getReady: async () => ({ version: '0.7.0', mode: 'installed' }) };
   let ready, window, manager, promptChoice = 0;
@@ -30,7 +31,7 @@ function fixture() {
   app.isPackaged = true; app.exited = false; app.quitRequests = 0;
   app.whenReady = () => ({ then(fn) { ready = fn; } });
   app.getPath = (name) => path.join(os.tmpdir(), 'konx-update-lifecycle-no-files', name);
-  app.getAppPath = () => path.dirname(path.dirname(__dirname));
+  app.getAppPath = () => REPO;
   app.setPath = () => {};
   app.quit = () => {
     app.quitRequests++;
@@ -87,6 +88,9 @@ function fixture() {
     close: async () => { runbook.hasOwnership = false; runbook.hasPendingCleanup = false; },
   };
   const dialogs = { open: async () => ({ canceled: true, filePaths: [] }), save: async () => ({ canceled: true }) };
+  const incidents = { hasOwnership: false, list: async () => ({ incidents: [], issues: [] }), get: async id => ({ id }), create: async params => ({ id: 'incident-fixture', ...params }),
+    addText: async () => {}, addBytes: async () => {}, addFile: async () => { calls.push('add-incident-file'); }, readCapture: async () => {}, remove: async () => {},
+    exportJson: async () => '{}', exportHtml: async () => '<html></html>', writeExport: async file => { calls.push('write-incident-export'); return file; }, close: async () => { incidents.hasOwnership = false; } };
   const sites = { hasOwnership: false, close: async () => { sites.hasOwnership = false; } };
   const events = { hasOwnership: false, run: async () => {}, list: () => ({ listeners: [] }), close: async () => { events.hasOwnership = false; } };
   const changes = { hasOwnership: false, hasPendingCleanup: false,
@@ -109,7 +113,7 @@ function fixture() {
     './capture': { CaptureManager: class { constructor() { return capture; } } },
     './knowledge': { KnowledgeLibrary: class { constructor() { return knowledge; } } },
     './device-snapshots': { SnapshotStore: class {} },
-    './incidents': { IncidentStore: class {} },
+    './incidents': { IncidentStore: class { constructor() { return incidents; } } },
     './site-workspaces': { SiteWorkspaceStore: class { constructor() { return sites; } } },
     './site-workspace-ipc': load('./site-workspace-ipc'),
     './topology-ipc': load('./topology-ipc'),
@@ -168,6 +172,7 @@ function fixture() {
         ipcMain: { handle: (name, callback) => handlers.set(name, callback), on: (name, callback) => sendHandlers.set(name, callback) },
       };
       if (Object.hasOwn(modules, name)) return modules[name];
+      if (name === 'fs') return { ...fs, promises: { ...fs.promises, writeFile: async () => { calls.push('write-incident-export'); } } };
       if (name.startsWith('./')) return {};
       if (name === 'child_process') return { execFile() { throw new Error('No subprocess permitted'); }, spawn() { throw new Error('No subprocess permitted'); } };
       return load(name);
@@ -176,7 +181,7 @@ function fixture() {
   vm.runInContext(fs.readFileSync(filename, 'utf8'), context, { filename });
   ready();
   return {
-    app, calls, sent, manager, behavior, handoff, connections, remote, runbook, sites, events, changes, copilot, dialogs,
+    app, calls, sent, manager, behavior, handoff, connections, remote, runbook, sites, events, changes, copilot, incidents, dialogs,
     get jobs() { return vm.runInContext('toolJobs', context); },
     get controller() { return vm.runInContext('updates', context); },
     get window() { return window; },
@@ -194,6 +199,61 @@ function fixture() {
 }
 
 async function runUpdateLifecycleTests(test) {
+  await test('incident lifecycle: final export write remains owned after the file dialog and quit waits for completion', async () => {
+    const f = fixture(), writing = deferred(); let prepared;
+    f.incidents.exportJson = async () => 'Exact prepared incident export';
+    f.dialogs.save = async () => ({ canceled: false, filePath: 'C:/Synthetic/report.json' });
+    f.incidents.writeExport = async (file, content) => { prepared = content; f.incidents.hasOwnership = true; await writing.promise; f.incidents.hasOwnership = false; return file; };
+    f.incidents.close = async () => { await writing.promise; f.incidents.hasOwnership = false; };
+    const exporting = f.invoke('tools:incidentExport', 'fixture-id', 'json'); await tick(); assert.equal(prepared, 'Exact prepared incident export');
+    f.app.quit(); await tick(); assert.equal(f.app.exited, false); assert.equal(f.incidents.hasOwnership, true);
+    writing.resolve(); assert.equal(await exporting, 'C:/Synthetic/report.json'); await tick(); await tick(); assert.equal(f.app.exited, true);
+  });
+  await test('incident lifecycle: active read or retained file ownership blocks installation and primary-frame admission is enforced', async () => {
+    const f = fixture(); f.incidents.hasOwnership = true;
+    await assert.rejects(f.invoke('app:updateInstall'), /incident/i); assert.ok(!f.calls.includes('launch-helper'));
+    assert.throws(() => f.invokeFrom({ sender: {}, senderFrame: {} }, 'tools:incidentList'), /primary/);
+  });
+  await test('incident lifecycle: quit drains workflow users before incident cleanup and rejects later evidence IPC', async () => {
+    const f = fixture(), reading = deferred(), order = []; let reads = 0;
+    f.incidents.get = async id => { reads++; f.incidents.hasOwnership = true; await reading.promise; return { id }; };
+    f.changes.close = async () => { order.push('changes'); };
+    f.incidents.close = async () => { order.push('incidents'); await reading.promise; f.incidents.hasOwnership = false; };
+    const pending = f.invoke('tools:incidentGet', 'fixture-id'); await tick(); f.app.quit(); await tick();
+    assert.equal(f.app.exited, false); assert.deepEqual(order, ['changes', 'incidents']);
+    for (const [channel, args] of [['Create', [{}]], ['List', []], ['Get', ['fixture-id']], ['Remove', ['fixture-id']], ['AddText', ['fixture-id', {}]], ['AddCapture', ['fixture-id', {}]], ['Capture', ['fixture-id', 'evidence-id']], ['Import', ['fixture-id', { kind: 'tool' }]], ['Export', ['fixture-id', 'json']]]) {
+      await assert.rejects(async () => f.invoke('tools:incident' + channel, ...args), /closing/i);
+    }
+    assert.equal(reads, 1); reading.resolve(); assert.deepEqual(await pending, { id: 'fixture-id' }); await tick(); await tick(); assert.equal(f.app.exited, true);
+  });
+  await test('incident lifecycle: failed or incomplete close retains the app and permits cleanup retry', async () => {
+    for (const rejects of [false, true]) {
+      const f = fixture(); f.incidents.hasOwnership = true;
+      f.incidents.close = async () => { if (rejects) throw new Error('Synthetic incident cleanup failure'); };
+      f.app.quit(); await tick(); assert.equal(f.app.exited, false); assert.ok(f.calls.includes('shutdown-error'));
+      assert.deepEqual(await f.invoke('tools:incidentList'), { incidents: [], issues: [] });
+      f.incidents.close = async () => { f.incidents.hasOwnership = false; }; f.app.quit(); await tick(); assert.equal(f.app.exited, true);
+    }
+  });
+  await test('incident lifecycle: import/export recheck shutdown before and after native file dialogs', async () => {
+    for (const format of ['import', 'export']) for (const stage of ['reading', 'dialog']) {
+      const f = fixture(), read = deferred(), dialog = deferred(), closing = deferred(); let dialogs = 0;
+      if (format === 'import') {
+        f.incidents.get = async () => { if (stage === 'reading') await read.promise; return { id: 'fixture-id' }; };
+        f.dialogs.open = async () => { dialogs++; return dialog.promise; };
+      } else {
+        f.incidents.exportJson = async () => { if (stage === 'reading') await read.promise; return '{}'; };
+        f.dialogs.save = async () => { dialogs++; return dialog.promise; };
+      }
+      const pending = f.invoke(format === 'import' ? 'tools:incidentImport' : 'tools:incidentExport', 'fixture-id', format === 'import' ? { kind: 'tool' } : 'json');
+      await tick(); f.incidents.hasOwnership = true; f.incidents.close = async () => { await closing.promise; f.incidents.hasOwnership = false; }; f.app.quit(); await tick();
+      if (stage === 'reading') read.resolve();
+      else dialog.resolve(format === 'import' ? { canceled: false, filePaths: ['C:/Synthetic/evidence.json'] } : { canceled: false, filePath: 'C:/Synthetic/report.json' });
+      await assert.rejects(pending, /closing/i); assert.equal(dialogs, stage === 'reading' ? 0 : 1);
+      assert.ok(!f.calls.includes('add-incident-file') && !f.calls.includes('write-incident-export'));
+      closing.resolve(); await tick(); await tick(); assert.equal(f.app.exited, true);
+    }
+  });
   await test('Copilot lifecycle: owned finalization blocks update and quit until persisted, rejects late admission', async () => {
     const f = fixture(), saving = deferred(); let stopped = false, starts = 0;
     f.copilot.run = async (_params, _emit, signal) => { starts++; f.copilot.hasOwnership = true;

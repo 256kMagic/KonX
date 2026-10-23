@@ -1,3 +1,4 @@
+import { installInvestigationContext, investigationChanged } from './copilot-investigations.mjs';
 import { h, icon, api, DataTable, modal, confirmDialog, toast, errMsg, fmtBytes } from './ui.js';
 
 const PAGE = 75, LIST_PAGE = 20;
@@ -51,7 +52,7 @@ export class IncidentTab {
     this.el = h('div.view.incident-view', h('div.tool-head', h('div.tool-title', icon('file'), h('h2', 'Incident Workspace'), h('span.sub', 'Local evidence, notes and an observation timeline')),
       h('div.incident-actions', this.createButton, this.refreshButton, this.jsonButton, this.htmlButton, this.deleteButton), this.status),
       h('div.incident-columns', h('aside.incident-library', this.listSearch, this.list, this.listPager), this.content));
-    this.setMode('timeline'); this.updateButtons(); this.renderPending();
+    installInvestigationContext(this); this.setMode('timeline'); this.updateButtons(); this.renderPending();
     this.ready = this.refresh(params.incidentId);
   }
   timeInput(label) { return h('input.input.incident-time', { placeholder: 'Observation time with UTC offset (optional)', maxLength: 128, 'aria-label': label, spellcheck: false }); }
@@ -92,7 +93,7 @@ export class IncidentTab {
   }
   acceptIncident(report) {
     if (this.disposed || !report) return;
-    this.report = report; this.selectedEvidence = null; this.page = 0;
+    this.report = report; this.selectedEvidence = null; this.page = 0; investigationChanged(this);
     const summary = { id: report.id, title: report.title, description: report.description, updatedAt: report.updatedAt,
       evidenceCount: report.evidence.length, totalBytes: report.totalBytes, timelineEvents: report.timeline.length };
     const found = this.incidents.findIndex((item) => item.id === report.id);
@@ -109,7 +110,7 @@ export class IncidentTab {
     this.status.textContent = `Opened “${report.title}”. Evidence stays in this local profile.`; this.app.updateStatus(this);
   }
   clearIncident() {
-    this.report = null; this.aiContext = null; this.selectedEvidence = null; this.page = 0;
+    this.report = null; this.aiContext = null; this.selectedEvidence = null; this.page = 0; investigationChanged(this);
     this.heading.replaceChildren(h('h3', 'No incident selected')); this.detail.replaceChildren(); this.renderRows(); this.renderPending(); this.updateButtons();
   }
   renderList() {
@@ -208,7 +209,7 @@ export class IncidentTab {
   async openCapture(evidenceId) {
     const id = this.report?.id; if (!id) return;
     await this.request(() => api.invoke('tools:incidentCapture', id, evidenceId), async (result) => {
-      const item = this.report?.id === id && this.report.evidence.find((entry) => entry.id === evidenceId); if (item) item.integrity = 'verified';
+      const item = this.report?.id === id && this.report.evidence.find((entry) => entry.id === evidenceId); if (item) { item.integrity = 'verified'; investigationChanged(this); }
       const tab = this.app.openTool('capture'); await tab.loadBytes(result.bytes, result.name);
     }, 'Verifying and opening the retained capture…');
   }

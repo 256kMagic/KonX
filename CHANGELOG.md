@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.26.0 — 2026-10-23
+
+- Add explicit device, snapshot, topology, event, site, incident, completed runbook and change-validation evidence choices in Copilot.
+- Preserve source references, collection times, selections, uncertainty and whole-value omission notices without automatically collecting or opening evidence.
+- Serialize incident reads and writes, retain failed cleanup ownership, and guard shutdown and updates against pending incident operations.
+- Retry transient Windows file-replacement failures within a bounded interval, validating both source and destination identity/version before every retry.
+
+See the [Copilot guide](docs/COPILOT.md) and [release notes](docs/releases/0.26.0.md).
+
+## 0.25.0 — 2026-10-23
+
+- Add selected packet, readable stream, SIP/SDP, RTP quality, capture comparison and remote-capture evidence to Copilot.
+- Add selected security, Wi-Fi and Mist observations with original scope, frame references, coverage and omissions.
+- Attaching existing results performs no new capture, parsing, cloud query, audio export or file read.
+
+See the [Copilot guide](docs/COPILOT.md) and [release notes](docs/releases/0.25.0.md).
+
 ## 0.24.0 � 2026-10-23
 
 - Add explicit terminal selection/viewport and connection diagnostics, including serial detection, logging and configured forwards.

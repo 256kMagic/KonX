@@ -1,3 +1,4 @@
+import { installInvestigationContext, investigationChanged } from './copilot-investigations.mjs';
 import { h, icon, api, DataTable, toast, errMsg, confirmDialog } from './ui.js';
 
 const date = (value) => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : 'Unknown time';
@@ -54,7 +55,7 @@ export class SnapshotTab {
       h('div.snapshot-actions', this.refreshButton, this.inspectorButton, this.demoButton, this.exportButton),
       h('div.snapshot-selectors', this.selector('Before', this.before, this.openBefore, this.removeBefore), this.selector('After', this.after, this.openAfter, this.removeAfter)),
       h('div.snapshot-actions', this.compareButton), this.status), this.content);
-    this.renderRows(); this.ready = this.refresh();
+    installInvestigationContext(this); this.renderRows(); this.ready = this.refresh();
   }
 
   selector(label, select, open, remove) { return h('div.snapshot-choice', h('label.field', h('span', label), select), h('div.snapshot-actions', open,
@@ -70,7 +71,7 @@ export class SnapshotTab {
   }
 
   clearComparison() {
-    this.report = null; this.aiContext = null; this.page = 0; this.table.selected.clear();
+    this.report = null; this.aiContext = null; this.page = 0; this.table.selected.clear(); investigationChanged(this);
     this.heading.textContent = 'No comparison selected'; this.summary.replaceChildren(); this.coverage.replaceChildren();
     this.detail.replaceChildren(h('p.hint', 'Select a change to inspect its before and after observations.')); this.renderRows(); this.updateButtons();
     this.app.updateStatus(this);
@@ -141,7 +142,7 @@ export class SnapshotTab {
     try {
       const result = await api.invoke('tools:snapshotCompare', { beforeId: this.before.value, afterId: this.after.value, ...(devicePairs.length ? { devicePairs } : {}) });
       if (this.disposed || request !== this.seq) return;
-      this.report = result; this.page = 0; this.table.selected.clear(); this.renderComparison();
+      this.report = result; this.page = 0; this.table.selected.clear(); investigationChanged(this); this.renderComparison();
       this.status.textContent = 'Comparison ready. Missing or incomplete categories are marked Unverified.';
     } catch (error) { if (!this.disposed && request === this.seq) this.status.textContent = errMsg(error); }
     finally { if (!this.disposed && request === this.seq) { this.busy = false; this.updateButtons(); this.app.updateStatus(this); } }
@@ -160,7 +161,7 @@ export class SnapshotTab {
         (device.warnings || []).map((warning) => h('p.hint', warning)))),
       ...(report.unmatched || []).map((device) => h('p.notice', `${device.side}: ${device.deviceLabel} · ${device.reason}`)),
       ...(report.warnings || []).map((warning) => h('p.notice', warning)),
-      report.sensitive ? h('p.notice', 'This comparison contains captured configuration. Its local evidence and JSON export can contain credentials. AI context includes only counts and coverage.') : null);
+      report.sensitive ? h('p.notice', 'This comparison contains captured configuration. Its local evidence and JSON export can contain credentials. Ask Copilot attaches only explicitly selected changes after review; changed configuration may contain sensitive text.') : null);
     this.renderRows(); this.renderChange();
   }
 

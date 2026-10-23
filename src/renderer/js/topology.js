@@ -1,3 +1,4 @@
+import { installInvestigationContext, investigationChanged } from './copilot-investigations.mjs';
 import { h, icon, api, errMsg, toast } from './ui.js';
 
 const shown = value => value === null || value === undefined || value === '' ? 'Unknown' : String(value);
@@ -56,7 +57,7 @@ export class TopologyTab {
       h('div.topology-summary-row', this.summary, h('span.hint', 'Schematic positions · recorded observations')),
       h('div.topology-content', this.canvas, this.detail), h('div.topology-bottom', this.endpointSummary, this.coverage, this.evidence));
     this.fit();
-    this.ready = Promise.all([this.refreshSnapshots(), params.report ? this.load(() => params.report, 'Existing observations loaded. No collection was started.', params.deviceId) : Promise.resolve()]);
+    installInvestigationContext(this); this.ready = Promise.all([this.refreshSnapshots(), params.report ? this.load(() => params.report, 'Existing observations loaded. No collection was started.', params.deviceId) : Promise.resolve()]);
     this.updateButtons();
   }
 
@@ -89,7 +90,7 @@ export class TopologyTab {
       const graph = await api.invoke('tools:topologyBuild', input, { staleHours: Number(this.threshold.value), endpoint: this.query.value.trim() });
       if (this.disposed || request !== this.seq) return;
       if (graph?.kind !== 'topology' || graph.schemaVersion !== 1 || !Array.isArray(graph.nodes) || !Array.isArray(graph.links)) throw new Error('Invalid topology response.');
-      this.inputReport = input; this.report = graph; this.selection = null;
+      this.inputReport = input; this.report = graph; this.selection = null; investigationChanged(this);
       this.graphOptions = { staleHours: graph.staleHours, at: graph.generatedAt, endpoint: graph.endpoint?.query || '' };
       this.aiContext = { kind: 'topology-summary', nodeCount: graph.nodes.length, linkCount: graph.links.length, staleHours: graph.staleHours, coverage: graph.coverage,
         unresolved: graph.nodes.filter(n => n.resolution === 'ambiguous' || n.resolution === 'unresolved').length, limitation: 'Recorded observations only; physical connectivity and endpoint attachment remain unverified.' };

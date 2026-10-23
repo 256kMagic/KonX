@@ -1,4 +1,5 @@
 'use strict';
+const { sameFile, sameVersion, replaceOwnedFile } = require('./atomic-replacement');
 
 // Local, explicitly imported incident evidence. Assets are immutable copies;
 // the manifest is an atomic append-only index. No sockets or cloud clients.
@@ -70,8 +71,30 @@ class IncidentStore {
   constructor(userDataDir, options = {}) {
     if (typeof userDataDir !== 'string' || !path.isAbsolute(userDataDir)) throw new Error('Incident storage requires an absolute profile directory');
     this.directory = path.join(userDataDir, 'incidents'); this.io = options.fs || fs; this.queue = Promise.resolve();
+    this.operations = 0; this.owners = new Set(); this.readVersions = new WeakMap(); this.closing = null;
   }
-  serialize(fn) { const work = this.queue.then(fn); this.queue = work.catch(() => {}); return work; }
+  get hasOwnership() { return this.operations > 0 || this.owners.size > 0; }
+  serialize(fn) {
+    if (this.closing) return Promise.reject(new Error('Incident storage is closing.'));
+    this.operations++; const work = this.queue.then(fn).finally(() => { this.operations--; }); this.queue = work.catch(() => {}); return work;
+  }
+  async cleanup(owner) {
+    if (owner.remove && !owner.identity && owner.handle) owner.identity = await owner.handle.stat({ bigint: true });
+    if (owner.handle) { await owner.handle.close(); owner.handle = null; }
+    if (owner.remove) {
+      let current; try { current = await this.io.lstat(owner.file, { bigint: true }); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      if (current) { if (!sameFile(owner.identity, current)) throw new Error('Owned incident temporary path changed; cleanup remains pending.'); await this.io.unlink(owner.file); }
+    }
+    this.owners.delete(owner);
+  }
+  async retryCleanup() {
+    const errors = []; for (const owner of [...this.owners]) try { await this.cleanup(owner); } catch (error) { errors.push(error); }
+    if (errors.length) throw Object.assign(new Error('Incident cleanup remains pending. Retry closing when storage is available.'), { code: 'INCIDENT_CLEANUP' });
+  }
+  close() {
+    if (this.closing) return this.closing;
+    this.closing = this.queue.then(() => this.retryCleanup()).finally(() => { this.closing = null; }); return this.closing;
+  }
   async regular(file, max) {
     const stat = await this.io.lstat(file);
     if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Evidence must be a regular file, not a symbolic link');
@@ -83,20 +106,22 @@ class IncidentStore {
     const stat = await this.io.lstat(directory);
     if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('Incident paths must be real directories, not symbolic links');
   }
-  async ready() { await this.realDirectory(this.directory, true); }
+  async ready() { await this.retryCleanup(); await this.realDirectory(this.directory, true); }
   dir(id) { return path.join(this.directory, idOf(id)); }
-  async readBytes(file, max) {
-    const stat = await this.regular(file, max), handle = await this.io.open(file, 'r');
+  async readBytes(file, max, observed) {
+    const stat = await this.io.lstat(file, { bigint: true });
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > BigInt(max) || stat.ino === 0n) throw new Error('Evidence must be a bounded regular file with known identity');
+    const owner = { file, handle: await this.io.open(file, 'r'), remove: false }; this.owners.add(owner);
     try {
-      const opened = await handle.stat();
-      if (!opened.isFile() || opened.size !== stat.size || opened.dev !== stat.dev || (opened.ino && stat.ino && opened.ino !== stat.ino)) throw new Error('Evidence changed while opening');
-      const buffer = Buffer.alloc(stat.size + 1); let offset = 0;
-      while (offset < buffer.length) { const part = await handle.read(buffer, offset, buffer.length - offset, null); if (!part.bytesRead) break; offset += part.bytesRead; }
-      if (offset !== stat.size) throw new Error('Evidence changed while reading');
-      return buffer.subarray(0, offset);
-    } finally { await handle.close(); }
+      const opened = await owner.handle.stat({ bigint: true }); if (!sameVersion(stat, opened)) throw new Error('Evidence changed while opening');
+      const buffer = Buffer.alloc(Number(stat.size) + 1); let offset = 0;
+      while (offset < buffer.length) { const part = await owner.handle.read(buffer, offset, buffer.length - offset, null); if (!part.bytesRead) break; offset += part.bytesRead; }
+      const after = await owner.handle.stat({ bigint: true });
+      if (BigInt(offset) !== stat.size || !sameVersion(opened, after)) throw new Error('Evidence changed while reading');
+      observed?.(after); return buffer.subarray(0, offset);
+    } finally { await this.cleanup(owner); }
   }
-  async readJson(file, max) { const bytes = await this.readBytes(file, max); try { return JSON.parse(bytes.toString('utf8')); } catch { throw new Error('Incident JSON is malformed'); } }
+  async readJson(file, max, observed) { const bytes = await this.readBytes(file, max, observed); try { return JSON.parse(bytes.toString('utf8')); } catch { throw new Error('Incident JSON is malformed'); } }
   async owned(id, requireEvidence = true) {
     await this.ready(); const directory = this.dir(id); await this.realDirectory(directory);
     const owner = await this.readJson(path.join(directory, 'owner.json'), 4096);
@@ -104,16 +129,21 @@ class IncidentStore {
     if (requireEvidence) await this.realDirectory(path.join(directory, 'evidence'));
     return directory;
   }
-  async atomicJson(directory, name, value, initial = false) {
+  async atomicJson(directory, name, value, initial = false, expectedVersion) {
     const bytes = Buffer.from(JSON.stringify(value, null, 2) + '\n');
     if (bytes.length > LIMITS.manifestBytes) throw new Error('Incident manifest exceeds its byte limit');
     const temp = path.join(directory, '.manifest-' + crypto.randomUUID() + '.tmp'), destination = path.join(directory, name);
-    let handle, created = false;
+    const targetVersion = initial ? null : expectedVersion || await this.io.lstat(destination, { bigint: true });
+    const owner = { file: temp, handle: await this.io.open(temp, 'wx', 0o600), remove: true, identity: null }; this.owners.add(owner);
+    let published = false;
     try {
-      handle = await this.io.open(temp, 'wx', 0o600); created = true;
-      await handle.writeFile(bytes); await handle.sync(); await handle.close(); handle = null;
-      if (initial) await this.io.link(temp, destination); else { await this.regular(destination, LIMITS.manifestBytes); await this.io.rename(temp, destination); created = false; }
-    } finally { if (handle) await handle.close().catch(() => {}); if (created) await this.io.unlink(temp).catch(() => {}); }
+      owner.identity = await owner.handle.stat({ bigint: true }); await owner.handle.writeFile(bytes); await owner.handle.sync();
+      const sourceVersion = await owner.handle.stat({ bigint: true }); if (!sameFile(owner.identity, sourceVersion)) throw new Error('Owned incident replacement identity is unavailable');
+      await owner.handle.close(); owner.handle = null;
+      if (initial) await this.io.link(temp, destination);
+      else { try { await replaceOwnedFile(this.io, temp, destination, sourceVersion, targetVersion); } catch (error) { if (error.code === 'ATOMIC_CONFLICT') error.code = 'INCIDENT_CONFLICT'; throw error; } owner.remove = false; }
+      published = true;
+    } finally { try { await this.cleanup(owner); } catch (error) { if (!published) throw error; } }
   }
   validate(value, id) {
     if (value?.schemaVersion !== 1 || value.id !== id || !parseTimestamp(value.createdAt) || !parseTimestamp(value.updatedAt) || !Array.isArray(value.evidence) || !Array.isArray(value.timeline) || value.evidence.length > LIMITS.evidence || value.timeline.length > LIMITS.timeline) throw new Error('Incident manifest schema or identity is invalid');
@@ -157,7 +187,7 @@ class IncidentStore {
     return { schemaVersion: 1, id, title, description, createdAt: parseTimestamp(value.createdAt), updatedAt: parseTimestamp(value.updatedAt),
       totalBytes: bytes, evidence, timeline, timelineLimited: value.timelineLimited === true };
   }
-  async manifest(id) { const directory = await this.owned(id); return this.validate(await this.readJson(path.join(directory, 'manifest.json'), LIMITS.manifestBytes), id); }
+  async manifest(id) { const directory = await this.owned(id); let version; const record = this.validate(await this.readJson(path.join(directory, 'manifest.json'), LIMITS.manifestBytes, stat => { version = stat; }), id); this.readVersions.set(record, version); return record; }
   summary(value) { return { id: value.id, title: value.title, description: value.description, createdAt: value.createdAt, updatedAt: value.updatedAt, evidenceCount: value.evidence.length, totalBytes: value.totalBytes, timelineEvents: value.timeline.length, timelineLimited: !!value.timelineLimited }; }
   create(input) { return this.serialize(async () => {
     await this.ready(); const title = titleOf(input?.title), description = string(input?.description, 'description', 4096);
@@ -182,7 +212,7 @@ class IncidentStore {
     }
     return this.summary(manifest);
   }); }
-  async list() {
+  list() { return this.serialize(async () => {
     await this.ready(); const incidents = [], issues = [];
     const entries = await this.io.readdir(this.directory);
     for (const name of entries.slice(0, LIMITS.incidents * 2)) {
@@ -191,7 +221,7 @@ class IncidentStore {
     }
     if (entries.length > LIMITS.incidents * 2) issues.push({ message: 'Directory listing limit reached; some entries were not examined.' });
     incidents.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)); return { incidents, issues };
-  }
+  }); }
   assetPath(id, item) { return path.join(this.dir(id), 'evidence', idOf(item.id) + '.bin'); }
   async verifiedText(id, item) {
     const bytes = await this.readBytes(this.assetPath(id, item), LIMITS.textBytes);
@@ -199,7 +229,7 @@ class IncidentStore {
     try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
     catch { const error = new Error('Text evidence is not valid UTF-8; the original bytes remain available'); error.code = 'INCIDENT_TEXT_ENCODING'; throw error; }
   }
-  async get(id) { return this.withPreviews(await this.manifest(id)); }
+  get(id) { return this.serialize(async () => this.withPreviews(await this.manifest(id))); }
   async withPreviews(manifest) {
     const id = manifest.id, result = structuredClone(manifest);
     let budget = Math.max(0, LIMITS.responseBytes - jsonBytes(result) - 16384);
@@ -250,13 +280,13 @@ class IncidentStore {
       sourceName, originalPath: content.sourcePath || null, sourceModifiedAt: sourceStat ? new Date(sourceStat.mtimeMs).toISOString() : null,
       relativePath: 'evidence/' + evidenceId + '.bin', bytes: size, sha256: null };
     const target = this.assetPath(id, item);
-    let destination, source, savedManifest, created = false;
+    let destination, source, destinationOwner, sourceOwner, savedManifest;
     try {
-      destination = await this.io.open(target, 'wx', 0o600); created = true;
+      destination = await this.io.open(target, 'wx', 0o600); destinationOwner = { file: target, handle: destination, remove: true, identity: null }; this.owners.add(destinationOwner); destinationOwner.identity = await destination.stat({ bigint: true });
       const digest = crypto.createHash('sha256');
       if (content.bytes) { await destination.writeFile(content.bytes); digest.update(content.bytes); }
       else {
-        source = await this.io.open(content.sourcePath, 'r'); const opened = await source.stat();
+        source = await this.io.open(content.sourcePath, 'r'); sourceOwner = { file: content.sourcePath, handle: source, remove: false }; this.owners.add(sourceOwner); const opened = await source.stat();
         if (!opened.isFile() || opened.size !== sourceStat.size || opened.dev !== sourceStat.dev || (opened.ino && sourceStat.ino && opened.ino !== sourceStat.ino)) throw new Error('Source file changed while opening');
         const buffer = Buffer.alloc(65536); let copied = 0;
         for (;;) {
@@ -267,8 +297,8 @@ class IncidentStore {
         const after = await source.stat();
         if (copied !== size || after.size !== size || after.mtimeMs !== sourceStat.mtimeMs) throw new Error('Source file changed during import');
       }
-      item.sha256 = digest.digest('hex'); await destination.sync(); await destination.close(); destination = null;
-      if (source) { await source.close(); source = null; }
+      item.sha256 = digest.digest('hex'); await destination.sync(); await destination.close(); destination = null; destinationOwner.handle = null;
+      if (sourceOwner) { await this.cleanup(sourceOwner); source = null; }
       let events;
       if (input.kind === 'syslog') {
         try {
@@ -297,42 +327,42 @@ class IncidentStore {
       }
       if (item.timelineCoverage) { item.timelineCoverage.retainedEvents = retained.length; item.timelineCoverage.limited ||= retained.length < events.length; }
       savedManifest = this.validate(manifest, id);
-      await this.atomicJson(this.dir(id), 'manifest.json', savedManifest); created = false;
+      await this.atomicJson(this.dir(id), 'manifest.json', savedManifest, false, this.readVersions.get(manifest)); destinationOwner.remove = false; await this.cleanup(destinationOwner);
     } catch (error) {
-      // Windows cannot unlink every open handle. Close our own handles before
-      // rolling back an unpublished evidence asset.
-      if (source) { await source.close().catch(() => {}); source = null; }
-      if (destination) { await destination.close().catch(() => {}); destination = null; }
-      if (created) { try { await this.io.unlink(target); } catch (cleanup) { error.message += '; unindexed evidence retained after cleanup failed: ' + evidenceId + ' (' + cleanup.message + ')'; } }
+      // Close owned handles before removing only the unpublished asset whose
+      // inode we created. Failed cleanup remains owned for close()/retry.
+      for (const owner of [sourceOwner, destinationOwner]) if (owner && this.owners.has(owner)) {
+        try { await this.cleanup(owner); } catch (cleanup) { error.message += '; incident cleanup pending (' + cleanup.message + ')'; }
+      }
       throw error;
-    } finally { if (source) await source.close().catch(() => {}); if (destination) await destination.close().catch(() => {}); }
+    }
     // The append is committed. Reopening its manifest could fail independently
     // and incorrectly invite a retry that saves the same note twice. Build the
     // response from the committed record; preview failures remain item details.
     return this.withPreviews(savedManifest);
   }
-  async evidencePath(id, evidenceId) {
+  evidencePath(id, evidenceId) { return this.serialize(async () => {
     const manifest = await this.manifest(id), item = manifest.evidence.find(e => e.id === idOf(evidenceId));
     if (!item) throw new Error('Evidence was not found in this incident');
     const file = this.assetPath(id, item), stat = await this.regular(file, LIMITS.fileBytes);
     if (stat.size !== item.bytes) throw new Error('Evidence size changed after import');
-    const handle = await this.io.open(file, 'r'), digest = crypto.createHash('sha256'); let total = 0;
+    const handle = await this.io.open(file, 'r'), owner = { file, handle, remove: false }, digest = crypto.createHash('sha256'); this.owners.add(owner); let total = 0;
     try {
       const opened = await handle.stat(); if (!opened.isFile() || opened.size !== stat.size || opened.dev !== stat.dev || (opened.ino && stat.ino && opened.ino !== stat.ino)) throw new Error('Evidence changed while opening');
       const buffer = Buffer.alloc(65536);
       for (;;) { const { bytesRead } = await handle.read(buffer, 0, buffer.length, null); if (!bytesRead) break; total += bytesRead; if (total > item.bytes) throw new Error('Evidence grew during verification'); digest.update(buffer.subarray(0, bytesRead)); }
-    } finally { await handle.close(); }
+    } finally { await this.cleanup(owner); }
     if (total !== item.bytes || digest.digest('hex') !== item.sha256) throw new Error('Evidence checksum differs from its imported bytes');
     return file;
-  }
-  async readCapture(id, evidenceId) {
+  }); }
+  readCapture(id, evidenceId) { return this.serialize(async () => {
     const manifest = await this.manifest(id), item = manifest.evidence.find(e => e.id === idOf(evidenceId));
     if (!item || item.kind !== 'capture') throw new Error('Choose capture evidence from this incident');
     const bytes = await this.readBytes(this.assetPath(id, item), LIMITS.fileBytes);
     if (bytes.length !== item.bytes || hash(bytes) !== item.sha256) throw new Error('Evidence checksum differs from its imported bytes');
     return { name: item.sourceName, bytes };
-  }
-  async exportRecord(id) {
+  }); }
+  exportRecord(id) { return this.serialize(async () => {
     const incident = await this.manifest(id), result = { schemaVersion: 1, kind: 'konx-incident-report', exportedAt: new Date().toISOString(), incident: structuredClone(incident), limitations: [
       'Captured files and other binary evidence are not embedded. SHA-256 values describe the original imported bytes.',
       'Text is embedded up to the report budget; truncation and integrity failures are explicit. Source assets remain in the local incident workspace.',
@@ -348,8 +378,30 @@ class IncidentStore {
       } catch (error) { item.integrity = error.code === 'INCIDENT_TEXT_ENCODING' ? 'verified' : 'error'; item.textOmitted = error.message; }
     }
     return result;
-  }
+  }); }
   async exportJson(id) { const text = JSON.stringify(await this.exportRecord(id), null, 2) + '\n'; if (Buffer.byteLength(text) > LIMITS.exportBytes) throw new Error('Incident export exceeds its byte limit'); return text; }
+  writeExport(destination, content) { return this.serialize(async () => {
+    if (typeof destination !== 'string' || !path.isAbsolute(destination) || destination.length > 4096 || destination.includes('\0')) throw new Error('Choose an absolute incident export path');
+    if (typeof content !== 'string' || Buffer.byteLength(content) > LIMITS.exportBytes) throw new Error('Incident export exceeds its byte limit');
+    await this.ready();
+    const parent = await this.io.realpath(path.dirname(destination)), library = await this.io.realpath(this.directory);
+    const relative = path.relative(library, parent);
+    if (!relative || (!relative.startsWith('..' + path.sep) && relative !== '..' && !path.isAbsolute(relative))) throw new Error('Choose an export location outside the managed incident library');
+    const target = path.join(parent, path.basename(destination));
+    let targetVersion = null;
+    try { targetVersion = await this.io.lstat(target, { bigint: true }); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (targetVersion && (!targetVersion.isFile() || targetVersion.isSymbolicLink())) throw new Error('Incident export destination must be a regular file');
+    const temp = path.join(parent, '.konx-incident-export-' + crypto.randomUUID() + '.tmp');
+    const owner = { file: temp, handle: await this.io.open(temp, 'wx', 0o600), remove: true, identity: null }; this.owners.add(owner);
+    let published = false;
+    try {
+      owner.identity = await owner.handle.stat({ bigint: true }); await owner.handle.writeFile(content, 'utf8'); await owner.handle.sync();
+      const sourceVersion = await owner.handle.stat({ bigint: true }); await owner.handle.close(); owner.handle = null;
+      if (targetVersion) { await replaceOwnedFile(this.io, temp, target, sourceVersion, targetVersion); owner.remove = false; }
+      else await this.io.link(temp, target);
+      published = true; return destination;
+    } finally { try { await this.cleanup(owner); } catch (error) { if (!published) throw error; } }
+  }); }
   async exportHtml(id) {
     const report = await this.exportRecord(id), incident = report.incident;
     const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);

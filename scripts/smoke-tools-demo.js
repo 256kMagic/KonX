@@ -499,7 +499,7 @@
       input(validation.fields.expectedOutcome, 'Review saved before/after observations without an automatic health verdict.');
       input(validation.fields.rollbackPlan, 'Manual rollback remains outside this offline fixture.');
       await validation.savePlan(); assert(validation.record?.phase === 'plan' && !validation.isDirty(), 'Packaged validation plan did not save cleanly');
-      await validation.advance(); assert(validation.record.phase === 'baseline', 'Baseline requires explicit advancement');
+      await validation.advance(); assert(validation.record.phase === 'baseline', 'Baseline requires explicit advancement: ' + validation.status.textContent);
       input(validation.before, before.id, 'change'); await validation.saveSources();
       assert(validation.record.sources.beforeId === before.id && validation.record.sources.afterId === null, 'Baseline source was not retained independently');
       await validation.advance(); assert(validation.record.phase === 'maintenance', 'Manual maintenance phase is missing');
@@ -683,9 +683,21 @@
         assert(attachment.snapshot.kind === 'security' && attachment.snapshot.facts.rows.length === security.report.checks.length && app.jobs.size === 0, 'Retained assessment facts were not attached passively');
         await controller.detach(attachment.id); await app.closeTab(panel);
       }
+      if (versionParts[1] >= 26) {
+        const investigation = app.openTool('change-validation', { validationId: changeValidation.savedId }); await investigation.ready;
+        assert(investigation.record?.id === changeValidation.savedId && !investigation.isDirty(), 'Retained validation could not reopen for Copilot');
+        await app.openCopilot(investigation);
+        assert(investigation.copilotButton && !panel.attachButton.disabled, 'Packaged investigation Copilot entry is unavailable');
+        const snapshot = investigation.captureCopilotContext({ choice: 'saved-plan' });
+        await controller.attach(snapshot); const attachment = controller.conversation.attachments.at(-1);
+        assert(attachment.snapshot.kind === 'change-validation' && attachment.snapshot.facts.rows[0].plan.name === changeName && attachment.snapshot.facts.rows[0].decisions.every(item => item.status === 'unknown') && app.jobs.size === 0, 'Saved investigation evidence or manual decisions did not survive passive attachment');
+        controller.focusSource(attachment); assert(app.active === investigation, 'Investigation source link did not open its canonical view');
+        await controller.detach(attachment.id); await app.closeTab(panel); await app.closeTab(investigation);
+      }
       await app.closeTab(source); await app.saveSettings({ uiLayout: priorLayout }); app.activate(ai);
       copilotChecks = { typedSource: true, companionPreservesSource: true, exactRequestReview: true, immutableStaleSnapshot: true, fiveLayouts: true, nativePopoutAndDock: true,
-        canonicalViewRetained: true, draftGuard: true, conversationSaved: true, noProviderRequests: true };
+        canonicalViewRetained: true, draftGuard: true, conversationSaved: true, noProviderRequests: true,
+        ...(versionParts[1] >= 26 ? { retainedInvestigationAttached: true, manualDecisionsPreserved: true, investigationSourceOpened: true } : {}) };
     }
     const article = await api.invoke('tools:knowledgeSave', { title: noteTitle, vendor: 'Synthetic fixture', content: 'Wireless RSSI observations are cached evidence. Verify the adapter and collection time.' });
     await ai.readDocument(article.id);

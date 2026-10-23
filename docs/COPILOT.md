@@ -53,6 +53,23 @@ Version 0.25.0 adds **Ask Copilot** in capture and assessment views. Use **Attac
 
 Open the normal analysis view first when its parsed result is required. Attachments use that result rather than starting another analysis. Parser limits, missing directions, frame coverage and source truncation remain visible. Already truncated source text is omitted as a whole value; an incomplete stream is not proof of packet loss on the network. Raw packet bytes, audio and unparsed payloads are excluded.
 
+## Investigation evidence
+
+Version 0.26.0 adds explicit Copilot choices in Device Inspector, Snapshots, Topology, Live Events, Sites, Incidents, Runbooks and Change Validation.
+
+| View | Evidence you can choose |
+| --- | --- |
+| Device Inspector | Selected parsed facts, complete selected command output, or recorded trace candidates |
+| Snapshots | Selected before/after changes with saved snapshot references |
+| Topology | Selected node or link with observed provenance and uncertainty |
+| Live Events | Explicitly selected retained messages and parsed fields |
+| Sites | Current draft name, notes and grouped references; references are not opened or resolved |
+| Incidents | Selected bounded complete text evidence, timeline or integrity information |
+| Runbooks | A selected step from the completed retained report |
+| Change Validation | Recorded plan, comparison evidence and explicit user decisions; drafts and manual assessments stay labeled |
+
+Select a row or item, then use **Ask Copilot** or the current-view picker. For a cross-tool investigation, attach each source explicitly to the same conversation and select the attachments to include. Unknown timestamps and incomplete evidence stay unknown. Clipped graph facts and truncated command/event/incident text are omitted whole, with notices. The original tool remains available to inspect fuller evidence.
+
 ## Requests and storage
 
 Conversations are local to the Windows profile. Rename or delete them from Copilot. Deletion removes the local conversation; it does not delete information already sent to a provider. The conversation list reports unreadable records rather than silently replacing them.

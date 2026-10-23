@@ -1,3 +1,4 @@
+import { installInvestigationContext, investigationChanged } from './copilot-investigations.mjs';
 import { h, icon, api, modal, toast, errMsg } from './ui.js';
 
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -57,7 +58,7 @@ export class ChangeValidationTab {
       h('div.tool-head', h('div.tool-title', icon('route'), h('h2', this.title)), h('div.change-actions', this.button('new', 'New validation', () => this.newRecord()), this.button('refresh', 'Refresh libraries', () => this.refresh()),
         this.button('advance', 'Advance phase', () => this.advance(), true), this.button('delete', 'Delete validation', () => this.remove())), this.status, this.phasebar),
       h('div.change-columns', h('aside', this.search, this.list), h('div.change-body', [...this.panels.values()], this.details)));
-    this.render(); this.ready = this.refresh(params.validationId);
+    installInvestigationContext(this); this.render(); this.ready = this.refresh(params.validationId);
   }
   panel(key, ...children) { const panel = h('div.change-step', { 'data-change-panel': key }, children); this.panels.set(key, panel); return panel; }
   button(action, label, handler, primary = false) { const button = h('button.btn', { class: primary ? 'primary' : '', 'data-change-action': action, onclick: handler }, label); this.buttons.set(action, button); return button; }
@@ -67,7 +68,7 @@ export class ChangeValidationTab {
   isRecordDirty() { return this.values() !== this.baseline; }
   hasMaintenanceDraft() { return !!this.maintenanceText?.value || !!this.maintenanceCheck?.checked; }
   isDirty() { return this.isRecordDirty() || this.hasMaintenanceDraft(); }
-  changed() { this.updateButtons(); this.app.updateStatus(this); }
+  changed() { investigationChanged(this); this.updateButtons(); this.app.updateStatus(this); }
   updateButtons() {
     const locked = this.busy || this.prompting, saved = !!this.record;
     for (const el of this.el?.querySelectorAll('button,input,textarea,select') || []) el.disabled = locked;
@@ -110,14 +111,14 @@ export class ChangeValidationTab {
     if (selected && !this.disposed) await this.select(selected);
   }
   accept(record) {
-    this.record = clone(record); this.plan = clone(record.plan); this.sources = clone(record.sources); this.decisions = decisionsInput(record); this.baseline = this.values();
+    this.record = clone(record); this.plan = clone(record.plan); this.sources = clone(record.sources); this.decisions = decisionsInput(record); this.baseline = this.values(); investigationChanged(this);
     this.pairs.replaceChildren(h('p.hint', 'Use Review device pairing to inspect the saved source identities.'));
     const summary = { id: record.id, name: record.plan.name, phase: record.phase, updatedAt: record.updatedAt, assessment: assessment(record) };
     const index = this.records.findIndex(r => r.id === record.id); if (index < 0) this.records.unshift(summary); else this.records[index] = summary;
     this.render(); this.renderList();
   }
   async select(value) { if (this.busy || !await this.discard() || this.disposed) return; await this.request(() => api.invoke('tools:changeGet', value), record => { this.pendingAttachment = null; this.maintenanceText.value = ''; this.maintenanceCheck.checked = false; this.page = record.phase; this.accept(record); this.status.textContent = 'Saved validation reopened. No phase advanced and no tool ran.'; }, 'Opening saved validation…'); }
-  async newRecord() { if (this.busy || !await this.discard() || this.disposed) return; this.record = null; this.plan = starter(); this.sources = { beforeId: null, afterId: null, devicePairs: [] }; this.decisions = []; this.pendingAttachment = null; this.maintenanceText.value = ''; this.maintenanceCheck.checked = false; this.baseline = this.values(); this.page = 'plan'; this.render(); this.fields.name.focus(); }
+  async newRecord() { if (this.busy || !await this.discard() || this.disposed) return; this.record = null; this.plan = starter(); this.sources = { beforeId: null, afterId: null, devicePairs: [] }; this.decisions = []; this.pendingAttachment = null; this.maintenanceText.value = ''; this.maintenanceCheck.checked = false; this.baseline = this.values(); investigationChanged(this); this.page = 'plan'; this.render(); this.fields.name.focus(); }
   renderList() { const query = this.search.value.trim().toLowerCase(); this.list.replaceChildren(...this.records.filter(r => r.name.toLowerCase().includes(query)).map(r => h('button.change-card', { 'data-change-id': r.id, 'aria-current': String(r.id === this.record?.id), disabled: this.busy || this.prompting, onclick: () => this.select(r.id) }, h('strong', r.name), h('span.hint', `${labels[r.phase]} · ${r.assessment}`)))); if (!this.list.childElementCount) this.list.append(h('p.hint', 'No saved validations match.')); }
   render() {
     for (const [key, input] of Object.entries(this.fields)) input.value = this.plan[key];
@@ -223,7 +224,7 @@ export class ChangeValidationTab {
   async remove() {
     if (!this.record || this.isDirty() || !await this.dialog({ title: 'Delete validation', body: h('p', 'Delete this workflow record? Original snapshots, source reports and incident copies remain.'), buttons: [{ label: 'Cancel', value: null }, { label: 'Delete validation', value: true, danger: true }] }) || this.disposed) return;
     const selected = this.record.id;
-    await this.request(() => api.invoke('tools:changeRemove', selected, this.record.revision), () => { this.records = this.records.filter(r => r.id !== selected); this.record = null; this.plan = starter(); this.sources = { beforeId: null, afterId: null, devicePairs: [] }; this.decisions = []; this.pendingAttachment = null; this.maintenanceText.value = ''; this.maintenanceCheck.checked = false; this.baseline = this.values(); this.page = 'plan'; this.render(); this.renderList(); this.status.textContent = 'Workflow deleted; original evidence is retained by its owners.'; }, 'Deleting saved validation…');
+    await this.request(() => api.invoke('tools:changeRemove', selected, this.record.revision), () => { this.records = this.records.filter(r => r.id !== selected); this.record = null; this.plan = starter(); this.sources = { beforeId: null, afterId: null, devicePairs: [] }; this.decisions = []; this.pendingAttachment = null; this.maintenanceText.value = ''; this.maintenanceCheck.checked = false; this.baseline = this.values(); investigationChanged(this); this.page = 'plan'; this.render(); this.renderList(); this.status.textContent = 'Workflow deleted; original evidence is retained by its owners.'; }, 'Deleting saved validation…');
   }
   updateBlockers() { return [...(this.busy || this.prompting ? ['Wait for the change validation operation.'] : []), ...(this.hasUnsavedInput() ? ['Save or discard the unsaved change validation input.'] : [])]; }
   async requestClose() { if (this.busy || this.prompting) { toast('Wait for the change validation operation to finish.', 'err'); return false; } return this.discard(); }

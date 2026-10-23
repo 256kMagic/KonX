@@ -8,7 +8,7 @@ const { TextDecoder } = require('node:util');
 const LIMITS = Object.freeze({ conversations: 100, turns: 100, attachments: 32, selectedAttachments: 8, historyTurns: 12,
   questionChars: 8000, answerChars: 50000, snapshotBytes: 64 * 1024, requestBytes: 256 * 1024,
   recordBytes: 4 * 1024 * 1024, libraryBytes: 32 * 1024 * 1024, completionReserve: 512 * 1024, preparations: 8, preparationMs: 300000 });
-const KINDS = Object.freeze(['ping', 'sweep', 'portscan', 'traceroute', 'dns', 'whois', 'subnet', 'wol', 'netinfo', 'terminal', 'connection', 'sftp', 'notepad', "capture-packet", "capture-stream", "sip-call", "rtp-stream", "capture-compare", "remote-capture", "security", "wifi", "mist"]);
+const KINDS = Object.freeze(['ping', 'sweep', 'portscan', 'traceroute', 'dns', 'whois', 'subnet', 'wol', 'netinfo', 'terminal', 'connection', 'sftp', 'notepad', "capture-packet", "capture-stream", "sip-call", "rtp-stream", "capture-compare", "remote-capture", "security", "wifi", "mist", 'device', 'snapshots', 'topology', 'events', 'sites', 'incidents', 'runbook', 'change-validation']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const clone = value => structuredClone(value);
 function fail(message, code = 'COPILOT_INVALID') { throw Object.assign(new Error(message), { code }); }

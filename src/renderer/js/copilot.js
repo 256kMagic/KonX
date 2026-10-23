@@ -287,9 +287,17 @@ export class CopilotController {
     if (this.jobId) void this.stop(); this.changed();
   }
   focusSource(attachment) {
-    const source = this.app.byId?.get(attachment.snapshot?.source?.tabId);
+    const snapshot = attachment.snapshot, source = this.app.byId?.get(snapshot?.source?.tabId);
     if (!source || source.disposed) { this.message = 'The source view is no longer open. The saved snapshot is still available.'; this.changed(); return; }
     this.app.activate(source);
+    const rows = snapshot?.facts?.rows, locator = Array.isArray(rows) && rows.length === 1 ? rows[0]?.locator : null;
+    if (snapshot.source.revision !== source.copilot?.revision || snapshot.source.runId !== source.copilot?.runId) {
+      this.changedSources.add(attachment.id);
+      this.message = 'Opened the source view. Its observations have changed; the saved snapshot is unchanged and its old selection was not applied.';
+    } else if (locator && typeof source.navigateCopilotSource === 'function') {
+      this.message = source.navigateCopilotSource(locator) ? 'Opened the selected evidence in its source view.' : 'Opened the source view. This saved selection cannot be located; the snapshot remains available.';
+    } else this.message = 'Opened the source view. The saved snapshot remains unchanged.';
+    this.changed();
   }
   async dispose() {
     this.closeView(); await this.flushDiscard();

@@ -143,7 +143,7 @@ async function fixture() {
       default: networkCalls++; throw Error('Unexpected operation: ' + channel);
     }
   });
-  const js = path.join(root, 'js'); fs.mkdirSync(js); for (const file of ['change-validation.js', 'runbooks.js', 'ui.js']) fs.copyFileSync(source('src/renderer/js/' + file), path.join(js, file));
+  const js = path.join(root, 'js'); fs.mkdirSync(js); for (const file of ['change-validation.js', 'runbooks.js', 'ui.js', 'copilot-context.mjs', 'copilot-investigations.mjs']) fs.copyFileSync(source('src/renderer/js/' + file), path.join(js, file));
   fs.copyFileSync(path.join(repo, 'src/renderer/styles.css'), path.join(root, 'styles.css'));
   fs.writeFileSync(path.join(root, 'preload.cjs'), `const {contextBridge,ipcRenderer}=require('electron');contextBridge.exposeInMainWorld('api',{invoke:(...args)=>ipcRenderer.invoke('change-fixture',...args)});`);
   fs.writeFileSync(path.join(root, 'index.html'), '<!doctype html><meta charset="UTF-8"><link rel="stylesheet" href="styles.css">');

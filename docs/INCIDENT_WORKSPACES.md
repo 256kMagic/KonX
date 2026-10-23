@@ -28,7 +28,7 @@ Export **HTML** for a readable standalone report or **JSON** for structured evid
 
 Binary capture contents are not embedded in these reports. Open a retained capture and save it separately if the recipient needs packet bytes. Large text may be visibly truncated in the report while the retained asset remains complete. Review report contents before sharing: terminal output, configuration, syslog, and packet data can contain credentials or other sensitive values. Incident assets are ordinary local files, not an encrypted archive.
 
-**Explain with AI** receives incident metadata and counts only. Raw evidence and notes are excluded from that automatic summary.
+From 0.26.0, **Ask Copilot** offers explicit choices for selected complete text evidence, retained timeline entries, and integrity information. Truncated text is omitted with a notice; attachment does not reread the source file. Review the saved attachment and complete request before sending it to your provider. See the [Copilot guide](COPILOT.md).
 
 ## Storage, limits, and unfinished work
 
@@ -37,4 +37,6 @@ Workspaces are stored in the KonX profile's `incidents` directory. Back up that 
 Limits are 200 incidents, 128 evidence items and 512 MiB per incident, 128 MiB per binary file, 8 MiB per imported text file, and 256 KiB per pasted item. The timeline retains up to 1,500 entries and labels limited coverage. Text previews and exported text are bounded independently; the original retained file is preserved.
 
 Save or discard draft fields and pending evidence before updating. The updater and tab-close action check for unfinished incident work. A forced process termination or operating-system shutdown can still discard unsaved drafts and pending captures; they are not persistent until explicitly added.
+
+From 0.26.0, incident reads and writes are serialized, pending file ownership blocks shutdown/update completion, and failed cleanup stays available for retry. Transient Windows replacement errors receive a short bounded retry with file identity/version checks. Persistent locks and externally changed records produce an error; preserve the current evidence and resolve the reported issue before retrying.
 

@@ -63,6 +63,7 @@ async function fixture() {
   fs.copyFileSync(path.join(__dirname, '../src/renderer/js/topology.js'), path.join(renderer, 'js/topology.js'));
   fs.copyFileSync(path.join(__dirname, '../src/renderer/topology.css'), path.join(renderer, 'topology.css'));
   fs.copyFileSync(path.join(REPO, 'src/renderer/js/ui.js'), path.join(renderer, 'js/ui.js'));
+  for (const file of ['copilot-context.mjs', 'copilot-investigations.mjs']) fs.copyFileSync(path.join(REPO, 'src/renderer/js', file), path.join(renderer, 'js', file));
   fs.copyFileSync(path.join(REPO, 'src/renderer/styles.css'), path.join(renderer, 'styles.css'));
   fs.writeFileSync(path.join(root, 'preload.cjs'), "const{contextBridge,ipcRenderer}=require('electron');contextBridge.exposeInMainWorld('api',{invoke:(channel,...args)=>ipcRenderer.invoke(channel,...args)});");
   fs.writeFileSync(path.join(renderer, 'index.html'), '<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\'; style-src \'self\' \'unsafe-inline\'; img-src \'self\' data:"><link rel="stylesheet" href="styles.css"><body><script type="module" src="fixture.js"></script></body>');

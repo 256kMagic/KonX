@@ -1,3 +1,4 @@
+import { installInvestigationContext, investigationChanged } from './copilot-investigations.mjs';
 import { h, icon, api, DataTable, modal, confirmDialog, toast, errMsg } from './ui.js';
 
 const kinds = { dns: 'DNS lookup', ping: 'ICMP echo', tcp: 'TCP connection', device: 'Cisco inventory', checklist: 'Manual checklist', capture: 'Manual capture review' };
@@ -37,7 +38,7 @@ export class RunbookTab {
     this.el = h('div.view.runbook-view', h('div.tool-head', h('div.tool-title', icon('route'), h('h2', 'Troubleshooting Runbooks'), h('span.sub', 'Reviewable procedures with explicit targets and retained observations')),
       h('div.runbook-actions', this.runButton, this.stopButton, this.reportButton, this.exportButton, this.removeButton),
       h('div.runbook-actions', this.selector, this.refreshButton, this.newButton, this.importButton), this.status), this.content);
-    this.ready = this.refresh(true);
+    installInvestigationContext(this); this.ready = this.refresh(true);
   }
   isDirty() { return this.editor.value !== this.baseline; }
   updateButtons() {
@@ -139,7 +140,7 @@ export class RunbookTab {
     if (result && !this.disposed) await this.refresh();
   }
   async exportDefinition() { if (!this.customId || this.isDirty()) return; await this.request(() => api.invoke('tools:runbookExport', this.customId), (file) => { if (file) toast('Saved procedure exported'); }); }
-  clearResult() { this.report = null; this.steps = []; this.table.setRows([]); this.resultSummary.replaceChildren(); this.detail.replaceChildren(); this.app.updateStatus(this); }
+  clearResult() { this.report = null; investigationChanged(this); this.steps = []; this.table.setRows([]); this.resultSummary.replaceChildren(); this.detail.replaceChildren(); this.app.updateStatus(this); }
   async start() {
     if (this.disposed || this.busy || this.jobId || !this.definition || this.reviewedText !== this.editor.value) return;
     const inputs = {};
@@ -165,7 +166,7 @@ export class RunbookTab {
     if (this.disposed || !this.jobId) return;
     if (type === 'progress' && !this.cancelRequested) this.status.textContent = `${data.phase || 'Running'} · step ${(data.index ?? 0) + 1} of ${data.total ?? '?'}`;
     if (type === 'step') { const index = this.steps.findIndex((step) => step.id === data.id); if (index < 0) this.steps.push(data); else this.steps[index] = data; this.table.setRows(this.steps); }
-    if (type === 'report' && data.kind === 'runbook' && data.schemaVersion === 1 && Array.isArray(data.steps)) { this.report = data; this.steps = data.steps; this.receivedReport = true; this.table.setRows(this.steps); this.renderResult(); }
+    if (type === 'report' && data.kind === 'runbook' && data.schemaVersion === 1 && Array.isArray(data.steps)) { this.report = data; investigationChanged(this); this.steps = data.steps; this.receivedReport = true; this.table.setRows(this.steps); this.renderResult(); }
     if (type === 'done' || type === 'error') {
       this.app.unregisterJob(this.jobId); this.jobId = null; this.state = 'idle'; this.app.tabStateChanged(this); this.updateButtons();
       this.status.textContent = type === 'error' ? data.message || 'Procedure failed.' : this.receivedReport ? this.report.complete ? 'Procedure finished. Review failed, unknown and manual observations.' : 'Procedure stopped or incomplete. Retained observations are shown.' : 'No final procedure report was returned.';

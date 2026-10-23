@@ -1,3 +1,4 @@
+import { installInvestigationContext, investigationChanged } from './copilot-investigations.mjs';
 import { h, icon, api, toast, errMsg, confirmDialog } from './ui.js';
 
 const bytes = value => new TextEncoder().encode(JSON.stringify(value)).length;
@@ -46,7 +47,7 @@ export class EventsTab {
       h('div.events-filters', this.search, this.sourceFilter, this.protocolFilter, this.severityFilter),
       h('div.events-body', h('div.events-list', h('div.events-table-scroll', this.table), h('div.events-pages', this.previous, this.pageStatus, this.next)),
         h('section.events-inspector', h('h3', 'Event details'), this.linkStatus, h('div.events-actions', this.terminalButton, this.prepareButton), this.details)));
-    this.render(); this.ready = this.refresh();
+    installInvestigationContext(this); this.render(); this.ready = this.refresh();
   }
   button(action, title, handler, glyph) { return h('button.btn', { 'data-events-action': action, onclick: handler }, glyph ? icon(glyph) : null, title); }
   message(text, failed = false) { this.status.textContent = text; this.status.setAttribute('role', failed ? 'alert' : 'status'); }
@@ -67,7 +68,7 @@ export class EventsTab {
     // A removed history can be recreated under the same listener ID by another
     // view. Its sequence starts again at zero; prior records are not its evidence.
     if (summary.state === 'starting' && summary.lastSequence === 0 && summary.retainedRecords === 0) this.replaceRecords([]);
-    this.summary = summary; this.state = summary.hasOwnership ? 'running' : 'idle';
+    this.summary = summary; investigationChanged(this); this.state = summary.hasOwnership ? 'running' : 'idle';
     if (!this.busy) this.message(summary.message, ['error', 'cleanup-pending'].includes(summary.state));
     this.app.tabStateChanged?.(this); this.app.updateStatus?.(this);
   }
@@ -81,7 +82,7 @@ export class EventsTab {
     const items = [...map.values()].sort((a, b) => a.record.sequence - b.record.sequence);
     for (const item of items) total += item.size;
     while (total > HISTORY_BYTES) total -= items.shift().size;
-    this.records = items.map(item => item.record);
+    this.records = items.map(item => item.record); investigationChanged(this);
     const retained = new Set(this.records.map(record => record.sequence));
     this.selected = new Set([...this.selected].filter(sequence => retained.has(sequence)));
     if (!retained.has(this.detailSequence)) this.detailSequence = null;

@@ -1,4 +1,5 @@
 'use strict';
+const { sameFile, replaceOwnedFile } = require('./atomic-replacement');
 // Local workflow records own decisions and retained copies, never collectors or
 // connections. Snapshot interpretation stays with the existing comparison owner.
 const fs = require('node:fs/promises');
@@ -113,7 +114,7 @@ class ChangeValidationStore {
   constructor(profile, options = {}) {
     if (typeof profile !== 'string' || !path.isAbsolute(profile)) fail('Change validation needs an absolute profile path.');
     this.directory = path.join(profile, 'change-validation'); this.io = options.fs || fs; this.snapshots = options.snapshots; this.incidents = options.incidents;
-    this.queue = Promise.resolve(); this.operations = 0; this.owners = new Set(); this.closing = null;
+    this.readVersions = new WeakMap(); this.queue = Promise.resolve(); this.operations = 0; this.owners = new Set(); this.closing = null;
   }
   get hasOwnership() { return this.operations > 0 || this.owners.size > 0; }
   get hasPendingCleanup() { return this.owners.size > 0; }
@@ -138,7 +139,7 @@ class ChangeValidationStore {
   }
   async ready() { await this.retryCleanup(); await this.io.mkdir(this.directory, { recursive: true }); const stat = await this.io.lstat(this.directory); if (!stat.isDirectory() || stat.isSymbolicLink()) fail('Change validation storage must be a real directory.'); }
   file(value) { return path.join(this.directory, id(value) + '.json'); }
-  async readFile(file, max = LIMITS.recordBytes) {
+  async readFile(file, max = LIMITS.recordBytes, observed) {
     const before = await this.io.lstat(file, { bigint: true }); if (!before.isFile() || before.isSymbolicLink() || before.size > BigInt(max)) fail('Workflow must be a bounded regular file.');
     const owner = { file, handle: await this.io.open(file, 'r'), remove: false }; this.owners.add(owner);
     try {
@@ -146,29 +147,32 @@ class ChangeValidationStore {
       const buffer = Buffer.alloc(Number(before.size) + 1); let used = 0;
       while (used < buffer.length) { const { bytesRead } = await owner.handle.read(buffer, used, buffer.length - used, null); if (!bytesRead) break; used += bytesRead; }
       const after = await owner.handle.stat({ bigint: true }); if (BigInt(used) !== before.size || after.size !== before.size || after.mtimeNs !== opened.mtimeNs) fail('Workflow changed while reading.', 'CHANGE_CONFLICT');
-      return new TextDecoder('utf-8', { fatal: true }).decode(buffer.subarray(0, used));
+      observed?.(after); return new TextDecoder('utf-8', { fatal: true }).decode(buffer.subarray(0, used));
     } finally { await this.cleanup(owner); }
   }
-  async read(value) { let parsed; try { parsed = JSON.parse(await this.readFile(this.file(value))); } catch (error) { if (error.code === 'ENOENT') fail('Saved change validation was not found.', 'CHANGE_NOT_FOUND'); throw error; } return validateRecord(parsed, value); }
+  async read(value) { let parsed, version; try { parsed = JSON.parse(await this.readFile(this.file(value), LIMITS.recordBytes, stat => { version = stat; })); } catch (error) { if (error.code === 'ENOENT') fail('Saved change validation was not found.', 'CHANGE_NOT_FOUND'); throw error; } const record = validateRecord(parsed, value); this.readVersions.set(record, version); return record; }
   async entries() {
     const owner = { handle: await this.io.opendir(this.directory), remove: false }; this.owners.add(owner); const entries = [];
     try { for (;;) { const entry = await owner.handle.read(); if (!entry) break; entries.push(entry.name); if (entries.length > LIMITS.records * 2) break; } }
     finally { await this.cleanup(owner); } return entries;
   }
-  async write(destination, content, initial = false) {
+  async write(destination, content, initial = false, expectedVersion) {
+    const targetVersion = initial ? null : expectedVersion || await this.io.lstat(destination, { bigint: true });
     const file = path.join(path.dirname(destination), '.change-' + crypto.randomUUID() + '.tmp');
     const owner = { file, handle: await this.io.open(file, 'wx', 0o600), remove: true, identity: null }; this.owners.add(owner);
     let published = false;
     try {
-      owner.identity = await owner.handle.stat({ bigint: true }); await owner.handle.writeFile(content, 'utf8'); await owner.handle.sync(); await owner.handle.close(); owner.handle = null;
+      owner.identity = await owner.handle.stat({ bigint: true }); await owner.handle.writeFile(content, 'utf8'); await owner.handle.sync();
+      const sourceVersion = await owner.handle.stat({ bigint: true }); if (!sameFile(owner.identity, sourceVersion)) fail('Owned replacement identity is unavailable.', 'CHANGE_CONFLICT');
+      await owner.handle.close(); owner.handle = null;
       if (initial) await this.io.link(file, destination);
-      else { const target = await this.io.lstat(destination); if (!target.isFile() || target.isSymbolicLink()) fail('Destination must be a regular file.'); await this.io.rename(file, destination); owner.remove = false; }
+      else { try { await replaceOwnedFile(this.io, file, destination, sourceVersion, targetVersion); } catch (error) { if (error.code === 'ATOMIC_CONFLICT') error.code = 'CHANGE_CONFLICT'; throw error; } owner.remove = false; }
       published = true;
     } finally { try { await this.cleanup(owner); } catch (error) { if (!published) throw error; } }
     // A committed record stays a successful save even if owned temp cleanup
     // needs retry. hasOwnership keeps updater/quit aware of that obligation.
   }
-  async publish(record, initial = false) { validateRecord(record, record.id); await this.write(this.file(record.id), bounded(record, LIMITS.recordBytes, 'Workflow'), initial); return clone(record); }
+  async publish(record, initial = false) { validateRecord(record, record.id); await this.write(this.file(record.id), bounded(record, LIMITS.recordBytes, 'Workflow'), initial, this.readVersions.get(record)); return clone(record); }
   async update(value, expected, action, change) {
     await this.ready(); const record = await this.read(value); if (record.revision !== revision(expected)) fail('This workflow changed since it was opened. Reopen it before saving.', 'CHANGE_CONFLICT');
     if (record.revision === Number.MAX_SAFE_INTEGER || record.timeline.length >= LIMITS.timeline) fail('Workflow history limit reached. Export it and create a new validation.', 'CHANGE_LIMIT');
