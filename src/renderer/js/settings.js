@@ -50,12 +50,15 @@ export async function settingsDialog(app) {
   appearance.inputs.terminalHighlighting.setAttribute('aria-label', 'Output highlighting');
   const terminal = buildFields([
     { name: 'scrollback', label: 'Scrollback lines', type: 'number', min: 100, max: 500000 },
-    { name: 'rightClick', label: 'Right-click in terminal', type: 'select', options: [['menu', 'Show menu'], ['paste', 'Paste (PuTTY style)']] },
-    { name: 'copyOnSelect', label: 'Copy on select', type: 'checkbox' },
+    { name: 'rightClick', label: 'Paste clipboard on right-click', type: 'checkbox' },
+    { name: 'copyOnSelect', label: 'Automatically copy highlighted text', type: 'checkbox' },
     { name: 'confirmMultilinePaste', label: 'Confirm before pasting multiple lines', type: 'checkbox' },
     { name: 'useRemoteTitle', label: 'Let the remote host set the tab title', type: 'checkbox' },
     { name: 'logDir', label: 'Default log folder', browse: 'dir', placeholder: app.info.logDir, span: 2 },
-  ], s);
+  ], { ...s, rightClick: s.rightClick === 'paste' });
+  for (const name of ['rightClick', 'copyOnSelect']) terminal.inputs[name].name = name;
+  // Preserve the existing saved enum while showing a direct on/off control.
+  const readTerminal = () => ({ ...terminal.read(), rightClick: terminal.inputs.rightClick.checked ? 'paste' : 'menu' });
   const transfer = buildFields([
     { name: 'sftpLocalDir', label: 'Default local folder', browse: 'dir', placeholder: '(home folder)', span: 2 },
     { name: 'sftpConflict', label: 'When a file already exists', type: 'select', options: [['ask', 'Ask'], ['overwrite', 'Overwrite'], ['skip', 'Skip'], ['newer', 'Overwrite if source is newer']] },
@@ -84,13 +87,13 @@ export async function settingsDialog(app) {
   hosts.el.style.height = '300px';
   hosts.setRows(await api.invoke('hostkeys:list'));
 
-  const readSettings = () => JSON.stringify({ uiLayout: layouts.read(), ...appearance.read(), ...terminal.read(), ...transfer.read() });
+  const readSettings = () => JSON.stringify({ uiLayout: layouts.read(), ...appearance.read(), ...readTerminal(), ...transfer.read() });
   const initialSettings = readSettings();
   let settingsOpen = true;
   const updates = createUpdatesPane(app, { blockers: () => settingsOpen && readSettings() !== initialSettings ? ['Save or cancel your Settings changes.'] : [] });
   const panes = {
     Appearance: h('div.mpane.active', layouts.el, h('div.grid2', appearance.els)),
-    Terminal: h('div.mpane', h('div.grid2', terminal.els)),
+    Terminal: h('div.mpane', h('div.grid2', terminal.els), h('p.hint', 'Enable right-click paste to send clipboard text to the connected terminal. Turn it off to open the terminal menu on right-click. Highlight text to copy it automatically when automatic copy is enabled.')),
     'File Transfer': h('div.mpane', h('div.grid2', transfer.els)),
     'Known Hosts': h('div.mpane', h('div.hint', 'SSH host keys you have accepted. Right-click to remove one.'), hosts.el),
     Updates: updates.el,
@@ -116,7 +119,7 @@ export async function settingsDialog(app) {
     ],
   }).finally(() => { settingsOpen = false; updates.dispose(); });
   if (!r) return;
-  const patch = { uiLayout: layouts.read(), ...appearance.read(), ...terminal.read(), ...transfer.read() };
+  const patch = { uiLayout: layouts.read(), ...appearance.read(), ...readTerminal(), ...transfer.read() };
   patch.fontSize = Number(patch.fontSize) || 14;
   patch.scrollback = Number(patch.scrollback) || 10000;
   patch.sftpConcurrency = Math.min(8, Math.max(1, Number(patch.sftpConcurrency) || 2));

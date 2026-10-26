@@ -1,6 +1,6 @@
 # AI & Knowledge
 
-This guide covers AI & Knowledge in KonX 0.27.1. Open **AI & Knowledge** from Home, the sidebar, or Network Tools. The standalone assistant explains findings, terminology, and possible next steps. KonX-AI separately offers [reviewed actions](KONX_AI.md#reviewed-actions): bounded diagnostics, selected editor replacements and new answer notes, each requiring a prepared review and an explicit execution click. Neither assistant automatically connects sessions or changes device settings.
+This guide covers AI & Knowledge in KonX 0.28.0. Open **AI & Knowledge** from Home, the sidebar, or Network Tools. The standalone assistant explains findings, terminology, and possible next steps. KonX-AI separately offers [reviewed actions](KONX_AI.md#reviewed-actions): bounded diagnostics, selected editor replacements and new answer notes, each requiring a prepared review and an explicit execution click. Neither assistant automatically connects sessions or changes device settings.
 
 The new [KonX-AI](KONX_AI.md) keeps conversations beside supported tools and previews the complete outbound request. **AI & Knowledge** remains the place to configure providers and manage the offline reference library. Its existing standalone assistant remains available.
 

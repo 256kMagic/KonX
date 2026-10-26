@@ -529,6 +529,7 @@ const fakeCrypt = {
   await require('./ssh-settings-ui-tests.cjs').runSshSettingsUiTests(test);
   await require('./terminal-logging-tests.cjs').runTerminalLoggingTests(test);
   await require('./terminal-logging-ui-tests.cjs').runTerminalLoggingUiTests(test);
+  await require('./terminal-clipboard-ui-tests.cjs').runTerminalClipboardUiTests(test);
   await require('./cisco-highlighting-tests.cjs').runCiscoHighlightingTests(test);
   await require('./cisco-highlighting-ui-tests.cjs').runCiscoHighlightingUiTests(test);
   await require('./serial-autobaud-tests.cjs').runSerialAutoBaudTests(test);

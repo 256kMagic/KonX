@@ -31,8 +31,8 @@
 #app[data-layout] #views { min-width:0; }
 .workspace-layout-select { width:150px; max-width:170px; min-width:100px; flex:0 1 150px; }
 .workspace-wall-count { width:auto; min-width:72px; max-width:110px; flex:none; }
-/* Keep every original toolbar action alongside the layout shortcut at 900px. */
-@media(max-width:1100px) {
+/* Keep every toolbar action, including updates, reachable as the window narrows. */
+@media(max-width:1360px) {
   #app[data-layout] #toolbar { gap:1px; padding-inline:4px; }
   #app[data-layout] #toolbar .brand { gap:4px; padding:0 4px 0 0; font-size:12px; }
   #app[data-layout] #toolbar .tb-sep { margin-inline:3px; }

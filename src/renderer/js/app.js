@@ -196,7 +196,7 @@ class WelcomeTab {
         'div.welcome',
         h('h1', h('img', { src: '../../assets/logo.svg', alt: '' }), app.info.name),
         h('p.lead', 'Terminal, file transfer and network toolkit — SSH2, Telnet, Serial, SFTP, ping, sweep, port scan and more in one window.'),
-        h('div.welcome-update', h('span.hint', `KonX ${app.info.version || ''}`), h('button.btn.sm', { onclick: () => updateKonx(app) }, icon('download'), 'Update KonX'),
+        h('div.welcome-update', h('span.hint', `KonX ${app.info.version || ''}`),
           h('button.btn.sm', { onclick: () => supportDialog(app) }, icon('info'), 'Report a problem')),
         h('h3', 'Quick connect'),
         h(
@@ -334,7 +334,7 @@ class App {
       h('button.tb-btn.icon-only', { title: 'Toggle session manager', onclick: () => this.toggleSidebar() }, icon('sidebar')),
       h('div.tb-sep'),
       h('div.quick', icon('zap'), this.quickProto, this.quickInput),
-      h('button.tb-btn', { onclick: () => this.editSession() }, icon('plus'), 'New Session'),
+      h('button.tb-btn', { title: 'New Session', 'aria-label': 'New Session', onclick: () => this.editSession() }, icon('plus'), h('span.header-session-label', 'New Session')),
       h('button.tb-btn', { title: 'Open an SFTP tab for the current SSH tab or a saved session', onclick: () => this.sftpForActive() }, icon('file-transfer'), 'SFTP'),
       h('button.tb-btn', { title: 'Notepad++-style editor', onclick: () => this.openNotepad() }, icon('edit'), 'Notepad'),
       toolsBtn,
@@ -344,7 +344,8 @@ class App {
       this.buttonBarToggle,
       h('button.tb-btn.icon-only', { title: 'Command window (send to one or all tabs)', onclick: () => this.toggle('cmdwin') }, icon('command')),
       h('button.tb-btn.icon-only', { title: 'Home', onclick: () => this.showHome() }, icon('home')),
-      h('button.tb-btn.icon-only', { title: 'Settings', onclick: () => settingsDialog(this) }, icon('settings'))
+      h('button.tb-btn.icon-only', { title: 'Settings', onclick: () => settingsDialog(this) }, icon('settings')),
+      h('button.tb-btn.header-update', { type: 'button', title: `Update KonX · Current version ${this.info.version || 'unknown'}`, 'aria-label': 'Update KonX', 'data-action': 'update-konx', onclick: () => updateKonx(this) }, icon('download'), h('span.header-update-label', 'Update KonX'))
     );
 
     this.sideSessions = h('div');

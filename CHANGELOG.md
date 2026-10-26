@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.28.0 — 2026-10-26
+
+- Move **Update KonX** from Home to the top-right header, available in every workspace layout; keep **Settings → Updates**.
+- Replace the terminal right-click dropdown with a clear **Paste clipboard on right-click** checkbox. Preserve the existing menu/paste choice and multiline-paste confirmation; new profiles keep the menu by default.
+- Clarify the automatic selection-copy control and retain existing clipboard preferences.
+- Fix rapid highlight/copy timing and prevent pending clipboard reads or multiline confirmations from pasting into a replacement connection.
+
+See the [terminal guide](docs/USER_GUIDE.md#copy-paste-search-and-links), [update guide](docs/UPDATING.md), and [release notes](docs/releases/0.28.0.md).
+
 ## 0.27.1 — KonX-AI and Saved Provider Keys
 
 - Rename the contextual assistant from Copilot to KonX-AI across current application labels and guides. Existing local conversations and workspace references remain compatible.

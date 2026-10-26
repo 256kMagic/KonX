@@ -128,6 +128,11 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
 .tb-btn.primary:hover { background: var(--accent-strong); }
 .tb-btn.icon-only { padding: 0 7px; }
 .tb-spacer { flex: 1; }
+.header-update { flex: none; color: var(--accent); border-color: var(--border); }
+.header-update:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (max-width: 1360px) {
+  .header-update-label, .header-session-label { display: none; }
+}
 .quick {
   display: flex; align-items: center; gap: 6px;
   height: 30px; flex: 0 1 300px; min-width: 140px;

@@ -1,8 +1,10 @@
 # KonX User Guide
 
+Version 0.28.0 moves **Update KonX** to the top-right header and makes right-click paste and automatic-copy options easier to find. See [terminal clipboard options](#copy-paste-search-and-links), the [update guide](UPDATING.md), and [release notes](releases/0.28.0.md).
+
 Version 0.27.1 renames the contextual assistant to **KonX-AI** and improves encrypted provider-key management. See the [KonX-AI guide](KONX_AI.md), [provider setup](AI_KNOWLEDGE_GUIDE.md#connect-a-provider), and [release validation](releases/0.27.1.md).
 
-This guide covers KonX 0.27.1 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one application. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
+This guide covers KonX 0.28.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one application. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
 
 Version 0.27.0 adds reviewed diagnostics, undoable editor replacements and saved answer notes to KonX-AI. See the [KonX-AI guide](KONX_AI.md) and [release validation](releases/0.27.0.md).
 
@@ -103,7 +105,7 @@ Examples use reserved documentation addresses such as `192.0.2.10`, `198.51.100.
 
 ## Install, run, and update
 
-Download a Windows x64 executable from the [0.27.1 release](https://github.com/256kMagic/KonX/releases/tag/v0.27.1).
+Download a Windows x64 executable from the [0.28.0 release](https://github.com/256kMagic/KonX/releases/tag/v0.28.0).
 
 | Download | Use it when | How to start |
 | --- | --- | --- |
@@ -112,20 +114,20 @@ Download a Windows x64 executable from the [0.27.1 release](https://github.com/2
 
 The portable executable still uses a Windows user profile for settings, saved sessions, and editor recovery. It does **not** automatically place all data beside the executable or make encrypted credentials transferable between computers. See [Application data and backups](#application-data-and-backups).
 
-**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.27.1.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
+**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.28.0.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
 
 For updates from **installed 0.6.2 or later**, or **portable 0.6.0 or later**:
 
 1. Save local and remote files, finish or cancel transfers, and save any packet captures you want to keep.
 2. Disconnect terminal and SFTP sessions, stop running tools, and save or cancel any open Knowledge note.
-3. Press **Update KonX** on Home or under **Settings → Updates**. KonX checks for a newer public release, downloads the matching installer or portable executable, and verifies its checksum.
+3. Press **Update KonX** at the top right of the header, or under **Settings → Updates**. On versions before 0.28.0, the shortcut is on Home. KonX checks for a newer public release, downloads the matching installer or portable executable, and verifies its checksum.
 4. With no work active, KonX updates and restarts automatically. If work needs attention, the downloaded update stays ready; finish the listed steps and press **Install and restart**. An all-users installation may show a Windows administrator prompt.
 
 From 0.16.1, staged update filenames include KonX and the version being installed. An update launched from an older copy may show `payload.exe` once while installing this fix; future updates use the branded filename. See [Update filenames](UPDATING.md#update-filenames-in-windows-prompts).
 
 Installed copies retain their installation folder and mode. Portable copies retain their filename and location; the containing folder must be writable. Both continue to use the existing Windows profile. No update is applied just because you close KonX, and no release checks run in the background. See [Updating KonX](UPDATING.md) for cancellation, failures, and release preparation.
 
-Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.27.1 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
+Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.28.0 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
 
 Npcap is optional for packet capture; SSH, SFTP, Notepad, and the other tools do not require it. Updating KonX does not install or update Npcap.
 
@@ -320,7 +322,14 @@ KonX automatically highlights recognized Cisco errors, interface up/down states,
 
 ### Copy, paste, search, and links
 
-Select text to copy automatically when **Copy on select** is enabled. **Ctrl+Shift+C** or **Ctrl+Insert** copies explicitly. Paste with **Ctrl+Shift+V**, **Shift+Insert**, or middle-click. Right-click normally opens a menu; **Settings → Terminal** can change it to paste.
+Open **Settings → Terminal** to choose your clipboard behavior, then **Save**:
+
+- **Automatically copy highlighted text:** copies terminal text when you select it. This is enabled by default; upgrading preserves your existing choice. **Ctrl+Shift+C** or **Ctrl+Insert** still copies explicitly.
+- **Paste clipboard on right-click:** pastes clipboard text when you right-click the terminal. Leave it off to open the terminal menu instead. New profiles keep it off; upgrading preserves your previous menu/paste choice.
+
+With both options enabled, drag to highlight terminal text, release the mouse, then right-click to paste it. Double-click and triple-click selection remain available. Both preferences are saved for future launches and apply to floating and popped-out terminals.
+
+Paste shortcuts remain **Ctrl+Shift+V**, **Shift+Insert**, and middle-click.
 
 With **Confirm before pasting multiple lines** enabled, KonX previews a multi-line paste and asks before sending it. A pasted newline can execute a command on the remote device, so check the target terminal and text before accepting.
 
@@ -652,12 +661,12 @@ Click the gear icon, make changes, and choose **Save**.
 | Page | Controls |
 | --- | --- |
 | **Appearance** | Workspace layout; application theme; Animate theme effects; terminal color scheme, font, size, cursor shape, blink |
-| **Terminal** | Scrollback; right-click behavior; copy on select; multi-line paste confirmation; remote tab titles; default log folder |
+| **Terminal** | Scrollback; right-click paste; automatic selection copy; multi-line paste confirmation; remote tab titles; default log folder |
 | **File Transfer** | Initial local folder; conflict policy; simultaneous transfers; hidden files |
 | **Known Hosts** | Saved SSH host keys and removal |
 | **Updates** | Current version and distribution; explicit **Update KonX** check, download, verification, and restart |
 
-Defaults include a dark theme, terminal font size 14, block cursor, 10,000 scrollback lines, copy on select, a context menu on right-click, multi-line paste confirmation, Ask on SFTP conflicts, and two simultaneous transfers. Per-session color scheme/font size can override terminal defaults in **Terminal & Log**.
+Defaults include a dark theme, terminal font size 14, block cursor, 10,000 scrollback lines, automatic selection copy enabled, right-click paste disabled (opens the context menu), multi-line paste confirmation, Ask on SFTP conflicts, and two simultaneous transfers. Per-session color scheme/font size can override terminal defaults in **Terminal & Log**.
 
 ### Appearance and motion
 
@@ -765,7 +774,7 @@ For an isolated profile, advanced users can launch from PowerShell with a separa
 
 ```powershell
 $env:KONX_USERDATA = Join-Path $env:LOCALAPPDATA 'KonX-TestProfile'
-& '.\KonX-0.27.1-portable.exe'
+& '.\KonX-0.28.0-portable.exe'
 ```
 
 Run this from the folder containing the portable executable. The environment variable applies to that PowerShell process and launches from it; use a normal shortcut or a separate shell for your normal profile. This setting does not make Windows-encrypted credentials portable.

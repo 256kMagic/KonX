@@ -33,6 +33,16 @@
     if (changeValidation) checks.changeValidation = changeValidation;
     if (aiContextSafety) checks.aiContextSafety = aiContextSafety;
     if (copilotChecks) checks.copilot = copilotChecks;
+    if (supportsMouseClipboard) {
+      const header = document.querySelector('#toolbar'), update = header.querySelector('[data-action="update-konx"]');
+      const bounds = update.getBoundingClientRect();
+      assert(header.lastElementChild === update && bounds.width > 0 && bounds.right <= innerWidth && bounds.top >= 0, 'Packaged updater is not visible at the top right');
+      if (options.phase === 'save') await app.saveSettings({ rightClick: 'paste', copyOnSelect: false });
+      assert(app.settings.rightClick === 'paste' && app.settings.copyOnSelect === false, 'Packaged terminal clipboard preferences did not persist');
+      const saved = await api.invoke('settings:get');
+      assert(saved.rightClick === 'paste' && saved.copyOnSelect === false, 'Terminal clipboard preferences differ from saved settings');
+      checks.mouseClipboard = { headerUpdater: true, rightClick: 'paste', copyOnSelect: false, restart: options.phase === 'forget' };
+    }
     // Portable launchers do not necessarily forward their app's stdout. Write
     // test evidence only to the parent-provided private artifact file.
     await api.invoke('np:write', options.resultPath, new TextEncoder().encode(JSON.stringify(checks, null, 2)));
@@ -62,6 +72,11 @@
   assert((await api.invoke('tools:knowledgeList', { query: 'RSSI' })).length > 0, 'Offline reference search found no signal guidance');
   const noteTitle = 'Package smoke synthetic reference';
   const versionParts = info.version.split('.').map(Number);
+  const supportsMouseClipboard = versionParts[0] > 0 || versionParts[1] >= 28;
+  if (supportsMouseClipboard) {
+    assert(app.settings.rightClick === (options.phase === 'forget' ? 'paste' : 'menu'), 'Unexpected right-click default or restart value');
+    assert(app.settings.copyOnSelect === (options.phase === 'save'), 'Unexpected selection-copy default or restart value');
+  }
   const supportsDeviceInspector = versionParts[0] > 0 || versionParts[1] >= 7;
   const supportsSnapshots = versionParts[0] > 0 || versionParts[1] >= 8;
   const supportsRtp = versionParts[0] > 0 || versionParts[1] >= 9;

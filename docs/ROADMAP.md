@@ -60,6 +60,14 @@ Each phase is tested and published separately with updated release notes and use
 
 Opening a prepared tool is separate from starting work. Proposed actions show their target and inputs before execution. Collection, commands, file changes, and sharing remain explicit; observations, uncertainty, and evidence provenance stay visible.
 
+## Workspace controls
+
+| Version | Deliverable | Status |
+| --- | --- | --- |
+| 0.28.0 | Header updater and clearer right-click paste and automatic-copy controls | Complete; 1,074 tests and packaged checks passed |
+
+See the [terminal clipboard guide](USER_GUIDE.md#copy-paste-search-and-links) and [update guide](UPDATING.md).
+
 ## Collection scope
 
 Device collection starts with connected Cisco IOS/IOS-XE SSH sessions and fixed read-only commands in a separate channel. Trace results show candidates and unresolved links when evidence is incomplete. Imported reports and a synthetic demo support offline use.

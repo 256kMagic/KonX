@@ -1,6 +1,6 @@
 # KonX-AI
 
-This guide covers **KonX-AI in KonX 0.27.1**. The contextual assistant was introduced in 0.23.0. Open **KonX-AI** from the toolbar, Home, or Network Tools. In Workbench it opens in the companion pane; other layouts open it as a floating panel. Existing Float, Pop out, Dock, resizing, and split controls work on the same conversation view.
+This guide covers **KonX-AI in KonX 0.28.0**. The contextual assistant was introduced in 0.23.0. Open **KonX-AI** from the toolbar, Home, or Network Tools. In Workbench it opens in the companion pane; other layouts open it as a floating panel. Existing Float, Pop out, Dock, resizing, and split controls work on the same conversation view.
 
 ## First request
 

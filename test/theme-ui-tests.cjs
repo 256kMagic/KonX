@@ -127,6 +127,12 @@ async function electronFixture() {
         };
         await until(() => run('Boolean(window.__app)'), 'application initialization');
         await until(() => run('!document.hidden'), 'visible but transparent fixture');
+        assert.equal(await run("document.querySelectorAll('[data-action=\"update-konx\"]').length"), 1);
+        assert.equal(await run("[...document.querySelectorAll('.welcome button')].some(button=>button.textContent.includes('Update KonX'))"), false);
+        await click(`document.querySelector('#toolbar [data-action="update-konx"]')`);
+        await until(() => run("!!document.querySelector('.update-status')?.textContent.includes('packaged')"), 'header opens development update status');
+        await click(`document.querySelector('.modal footer button')`);
+        await until(() => run("!document.querySelector('.update-panel')"), 'header update dialog closes');
         await save({ copyOnSelect: false, colorScheme: 'app', themeAnimations: true });
         await run(`(async()=>{
           window.__themeModule=await import('./js/themes.js');
@@ -145,10 +151,14 @@ async function electronFixture() {
             const controls=[...toolbar.querySelectorAll('button')].filter(el=>getComputedStyle(el).display!=='none'&&el.getBoundingClientRect().width);
             return {width:innerWidth,height:innerHeight,documentWidth:document.documentElement.scrollWidth,toolbar:[r.left,r.top,r.right,r.bottom],
               controls:controls.map(el=>({name:el.title||el.textContent,rect:(()=>{const b=el.getBoundingClientRect();return[b.left,b.top,b.right,b.bottom]})()})),
-              headerInside:window.__app.themeHeader.parentElement===toolbar,viewTop:window.__term.wrap.getBoundingClientRect().top};})()`);
+              headerInside:window.__app.themeHeader.parentElement===toolbar,viewTop:window.__term.wrap.getBoundingClientRect().top,
+              updateAtRight:toolbar.lastElementChild.matches('[data-action="update-konx"]'),
+              updateReachable:(()=>{const b=toolbar.lastElementChild,r=b.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return b===hit||b.contains(hit)})()};})()`);
           assert.ok(bounds.documentWidth <= bounds.width + 2, JSON.stringify(bounds));
           assert.ok(bounds.toolbar[3] - bounds.toolbar[1] <= 48, 'The theme must retain a compact toolbar: ' + JSON.stringify(bounds));
           assert.equal(bounds.headerInside, true);
+          assert.equal(bounds.updateAtRight, true);
+          assert.equal(bounds.updateReachable, true, 'Header updater must remain reachable at ' + width + ': ' + JSON.stringify(bounds));
           assert.ok(bounds.viewTop < 180, 'A hero banner must not push terminal output down: ' + JSON.stringify(bounds));
           for (const control of bounds.controls) {
             assert.ok(control.rect[0] >= -2 && control.rect[2] <= bounds.width + 2 && control.rect[1] >= -2 && control.rect[3] <= bounds.toolbar[3] + 2,
@@ -177,6 +187,9 @@ async function electronFixture() {
             window.__term.term.clearSelection();window.__term.term.refresh(0,window.__term.term.rows-1);})`);
           assert.equal(await run('window.__term.term.getSelection()'), '');
           await geometry(1400, 880); await capture(id + '-terminal-1400');
+          await geometry(1101, 560);
+          await geometry(1361, 560);
+          await geometry(1401, 560);
           await geometry(900, 560); await capture(id + '-terminal-900');
           await run('window.__app.activate(window.__np);void 0;'); await pause(60);
           const editor = await run(`(() => { const editor=window.__np.host.querySelector('.monaco-editor'),fx=window.__np.host.querySelector('.theme-output-fx');
@@ -220,6 +233,10 @@ async function electronFixture() {
           assert.equal(await run('getComputedStyle(window.__term.wrap.querySelector(".theme-output-fx")).display'), 'none');
           assert.equal(await run('getComputedStyle(window.__np.host.querySelector(".theme-output-fx")).display'), 'none');
           assert.equal(await run('window.__np.theme()'), 'konx-' + id);
+          await geometry(900, 560);
+          await geometry(1101, 560);
+          await geometry(1361, 560);
+          await geometry(1401, 560);
         }
         await save({ uiTheme: 'chroma-rgb', colorScheme: 'solarized' });
         assert.equal(await run('window.__term.term.options.theme.background'), '#002b36');

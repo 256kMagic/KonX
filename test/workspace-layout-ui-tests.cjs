@@ -146,8 +146,10 @@ async function fixture() {
           await setViewport(win, run, width, height); await pause(75);
           const g = await run(`(()=>{const w=window.__app.workspaceLayout.get(),v=document.querySelector('#views').getBoundingClientRect(),grid=document.querySelector('.workspace-panes');grid.scrollTop=0;grid.scrollLeft=0;return {layout:w.layout,width:innerWidth,height:innerHeight,scroll:document.documentElement.scrollWidth,verticalRange:grid.scrollHeight-grid.clientHeight,
             panes:[...document.querySelectorAll('.workspace-pane')].filter(e=>getComputedStyle(e).display!=='none'&&e.getBoundingClientRect().width).map(e=>{const r=e.getBoundingClientRect();return {slot:e.dataset.slot,left:r.left,top:r.top,right:r.right,bottom:r.bottom};}),
-            views:{left:v.left,top:v.top,right:v.right,bottom:v.bottom},ids:w.visibleIds};})()`);
+            views:{left:v.left,top:v.top,right:v.right,bottom:v.bottom},ids:w.visibleIds,
+            update:(()=>{const b=document.querySelector('#toolbar [data-action="update-konx"]'),r=b.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,reachable:b===hit||b.contains(hit)}})()};})()`);
           assert.equal(g.layout, layout); assert.ok(g.scroll <= width + 2, JSON.stringify(g));
+          assert.ok(g.update.reachable && g.update.left >= 0 && g.update.right <= g.width && g.update.bottom <= 48, 'Header updater must stay visible in ' + layout + ': ' + JSON.stringify(g.update));
           if (['workbench', 'focus'].includes(layout) && width === 900) {
             await run(`window.__app.workspaceLayout.contextHidden[${JSON.stringify(layout)}]=false;window.__app.workspaceLayout.refresh();true;`);
             const context = await run(`(()=>{const e=document.querySelector('.workspace-context'),r=e.getBoundingClientRect(),v=document.querySelector('#views').getBoundingClientRect();return {visible:getComputedStyle(e).display!=='none',inside:r.width>0&&r.left>=v.left-2&&r.right<=v.right+2&&r.top>=v.top-2&&r.bottom<=v.bottom+2};})()`);

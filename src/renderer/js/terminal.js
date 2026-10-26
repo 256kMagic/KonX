@@ -103,11 +103,11 @@ export class TerminalTab {
     this.term.onTitleChange((t) => {
       if (t && this.app.settings.useRemoteTitle) this.app.setTabTitle(this, t);
     });
-    const copySel = debounce(() => {
+    const copySel = () => {
       if (this.disposed) return;
       const sel = this.term.getSelection();
-      if (sel && this.app.settings.copyOnSelect) api.invoke('clipboard:write', sel);
-    }, 120);
+      if (sel && this.app.settings.copyOnSelect) api.invoke('clipboard:write', sel).catch(error => { if (!this.disposed) toast(errMsg(error), 'err'); });
+    };
     this.term.onSelectionChange(copySel);
     this.term.onSelectionChange(() => { if (!this.disposed) this.copilot.touch(); });
     this.term.attachCustomKeyEventHandler((e) => this._key(e));
@@ -371,12 +371,21 @@ export class TerminalTab {
   }
 
   async pasteClipboard() {
-    const text = await api.invoke('clipboard:read');
-    if (text) this.paste(text);
+    const generation = this.connectionGeneration;
+    const valid = () => !this.disposed && this.state === 'connected' && generation === this.connectionGeneration;
+    if (!valid()) return;
+    try {
+      const text = await api.invoke('clipboard:read');
+      if (text && valid()) await this.paste(text);
+    } catch (error) {
+      if (valid()) toast(errMsg(error), 'err');
+    }
   }
 
   async paste(text) {
-    if (this.state !== 'connected') return;
+    const generation = this.connectionGeneration;
+    const valid = () => !this.disposed && this.state === 'connected' && generation === this.connectionGeneration;
+    if (!valid()) return;
     const lines = text.replace(/\r?\n$/, '').split(/\r?\n/);
     if (lines.length > 1 && this.app.settings.confirmMultilinePaste) {
       const ok = await modal({
@@ -394,7 +403,7 @@ export class TerminalTab {
       this.focus();
       if (!ok) return;
     }
-    if (this.disposed) return;
+    if (!valid()) return;
     this.term.paste(text);
   }
 
