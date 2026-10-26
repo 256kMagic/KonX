@@ -1,0 +1,35 @@
+/* Colors are owned by APP_THEMES and applied by applyApplicationTheme. These
+   rules provide the approved static finishes without changing tool geometry. */
+:root.theme-static { color-scheme: dark; }
+:root.theme-static[data-appearance="light"] { color-scheme: light; }
+
+:root.theme-static #toolbar {
+  background: linear-gradient(105deg, var(--panel), color-mix(in srgb, var(--accent) 6%, var(--panel)));
+  box-shadow: inset 0 2px var(--accent);
+}
+:root.theme-static #sidebar { background: var(--panel); }
+:root.theme-static .tree-row.selected { background: var(--sel); box-shadow: inset 2px 0 var(--accent); }
+:root.theme-static .tool-item:hover { box-shadow: inset 2px 0 var(--accent); }
+:root.theme-static :is(.tab.active, .np-tab.active) { background: var(--panel); box-shadow: inset 0 2px var(--accent); }
+:root.theme-static :is(.tab.active .ticon, .np-tab.active .np-tabicon) { color: var(--accent); }
+:root.theme-static :is(.btn.primary, .tb-btn.primary, .ctx .item:hover, .prows .prow.sel, .prows .prow.sel.c-expert, .phex .hl) {
+  color: var(--theme-button-text);
+}
+:root.theme-static :is(.btn.danger, .ctx .item.danger:hover) { color: var(--theme-danger-text); }
+:root.theme-static .prow.c-expert { background: color-mix(in srgb, var(--err) 6%, var(--bg)); color: var(--err); }
+:root.theme-static .prows .prow.sel.c-expert { background: var(--accent); color: var(--theme-button-text); }
+:root.theme-static :is(.security-detail, .wireless-detail, .wireless-observation, .ai-answer, .ai-document-content, .ai-connection, .ai-context-details, .ai-note-editor) { background: var(--panel); }
+:root.theme-static :is(.tbl-wrap, .security-results, .wireless-content, .ai-workspace, .pre-out, .kv, .pdetails, .phex) { background-color: var(--bg); }
+:root.theme-static .ai-source { border-left: 2px solid var(--accent); }
+:root.theme-static .ai-library-item:hover { border-color: var(--accent); }
+:root.theme-static .notice { color: var(--muted); }
+:root.theme-static :is(button, input, select, textarea, summary, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+:root[data-theme="obsidian-gold"] #toolbar { background: linear-gradient(105deg, var(--panel), #201e19); }
+:root[data-theme="arctic-glass"] #toolbar { background: linear-gradient(105deg, var(--panel), #e8f0ff); }
+:root[data-theme="arctic-glass"] #sidebar { box-shadow: inset -4px 0 15px color-mix(in srgb, var(--accent) 2%, transparent); }
+:root[data-theme="deep-ocean"] #sidebar { background-image: repeating-radial-gradient(ellipse at 110% 105%, transparent 0 48px, color-mix(in srgb, var(--accent) 3%, transparent) 49px 50px, transparent 51px 96px); }
+:root[data-theme="sandstone"] #toolbar { background: linear-gradient(105deg, var(--panel), #eee2d0); }
+:root[data-theme="sandstone"] .tree-row.selected { box-shadow: inset 3px 0 var(--accent); }
+:root[data-theme="crimson-circuit"] #toolbar { background: linear-gradient(105deg, var(--panel), #2f1a25); }
+:root[data-theme="crimson-circuit"] :is(.tab.active, .np-tab.active) { background: linear-gradient(var(--accent), var(--accent)) left top / 50% 2px no-repeat, var(--panel); box-shadow: none; }

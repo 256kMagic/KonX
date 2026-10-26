@@ -7,7 +7,8 @@ const { spawn } = require('node:child_process');
 const { setViewport } = require('./lib/electron-viewport.cjs');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const layouts = ['classic', 'workbench', 'incident-desk', 'operations-wall', 'focus'];
-const themes = ['dark', 'light', 'arc-reactor', 'chroma-rgb', 'matrix-mainframe', 'synthwave-grid', 'hologram-prism', 'plasma-forge'];
+const themes = ['dark', 'light', 'arc-reactor', 'chroma-rgb', 'matrix-mainframe', 'synthwave-grid', 'hologram-prism', 'plasma-forge',
+  'obsidian-gold', 'arctic-glass', 'deep-ocean', 'sandstone', 'crimson-circuit'];
 async function until(check, description, timeout = 12000) {
   const end = Date.now() + timeout;
   while (!(await check())) { if (Date.now() >= end) throw new Error('Timed out: ' + description); await pause(25); }

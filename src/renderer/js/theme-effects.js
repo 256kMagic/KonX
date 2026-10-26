@@ -1,11 +1,19 @@
 // Decorative layers never receive pointer/keyboard events or enter tool output.
-import { applicationTheme } from './themes.js';
+import { APP_THEMES, applicationTheme, scheme } from './themes.js';
+
+const chromeProperties = new Set(Object.values(APP_THEMES).flatMap(theme => Object.keys(theme.ui || {})));
 
 export function applyApplicationTheme(settings, doc = document) {
   const theme = applicationTheme(settings.uiTheme);
   const root = doc.documentElement;
   root.dataset.theme = theme.id;
+  root.dataset.appearance = theme.appearance;
   root.classList.toggle('theme-animated', theme.animated);
+  root.classList.toggle('theme-static', !!theme.ui);
+  for (const name of chromeProperties) {
+    if (theme.ui?.[name]) root.style.setProperty(name, theme.ui[name]);
+    else root.style.removeProperty(name);
+  }
   root.dataset.themeMotion = settings.themeAnimations === false ? 'paused' : 'running';
   root.dataset.themeVisible = String(!doc.hidden);
   return theme;
@@ -34,33 +42,38 @@ export function mountThemeOutput(host) {
 const registeredEditors = new WeakMap();
 export function editorTheme(monaco, settings) {
   const theme = applicationTheme(settings.uiTheme);
-  if (!theme.animated) return theme.id === 'light' ? 'konx-light' : 'konx-dark';
+  if (theme.terminalScheme) return theme.id === 'light' ? 'konx-light' : 'konx-dark';
+  const palette = scheme('app', theme.id);
   let registered = registeredEditors.get(monaco);
   if (!registered) registeredEditors.set(monaco, registered = new Set());
   const name = 'konx-' + theme.id;
   if (!registered.has(name)) {
     monaco.editor.defineTheme(name, {
-      base: 'vs-dark', inherit: true,
+      base: theme.appearance === 'light' ? 'vs' : 'vs-dark', inherit: true,
       rules: [
         { token: 'comment', foreground: theme.muted.slice(1), fontStyle: 'italic' },
         { token: 'keyword', foreground: theme.accent.slice(1) },
         { token: 'keyword.section', foreground: theme.accent.slice(1), fontStyle: 'bold' },
-        { token: 'keyword.sub', foreground: 'd5a8ff' },
-        { token: 'keyword.no', foreground: 'f3cf73' },
-        { token: 'keyword.permit', foreground: '8fe0ad' },
-        { token: 'keyword.deny', foreground: 'ff9a9a' },
-        { token: 'number.ip', foreground: '8dcbff' },
-        { token: 'number.mac', foreground: 'd5a8ff' },
-        { token: 'type.interface', foreground: 'f3cf73' },
+        { token: 'keyword.sub', foreground: palette.magenta.slice(1) },
+        { token: 'keyword.no', foreground: palette.yellow.slice(1) },
+        { token: 'keyword.permit', foreground: palette.green.slice(1) },
+        { token: 'keyword.deny', foreground: palette.red.slice(1) },
+        { token: 'number.ip', foreground: (theme.animated ? palette.blue : theme.accent).slice(1) },
+        { token: 'number.mac', foreground: palette.magenta.slice(1) },
+        { token: 'type.interface', foreground: palette.yellow.slice(1) },
+        ...(!theme.animated ? [
+          { token: 'number', foreground: palette.blue.slice(1) },
+          { token: 'string', foreground: palette.green.slice(1) },
+        ] : []),
         { token: 'date', foreground: theme.muted.slice(1) },
-        { token: 'log.error', foreground: 'ff9a9a' },
-        { token: 'log.warn', foreground: 'f3cf73' },
-        { token: 'log.info', foreground: '8fe0ad' },
+        { token: 'log.error', foreground: palette.red.slice(1) },
+        { token: 'log.warn', foreground: palette.yellow.slice(1) },
+        { token: 'log.info', foreground: palette.green.slice(1) },
         { token: 'log.debug', foreground: theme.muted.slice(1) },
       ],
       colors: {
-        'editor.background': '#00000000', 'editor.foreground': theme.foreground,
-        'editorGutter.background': '#00000000', 'minimap.background': theme.background,
+        'editor.background': theme.animated ? '#00000000' : theme.background, 'editor.foreground': theme.foreground,
+        'editorGutter.background': theme.animated ? '#00000000' : theme.background, 'minimap.background': theme.background,
         'editor.lineHighlightBackground': theme.accent + '0c', 'editor.lineHighlightBorder': '#00000000',
         'editorLineNumber.foreground': theme.muted, 'editorLineNumber.activeForeground': theme.accent,
         'editorCursor.foreground': theme.accent, 'editor.selectionBackground': theme.selection,

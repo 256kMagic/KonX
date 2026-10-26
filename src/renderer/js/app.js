@@ -291,7 +291,8 @@ class App {
 
   updateThemeHeader() {
     if (!this.themeHeader) return;
-    this.themeHeader.classList.toggle('hidden', !this.theme.animated);
+    this.themeHeader.classList.toggle('hidden', !!this.theme.terminalScheme);
+    this.themeMotion.classList.toggle('hidden', !this.theme.animated);
     this.themeName.textContent = this.theme.label;
     const reduced = this.motionPreference.matches;
     const paused = this.settings.themeAnimations === false;

@@ -50,7 +50,59 @@ export const APP_THEMES = Object.fromEntries([
   ['hologram-prism', 'Hologram Prism', true, '#060512', '#f3f0ff', '#d0b0ff', '#c4bbe2', '#3a3058', '#54fff0'],
   ['plasma-forge', 'Plasma Forge', true, '#100510', '#fff0e9', '#ffbe87', '#d7b7c2', '#53352f', '#d35aff'],
 ].map(([id, label, animated, background, foreground, accent, muted, selection, secondary]) =>
-  [id, { id, label, animated, background, foreground, accent, muted, selection, secondary }]));
+  [id, { id, label, animated, background, foreground, accent, muted, selection, secondary,
+    appearance: id === 'light' ? 'light' : 'dark',
+    terminalScheme: id === 'dark' ? 'konx' : id === 'light' ? 'light' : null }]));
+
+// Static themes own their chrome and output colors together. Consumers use this
+// catalog rather than treating every non-animated theme as classic Dark/Light.
+function staticTheme({ id, label, appearance = 'dark', background, panel, terminal,
+  foreground, muted, accent, selection, secondary, ok, warn, error, radius, palette }) {
+  const light = appearance === 'light';
+  return { id, label, animated: false, appearance, background: terminal, foreground,
+    accent, muted, selection, secondary, palette,
+    ui: {
+      '--bg': background, '--panel': panel,
+      '--panel-2': `color-mix(in srgb, ${panel} 80%, ${background})`,
+      '--panel-3': `color-mix(in srgb, ${accent} 8%, ${panel})`,
+      '--text': foreground, '--text-strong': foreground, '--muted': muted, '--faint': muted,
+      '--accent': accent, '--accent-strong': accent,
+      '--accent-soft': `color-mix(in srgb, ${accent} 12%, ${panel})`,
+      '--sel': `color-mix(in srgb, ${accent} 12%, ${panel})`,
+      '--hover': `color-mix(in srgb, ${accent} 7%, transparent)`,
+      '--border': `color-mix(in srgb, ${muted} 24%, ${panel})`,
+      '--border-strong': `color-mix(in srgb, ${muted} 43%, ${panel})`,
+      '--ok': ok, '--warn': warn, '--err': error,
+      '--theme-button-text': light ? '#ffffff' : terminal,
+      '--theme-danger-text': light ? '#ffffff' : terminal,
+      '--theme-secondary': secondary, '--radius': radius + 'px',
+      '--shadow': light ? '0 12px 40px #18283a2e' : '0 12px 40px #0008',
+    },
+  };
+}
+
+for (const value of [
+  { id: 'obsidian-gold', label: 'Obsidian Gold', background: '#0d1014', panel: '#171c22', terminal: '#090c10',
+    foreground: '#e9edf2', muted: '#9ba5b4', accent: '#d5b36a', selection: '#46402f', secondary: '#88baf0',
+    ok: '#72caa4', warn: '#e7a55a', error: '#ed7e86', radius: 6,
+    palette: { red: '#ed7e86', green: '#72caa4', yellow: '#e7a55a', blue: '#88baf0', magenta: '#c4a0e5', cyan: '#75ccd2' } },
+  { id: 'arctic-glass', label: 'Arctic Glass', appearance: 'light', background: '#edf3fa', panel: '#fafcff', terminal: '#e6eef8',
+    foreground: '#17273c', muted: '#52667e', accent: '#225ad8', selection: '#c0d2f1', secondary: '#7145a2',
+    ok: '#16734b', warn: '#865b00', error: '#b42337', radius: 10,
+    palette: { red: '#b42337', green: '#16734b', yellow: '#865b00', blue: '#225ad8', magenta: '#7145a2', cyan: '#156d78' } },
+  { id: 'deep-ocean', label: 'Deep Ocean', background: '#0b1b22', panel: '#142a33', terminal: '#07151c',
+    foreground: '#e1f0ee', muted: '#91b2b9', accent: '#71c9b6', selection: '#244d50', secondary: '#9bbef3',
+    ok: '#98d693', warn: '#e7be78', error: '#f28c87', radius: 8,
+    palette: { red: '#f28c87', green: '#98d693', yellow: '#e7be78', blue: '#9bbef3', magenta: '#c4afe5', cyan: '#71c9b6' } },
+  { id: 'sandstone', label: 'Sandstone', appearance: 'light', background: '#ede6da', panel: '#faf5ec', terminal: '#e6dccc',
+    foreground: '#332a24', muted: '#675549', accent: '#97482c', selection: '#d2baa5', secondary: '#7a437d',
+    ok: '#286747', warn: '#805b16', error: '#b12c34', radius: 3,
+    palette: { red: '#b12c34', green: '#286747', yellow: '#805b16', blue: '#3c608d', magenta: '#7a437d', cyan: '#25666c' } },
+  { id: 'crimson-circuit', label: 'Crimson Circuit', background: '#171317', panel: '#241d24', terminal: '#100e12',
+    foreground: '#f2e8ef', muted: '#b3a0b1', accent: '#e87089', selection: '#52303f', secondary: '#96bdf3',
+    ok: '#79cbaa', warn: '#e6bc70', error: '#ff9582', radius: 2,
+    palette: { red: '#ff9582', green: '#79cbaa', yellow: '#e6bc70', blue: '#96bdf3', magenta: '#d5a3e7', cyan: '#82cad0' } },
+]) APP_THEMES[value.id] = staticTheme(value);
 
 export function applicationTheme(name) {
   return Object.hasOwn(APP_THEMES, name) ? APP_THEMES[name] : APP_THEMES.dark;
@@ -59,7 +111,17 @@ export function applicationTheme(name) {
 export function scheme(name, uiTheme = 'dark') {
   if (name === 'app') {
     const theme = applicationTheme(uiTheme);
-    if (!theme.animated) return scheme(theme.id === 'light' ? 'light' : 'konx');
+    if (theme.terminalScheme) return scheme(theme.terminalScheme);
+    if (theme.palette) {
+      const colors = { background: theme.background, foreground: theme.foreground,
+        cursor: theme.accent, cursorAccent: theme.background, selectionBackground: theme.selection,
+        black: theme.muted, brightBlack: theme.muted, white: theme.foreground, brightWhite: theme.foreground };
+      for (const [name, color] of Object.entries(theme.palette)) {
+        colors[name] = color;
+        colors['bright' + name[0].toUpperCase() + name.slice(1)] = color;
+      }
+      return colors;
+    }
     return {
       ...scheme('konx'), background: theme.background, foreground: theme.foreground,
       cursor: theme.accent, cursorAccent: theme.background, selectionBackground: theme.selection,

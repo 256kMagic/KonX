@@ -90,6 +90,14 @@ async function fixture() {
         await until(async () => await run('__t.term.cols') < cols, 'popout terminal resize').catch(async error => {
           throw new Error(error.message + ' ' + JSON.stringify({ before: cols, bounds: child.getBounds(), current: await run('({cols:__t.term.cols,active:__t.active,disposed:__t.disposed,ownerWidth:__t.el.ownerDocument.defaultView.innerWidth,width:__t.wrap.clientWidth,height:__t.wrap.clientHeight,expected:__t.fit.proposeDimensions()})') }));
         });
+        for (const theme of ['obsidian-gold', 'arctic-glass', 'deep-ocean', 'sandstone', 'crimson-circuit']) {
+          await run(`__app.saveSettings({uiTheme:${JSON.stringify(theme)}})`);
+          const mainTheme = await run(`({appearance:document.documentElement.dataset.appearance,style:document.documentElement.style.cssText})`);
+          assert.equal(await child.webContents.executeJavaScript('document.documentElement.dataset.theme'), theme);
+          assert.deepEqual(await child.webContents.executeJavaScript(`({appearance:document.documentElement.dataset.appearance,style:document.documentElement.style.cssText})`), mainTheme,
+            'Pop-out must inherit the complete static palette and light/dark appearance');
+          assert.equal(await run('__t.term===__termObject&&__t.state==="connected"'), true);
+        }
         await run(`__app.saveSettings({uiTheme:'light'})`);
         assert.equal(await child.webContents.executeJavaScript('document.documentElement.dataset.theme'), 'light');
         main.restore();

@@ -1,10 +1,10 @@
 # KonX User Guide
 
-Version 0.28.0 moves **Update KonX** to the top-right header and makes right-click paste and automatic-copy options easier to find. See [terminal clipboard options](#copy-paste-search-and-links), the [update guide](UPDATING.md), and [release notes](releases/0.28.0.md).
+Version 0.29.0 adds **Obsidian Gold**, **Arctic Glass**, **Deep Ocean**, **Sandstone**, and **Crimson Circuit** application themes. See [Appearance and motion](#appearance-and-motion), the [theme guide](THEMES.md), and [release notes](releases/0.29.0.md). The top-right updater and terminal clipboard controls from 0.28.0 remain available.
 
 Version 0.27.1 renames the contextual assistant to **KonX-AI** and improves encrypted provider-key management. See the [KonX-AI guide](KONX_AI.md), [provider setup](AI_KNOWLEDGE_GUIDE.md#connect-a-provider), and [release validation](releases/0.27.1.md).
 
-This guide covers KonX 0.28.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one application. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
+This guide covers KonX 0.29.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one application. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
 
 Version 0.27.0 adds reviewed diagnostics, undoable editor replacements and saved answer notes to KonX-AI. See the [KonX-AI guide](KONX_AI.md) and [release validation](releases/0.27.0.md).
 
@@ -84,6 +84,7 @@ For downloads, build instructions, and project information, see the [README](../
 - [Troubleshooting runbooks](RUNBOOKS.md)
 - [Capture comparison](CAPTURE_COMPARISON.md)
 - [Workspace layouts](WORKSPACE_LAYOUTS.md)
+- [Themes and terminal colors](THEMES.md)
 - [Saved site workspaces](SITE_WORKSPACES.md)
 - [Visual topology](TOPOLOGY.md)
 - [Live Events: syslog and SNMP traps](EVENTS.md)
@@ -105,7 +106,7 @@ Examples use reserved documentation addresses such as `192.0.2.10`, `198.51.100.
 
 ## Install, run, and update
 
-Download a Windows x64 executable from the [0.28.0 release](https://github.com/256kMagic/KonX/releases/tag/v0.28.0).
+Download a Windows x64 executable from the [0.29.0 release](https://github.com/256kMagic/KonX/releases/tag/v0.29.0).
 
 | Download | Use it when | How to start |
 | --- | --- | --- |
@@ -114,7 +115,7 @@ Download a Windows x64 executable from the [0.28.0 release](https://github.com/2
 
 The portable executable still uses a Windows user profile for settings, saved sessions, and editor recovery. It does **not** automatically place all data beside the executable or make encrypted credentials transferable between computers. See [Application data and backups](#application-data-and-backups).
 
-**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.28.0.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
+**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.29.0.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
 
 For updates from **installed 0.6.2 or later**, or **portable 0.6.0 or later**:
 
@@ -127,7 +128,7 @@ From 0.16.1, staged update filenames include KonX and the version being installe
 
 Installed copies retain their installation folder and mode. Portable copies retain their filename and location; the containing folder must be writable. Both continue to use the existing Windows profile. No update is applied just because you close KonX, and no release checks run in the background. See [Updating KonX](UPDATING.md) for cancellation, failures, and release preparation.
 
-Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.28.0 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
+Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.29.0 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
 
 Npcap is optional for packet capture; SSH, SFTP, Notepad, and the other tools do not require it. Updating KonX does not install or update Npcap.
 
@@ -672,7 +673,19 @@ Defaults include a dark theme, terminal font size 14, block cursor, 10,000 scrol
 
 In 0.14.0 or later, **Workspace layout** selects the physical arrangement of the app independently of its theme. Choose **Docked Workbench**, **Incident Desk**, **Operations Wall**, **Focus Workspace**, or **Classic** using the structural previews, then **Save**. Existing profiles keep Classic by default. Switching layouts retains open sessions, tools, captures, and drafts; the focused pane remains the command target. See the [workspace layout guide](WORKSPACE_LAYOUTS.md) for pane selection, focus, expansion, and restart behavior.
 
-In 0.5.0 or later, open **Settings → Appearance**, choose an **Application theme**, and choose **Save**. Existing Dark and Light themes keep the classic appearance. Six additional themes add glow and animation:
+Open **Settings → Appearance**, choose an **Application theme**, and choose **Save**. In 0.29.0, five additional themes provide coordinated colors without animation:
+
+| Theme | Look |
+| --- | --- |
+| **Obsidian Gold** | Charcoal surfaces, warm gold accents, and a dark terminal |
+| **Arctic Glass** | Cool light surfaces, cobalt accents, and a light terminal |
+| **Deep Ocean** | Dark petrol surfaces, seafoam accents, and a dark terminal |
+| **Sandstone** | Warm paper surfaces, clay accents, and a light terminal |
+| **Crimson Circuit** | Plum-charcoal surfaces, rose-red accents, and a dark terminal |
+
+These themes work with every workspace layout and follow panels into floating and pop-out windows. Theme changes are saved without reconnecting sessions or replacing open documents. Updating does not automatically select a new theme. See [Themes and terminal colors](THEMES.md) for the full workflow and tester checklist.
+
+Existing Dark and Light themes keep the classic appearance. The six animated themes introduced in 0.5.0 remain available:
 
 | Theme | Look |
 | --- | --- |
@@ -685,11 +698,11 @@ In 0.5.0 or later, open **Settings → Appearance**, choose an **Application the
 
 The top header stays compact. Decorative effects appear behind terminal and editor output; there is no separate hero banner above the workspace. Tables, forms, and explanations use quieter surfaces for reading.
 
-Choose **Pause effects** in the top header to stop theme animation, or clear **Animate theme effects** in **Settings → Appearance**. This preference is saved for your next launch. Choose **Resume effects** to start motion again. KonX automatically respects Windows' reduced-motion preference; the header motion button is disabled while that preference is active.
+For an animated theme, choose **Pause effects** in the top header to stop theme animation, or clear **Animate theme effects** in **Settings → Appearance**. This preference is saved for your next launch. Choose **Resume effects** to start motion again. KonX automatically respects Windows' reduced-motion preference; the header motion button is disabled while that preference is active. The five new themes and classic Dark/Light have no animated effects, so they do not need pausing.
 
 Application themes coordinate the interface and Notepad's palette and background automatically. To coordinate terminal colors and backgrounds too, set **Terminal color scheme → Follow application theme** in **Settings → Appearance** and choose **Save**. This is the default for new profiles; upgrading preserves an existing profile's terminal scheme, so select it explicitly after updating. A saved session's explicit scheme in **Terminal & Log** continues to override the global selection.
 
-Terminal palettes remain independently selectable. Existing schemes such as KonX Dark, Classic, Green Phosphor, Solarized Dark, Monokai, and Light keep their original colors and opaque backgrounds. Choose one of these whenever you want a classic terminal inside an animated application theme.
+Terminal palettes remain independently selectable. Existing schemes such as KonX Dark, Classic, Green Phosphor, Solarized Dark, Monokai, and Light keep their original colors and opaque backgrounds. Choose one of these whenever you want a terminal palette independent of the application theme.
 
 Notepad's wrap/map/whitespace options are managed in its own menu and toolbar. Its language, encoding, and line-ending choices apply to the document. Saved session connection settings are edited from that session rather than the global settings dialog.
 
@@ -774,7 +787,7 @@ For an isolated profile, advanced users can launch from PowerShell with a separa
 
 ```powershell
 $env:KONX_USERDATA = Join-Path $env:LOCALAPPDATA 'KonX-TestProfile'
-& '.\KonX-0.28.0-portable.exe'
+& '.\KonX-0.29.0-portable.exe'
 ```
 
 Run this from the folder containing the portable executable. The environment variable applies to that PowerShell process and launches from it; use a normal shortcut or a separate shell for your normal profile. This setting does not make Windows-encrypted credentials portable.

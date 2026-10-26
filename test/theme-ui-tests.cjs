@@ -8,6 +8,7 @@ const { spawn } = require('node:child_process');
 const { setViewport } = require('./lib/electron-viewport.cjs');
 
 const themeIds = ['arc-reactor', 'chroma-rgb', 'matrix-mainframe', 'synthwave-grid', 'hologram-prism', 'plasma-forge'];
+const staticIds = ['obsidian-gold', 'arctic-glass', 'deep-ocean', 'sandstone', 'crimson-circuit'];
 const pause = (ms = 20) => new Promise((resolve) => setTimeout(resolve, ms));
 async function until(check, description, timeout = 12000) {
   const end = Date.now() + timeout;
@@ -32,7 +33,7 @@ async function runFixture(reduced) {
     const collect = (data) => { output = (output + data).slice(-1024 * 1024); };
     child.stdout.on('data', collect); child.stderr.on('data', collect);
     const code = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { child.kill(); reject(new Error('Theme UI fixture timed out\n' + output)); }, 55000);
+      const timer = setTimeout(() => { child.kill(); reject(new Error('Theme UI fixture timed out\n' + output)); }, 85000);
       child.once('error', (error) => { clearTimeout(timer); reject(error); });
       child.once('exit', (value) => { clearTimeout(timer); resolve(value); });
     });
@@ -51,7 +52,7 @@ async function runFixture(reduced) {
 }
 
 async function runThemeUiTests(test) {
-  await test('real theme UI: six animated themes, terminal/editor output, compact toolbar, pause persistence and classic palettes', () => runFixture(false));
+  await test('real theme UI: eleven custom themes, picker save, terminal/editor output, compact toolbar, pause persistence and classic palettes', () => runFixture(false));
   await test('real theme UI: Windows reduced motion stops effects and disables the motion toggle', () => runFixture(true));
 }
 
@@ -101,6 +102,7 @@ async function electronFixture() {
   };
   app.on('browser-window-created', (_event, win) => {
     win.setOpacity(0); win.setFocusable(false); win.setSkipTaskbar(true);
+    win.webContents.setBackgroundThrottling(false);
     win.webContents.on('console-message', (_event, level, message) => { if (level >= 3) failures.push(message); });
     win.webContents.once('did-finish-load', async () => {
       try {
@@ -110,7 +112,7 @@ async function electronFixture() {
         const click = async (expression) => {
           let point;
           await until(async () => {
-            point = await run(`(() => { const el=${expression}; if(!el) throw new Error('Missing theme fixture control'); const r=el.getBoundingClientRect();
+            point = await run(`(() => { const el=${expression}; if(!el) throw new Error('Missing theme fixture control'); el.scrollIntoView({block:'nearest',inline:'nearest'}); const r=el.getBoundingClientRect();
               if(!r.width||!r.height||el.disabled)return{ready:false}; const x=Math.round(r.left+r.width/2),y=Math.round(r.top+r.height/2),hit=document.elementFromPoint(x,y);
               return{x,y,ready:el===hit||el.contains(hit)};})()`);
             return point.ready;
@@ -122,8 +124,42 @@ async function electronFixture() {
           await pause(25);
         };
         const save = async (patch) => { await run(`window.__app.saveSettings(${JSON.stringify(patch)}).then(()=>undefined)`); await pause(35); };
+        const picker = `[...document.querySelectorAll('.modal select')].find(el=>[...el.options].some(option=>option.value==='obsidian-gold'))`;
+        const chooseTheme = async (id) => {
+          await click(`document.querySelector('#toolbar button[title="Settings"]')`);
+          await until(() => run(`Boolean(${picker})`), 'application theme picker');
+          assert.deepEqual(await run(`[...(${picker}).options].map(option=>option.value)`), ['dark', 'light', ...themeIds, ...staticIds]);
+          // Select a real option after verifying that the form control is
+          // reachable, then use native input for Save. The form owns persistence.
+          assert.equal(await run(`(()=>{const e=${picker};e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)===e;})()`), true);
+          await run(`(()=>{const choice=${picker};choice.value=${JSON.stringify(id)};choice.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+          assert.notEqual(await run('document.documentElement.dataset.theme'), id, 'Choosing a theme must wait for Save');
+          await click(`[...document.querySelectorAll('.modal footer button')].find(button=>button.textContent==='Save')`);
+          await until(() => run(`document.documentElement.dataset.theme===${JSON.stringify(id)}`), 'theme saved from Appearance');
+          assert.equal(JSON.parse(fs.readFileSync(path.join(fixtureRoot, 'profile', 'settings.json'), 'utf8')).uiTheme, id);
+        };
         const capture = async (name) => {
-          if (screenshots) fs.writeFileSync(path.join(screenshots, name + '.png'), (await win.webContents.capturePage(undefined, { stayHidden: true })).toPNG());
+          if (!screenshots) return;
+          // DOM/xterm render completion can precede Chromium's compositor. Wait
+          // through two paint opportunities before capturing this inactive window.
+          await run('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+          await pause(100);
+          fs.writeFileSync(path.join(screenshots, name + '.png'), (await win.webContents.capturePage(undefined, { stayHidden: true })).toPNG());
+        };
+        const readable = async (expression, label) => {
+          const result = await run(`(()=>{
+            const element=${expression};if(!element)throw Error('Missing contrast target');
+            const ctx=document.createElement('canvas').getContext('2d',{willReadFrequently:true});
+            const rgba=color=>{ctx.clearRect(0,0,1,1);ctx.fillStyle=color;ctx.fillRect(0,0,1,1);return [...ctx.getImageData(0,0,1,1).data].map(v=>v/255);};
+            const over=(a,b)=>[0,1,2].map(i=>a[i]*a[3]+b[i]*(1-a[3]));
+            const ancestors=[];for(let e=element;e;e=e.parentElement)ancestors.unshift(e);
+            let background=[1,1,1];for(const e of ancestors)background=over(rgba(getComputedStyle(e).backgroundColor),background);
+            const color=getComputedStyle(element).color,foreground=over(rgba(color),background);
+            const luminance=rgb=>rgb.map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
+            const a=luminance(foreground),b=luminance(background);
+            return{color,background,ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};
+          })()`);
+          assert.ok(result.ratio >= 4.5, label + ': ' + JSON.stringify(result));
         };
         await until(() => run('Boolean(window.__app)'), 'application initialization');
         await until(() => run('!document.hidden'), 'visible but transparent fixture');
@@ -145,6 +181,10 @@ async function electronFixture() {
         })()`);
         assert.equal(await run('window.__app.jobs.size'), 0);
         assert.equal(await run('window.__term.term.options.allowTransparency'), true);
+        if (!reduced) await run(`(async()=>{const {makeRtpDemo}=await import('./js/capture/sample-rtp.mjs');
+          const {createComparisonDemo}=await import('./js/capture/sample-compare.mjs');const {readCapture,writePcapng}=await import('./js/capture/pcapfile.mjs');
+          const sip=readCapture(makeRtpDemo().bytes).packets.slice(0,2),tcp=readCapture(createComparisonDemo().after.bytes).packets;
+          window.__cap=window.__app.openTool('capture');await window.__cap.loadBytes(writePcapng([...sip,...tcp]),'theme-sip-and-tcp.pcapng');return true;})()`);
         const geometry = async (width, height) => {
           await setViewport(win, run, width, height); await pause(60);
           const bounds = await run(`(() => { const toolbar=document.querySelector('#toolbar'),r=toolbar.getBoundingClientRect();
@@ -165,27 +205,34 @@ async function electronFixture() {
               'Toolbar control clipped at ' + width + ': ' + JSON.stringify(control));
           }
         };
-        for (const id of reduced ? ['arc-reactor'] : themeIds) {
-          await save({ uiTheme: id, colorScheme: 'app', themeAnimations: true });
+        for (const id of reduced ? ['arc-reactor'] : [...themeIds, ...staticIds]) {
+          const animated = themeIds.includes(id);
+          if (animated) await save({ uiTheme: id, colorScheme: 'app', themeAnimations: true });
+          else await chooseTheme(id);
           await run('window.__app.activate(window.__term);void 0;');
           const terminal = await run(`(() => { const fx=window.__term.wrap.querySelector('.theme-output-fx'),root=document.documentElement;
             window.__term.term.selectAll(); return {theme:root.dataset.theme,animated:root.classList.contains('theme-animated'),
-            header:window.__app.themeName.textContent,headerHidden:window.__app.themeHeader.classList.contains('hidden'),
+            header:window.__app.themeName.textContent,headerHidden:window.__app.themeHeader.classList.contains('hidden'),motionHidden:getComputedStyle(window.__app.themeMotion).display==='none',
             background:window.__term.term.options.theme.background,foreground:window.__term.term.options.theme.foreground,
             fxCount:window.__term.wrap.querySelectorAll(':scope > .theme-output-fx').length,display:getComputedStyle(fx).display,pointer:getComputedStyle(fx).pointerEvents,
             aria:fx.getAttribute('aria-hidden'),selection:window.__term.term.getSelection()};})()`);
-          assert.equal(terminal.theme, id); assert.equal(terminal.animated, true);
+          assert.equal(terminal.theme, id); assert.equal(terminal.animated, animated);
           assert.equal(terminal.header, await run(`window.__themeModule.applicationTheme(${JSON.stringify(id)}).label`));
-          assert.equal(terminal.headerHidden, false); assert.equal(terminal.background, '#00000000');
+          assert.equal(terminal.headerHidden, false); assert.equal(terminal.motionHidden, !animated);
+          assert.equal(terminal.background, animated ? '#00000000' : await run(`window.__themeModule.scheme('app',${JSON.stringify(id)}).background`));
           assert.equal(terminal.foreground, await run(`window.__themeModule.applicationTheme(${JSON.stringify(id)}).foreground`));
-          assert.equal(terminal.fxCount, 1); assert.equal(terminal.display, 'block'); assert.equal(terminal.pointer, 'none'); assert.equal(terminal.aria, 'true');
+          assert.equal(terminal.fxCount, 1); assert.equal(terminal.display, animated ? 'block' : 'none');
+          if (animated) assert.equal(terminal.pointer, 'none');
+          assert.equal(terminal.aria, 'true');
           assert.ok(terminal.selection.includes('Synthetic output only')); assert.ok(!terminal.selection.includes('01010'));
+          await until(() => run('window.__term.term.element.querySelector(".xterm-selection").childElementCount>0'), 'terminal selection painted');
           // Wait for xterm's render event after clearing the temporary selection.
           // A transparent inactive fixture can otherwise be captured before its
           // old selection canvas has been repainted.
           await run(`new Promise(resolve=>{const listener=window.__term.term.onRender(()=>{listener.dispose();resolve();});
             window.__term.term.clearSelection();window.__term.term.refresh(0,window.__term.term.rows-1);})`);
           assert.equal(await run('window.__term.term.getSelection()'), '');
+          await until(() => run('window.__term.term.element.querySelector(".xterm-selection").childElementCount===0'), 'terminal selection paint cleared');
           await geometry(1400, 880); await capture(id + '-terminal-1400');
           await geometry(1101, 560);
           await geometry(1361, 560);
@@ -196,13 +243,31 @@ async function electronFixture() {
             window.__np.editor.setSelection({startLineNumber:1,startColumn:1,endLineNumber:1,endColumn:9});
             const desired=document.createElement('span');desired.style.color=window.__themeModule.applicationTheme(document.documentElement.dataset.theme).foreground;
             document.body.append(desired);const expected=getComputedStyle(desired).color;desired.remove();
-            return {name:window.__np.theme(),background:getComputedStyle(editor).backgroundColor,foreground:getComputedStyle(editor).color,expected,
+            desired.style.color=window.__themeModule.scheme('app',document.documentElement.dataset.theme).background;document.body.append(desired);
+            const expectedBackground=getComputedStyle(desired).color;desired.remove();
+            return {name:window.__np.theme(),background:getComputedStyle(editor).backgroundColor,foreground:getComputedStyle(editor).color,expected,expectedBackground,
               display:getComputedStyle(fx).display,pointer:getComputedStyle(fx).pointerEvents,fxCount:window.__np.host.querySelectorAll(':scope > .theme-output-fx').length,
               selection:window.__np.current.model.getValueInRange(window.__np.editor.getSelection())};})()`);
-          assert.equal(editor.name, 'konx-' + id); assert.equal(editor.background, 'rgba(0, 0, 0, 0)');
-          assert.equal(editor.foreground, editor.expected); assert.equal(editor.display, 'block'); assert.equal(editor.pointer, 'none');
+          assert.equal(editor.name, 'konx-' + id); assert.equal(editor.background, animated ? 'rgba(0, 0, 0, 0)' : editor.expectedBackground);
+          assert.equal(editor.foreground, editor.expected); assert.equal(editor.display, animated ? 'block' : 'none');
+          if (animated) assert.equal(editor.pointer, 'none');
           assert.equal(editor.fxCount, 1); assert.equal(editor.selection, 'hostname');
           await setViewport(win, run, 1400, 880); await pause(60); await capture(id + '-notepad-1400');
+          if (!animated) {
+            await run('window.__app.activate(window.__cap);window.__cap.select(0);void 0;');
+            await until(() => run('Boolean(window.__cap.el.querySelector(".prows .prow.sel"))'), 'selected packet row');
+            await readable('window.__cap.el.querySelector(".prows .prow.sel")', id + ' selected packet');
+            await readable('window.__cap.el.querySelector(".prows .prow.c-expert:not(.sel)")', id + ' unselected TCP expert packet');
+            await capture(id + '-capture-1400');
+            await click('window.__cap.sipButton');
+            await until(() => run('Boolean(document.querySelector(".sip-call-row.active"))'), 'sample SIP call');
+            await readable('document.querySelector(".sip-call-row.active .sip-call-id")', id + ' selected SIP call ID');
+            await readable('document.querySelector(".sip-call-row.active .sip-call-meta")', id + ' selected SIP call metadata');
+            await readable('document.querySelector(".sip-message-detail")', id + ' SIP message detail');
+            await capture(id + '-sip-1400');
+            await click(`[...document.querySelectorAll('.modal footer button')].find(button=>button.textContent==='Close')`);
+            await until(() => run('!document.querySelector(".sip-workspace")'), 'SIP dialog closes');
+          }
         }
         if (reduced) {
           assert.equal(await run('matchMedia("(prefers-reduced-motion: reduce)").matches'), true);
@@ -247,7 +312,7 @@ async function electronFixture() {
         assert.equal(await run('getComputedStyle(window.__term.wrap.querySelector(".theme-output-fx")).display'), 'none');
         assert.equal(await run('window.__app.jobs.size'), 0);
         assert.deepEqual(failures, []);
-        console.log('THEME_UI_PASS: six themes, transparent xterm/Monaco, text selection, compact header, two viewport sizes, pause/resume persistence and classic overrides');
+        console.log('THEME_UI_PASS: eleven custom themes, Appearance save, static/animated xterm and Monaco, text selection, compact header, five viewport sizes, pause/resume persistence and classic overrides');
         finish(0);
       } catch (error) { finish(1, error); }
     });

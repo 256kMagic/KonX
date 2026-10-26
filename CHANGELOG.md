@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.29.0 — 2026-10-26
+
+- Add five static application themes: **Obsidian Gold**, **Arctic Glass**, **Deep Ocean**, **Sandstone**, and **Crimson Circuit**.
+- Coordinate application surfaces, terminal palettes, and Notepad colors with the new themes; Arctic Glass and Sandstone include light terminal and editor backgrounds.
+- Keep theme selection independent of workspace layout, with the same appearance in docked, floating, and popped-out panels.
+- Match Events and Site Workspace error/selection colors to the active theme and keep packet warning rows readable in the new light themes.
+- Preserve existing application themes, explicit terminal palettes, per-session overrides, and saved appearance preferences when upgrading. The six animated themes retain their existing motion controls.
+
+See the [theme guide](docs/THEMES.md), [user guide](docs/USER_GUIDE.md#appearance-and-motion), and [release notes](docs/releases/0.29.0.md).
+
 ## 0.28.0 — 2026-10-26
 
 - Move **Update KonX** from Home to the top-right header, available in every workspace layout; keep **Settings → Updates**.

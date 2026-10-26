@@ -40,7 +40,7 @@ export async function settingsDialog(app) {
     { name: 'colorScheme', label: 'Terminal color scheme', type: 'select', options: Object.entries(SCHEMES).map(([k, v]) => [k, v.label]), hint: 'Follow application theme adds matching colors and backgrounds. Saved session palettes take priority.' },
     { name: 'terminalHighlighting', label: 'Output highlighting', type: 'select', options: [['cisco', 'Cisco network output'], ['off', 'Off']], span: 2,
       hint: 'Highlights recognized Cisco errors, interface states, and IP addresses. Saved session choices take priority.' },
-    { name: 'themeAnimations', label: 'Animate theme effects', type: 'checkbox', span: 2, hint: 'Use Pause effects in the header at any time. Windows reduced-motion preferences are respected.' },
+    { name: 'themeAnimations', label: 'Animate theme effects', type: 'checkbox', span: 2, hint: 'Applies to the six animated themes. Static themes do not move. Use Pause effects in the header for animated themes; Windows reduced-motion preferences are respected.' },
     { name: 'fontFamily', label: 'Terminal font', span: 2 },
     { name: 'fontSize', label: 'Font size', type: 'number', min: 7, max: 36 },
     { name: 'cursorStyle', label: 'Cursor', type: 'select', options: [['block', 'Block'], ['underline', 'Underline'], ['bar', 'Bar']] },

@@ -65,8 +65,9 @@ Opening a prepared tool is separate from starting work. Proposed actions show th
 | Version | Deliverable | Status |
 | --- | --- | --- |
 | 0.28.0 | Header updater and clearer right-click paste and automatic-copy controls | Complete; 1,074 tests and packaged checks passed |
+| 0.29.0 | Five static application themes with coordinated terminal and editor palettes | Complete; 1,075 tests and packaged checks passed |
 
-See the [terminal clipboard guide](USER_GUIDE.md#copy-paste-search-and-links) and [update guide](UPDATING.md).
+See the [theme guide](THEMES.md), [terminal clipboard guide](USER_GUIDE.md#copy-paste-search-and-links), and [update guide](UPDATING.md).
 
 ## Collection scope
 

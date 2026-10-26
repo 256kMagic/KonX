@@ -11,6 +11,17 @@ const animatedIds = [
   'arc-reactor', 'chroma-rgb', 'matrix-mainframe',
   'synthwave-grid', 'hologram-prism', 'plasma-forge',
 ];
+const staticIds = ['obsidian-gold', 'arctic-glass', 'deep-ocean', 'sandstone', 'crimson-circuit'];
+const customIds = [...animatedIds, ...staticIds];
+function contrast(foreground, background) {
+  const luminance = hex => {
+    const rgb = hex.slice(1).match(/../g).map(value => Number.parseInt(value, 16) / 255)
+      .map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+    return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+  };
+  const a = luminance(foreground), b = luminance(background);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
 const classicPalettes = {
   konx: ['#13161b', '#d9dfe8', '#3b9cf2'],
   classic: ['#000000', '#c0c0c0', '#c0c0c0'],
@@ -54,22 +65,42 @@ async function runThemeTests(test) {
   const themes = await loadThemes();
   const { APP_THEMES, SCHEMES, applicationTheme, scheme, terminalTheme, usesThemeEffects } = themes;
 
-  await test('themes: six animated choices coexist with classic Dark and Light', () => {
-    assert.deepEqual(Object.keys(APP_THEMES).sort(), ['dark', 'light', ...animatedIds].sort());
+  await test('themes: five static and six animated choices coexist with classic Dark and Light', () => {
+    assert.deepEqual(Object.keys(APP_THEMES).sort(), ['dark', 'light', ...customIds].sort());
     assert.equal(applicationTheme('dark').animated, false);
     assert.equal(applicationTheme('light').animated, false);
     const signatures = new Set();
-    for (const id of animatedIds) {
+    for (const id of customIds) {
       const value = applicationTheme(id);
       assert.equal(value.id, id);
-      assert.equal(value.animated, true);
+      assert.equal(value.animated, animatedIds.includes(id));
       assert.ok(value.label.length > 3);
       for (const field of ['background', 'foreground', 'accent', 'muted', 'selection', 'secondary']) {
         assert.match(value[field], /^#[\da-f]{6}$/i, id + '.' + field);
       }
       signatures.add(value.background + value.accent);
     }
-    assert.equal(signatures.size, 6, 'Each animated theme must have its own palette');
+    assert.equal(signatures.size, 11, 'Each custom theme must have its own palette');
+  });
+
+  await test('themes: new static palettes remain opaque, distinguish light and dark, and keep output readable', () => {
+    for (const id of staticIds) {
+      const theme = applicationTheme(id), colors = scheme('app', id);
+      assert.equal(theme.appearance, ['arctic-glass', 'sandstone'].includes(id) ? 'light' : 'dark', id);
+      assert.equal(usesThemeEffects({ uiTheme: id, colorScheme: 'app', themeAnimations: true }), false, id);
+      assert.deepEqual(terminalTheme({ uiTheme: id, colorScheme: 'app' }), colors, id);
+      assert.equal(colors.background, theme.background, id);
+      assert.notDeepEqual(colors, scheme('konx'), id + ' must not silently become classic Dark');
+      assert.notDeepEqual(colors, scheme('light'), id + ' must not silently become classic Light');
+      for (const channel of ['foreground', 'brightBlack', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan',
+        'brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brightMagenta', 'brightCyan']) {
+        const ratio = contrast(colors[channel], colors.background);
+        assert.ok(ratio >= 4.5, `${id}.${channel} contrast ${ratio.toFixed(2)}:1 is below 4.5:1`);
+      }
+      for (const palette of Object.keys(classicPalettes)) {
+        assert.deepEqual(terminalTheme({ uiTheme: id, colorScheme: 'app' }, { colorScheme: palette }), scheme(palette), id + ':' + palette);
+      }
+    }
   });
 
   await test('themes: all established terminal palettes keep their colors and ANSI channels', () => {
@@ -97,7 +128,7 @@ async function runThemeTests(test) {
   await test('themes: following the application selects its opaque palette without mutating shared schemes', () => {
     assert.deepEqual(scheme('app', 'dark'), scheme('konx'));
     assert.deepEqual(scheme('app', 'light'), scheme('light'));
-    for (const uiTheme of animatedIds) {
+    for (const uiTheme of customIds) {
       const value = scheme('app', uiTheme);
       assert.equal(value.background, applicationTheme(uiTheme).background);
       assert.equal(value.foreground, applicationTheme(uiTheme).foreground);
@@ -124,7 +155,7 @@ async function runThemeTests(test) {
   });
 
   await test('themes: transparent terminal output is limited to animated application-following palettes', () => {
-    for (const uiTheme of ['dark', 'light', ...animatedIds]) {
+    for (const uiTheme of ['dark', 'light', ...customIds]) {
       for (const colorScheme of ['app', ...Object.keys(classicPalettes)]) {
         const settings = { uiTheme, colorScheme };
         const animatedOutput = colorScheme === 'app' && animatedIds.includes(uiTheme);
@@ -142,12 +173,12 @@ async function runThemeTests(test) {
     assert.deepEqual(terminalTheme(settings), terminalTheme({ ...settings, themeAnimations: true }));
   });
 
-  await test('themes: a new profile follows the app, preserves classic UI defaults and persists all six choices', () => {
+  await test('themes: a new profile follows the app, preserves classic UI defaults and persists every custom choice', () => {
     withStore((store, reload) => {
       assert.equal(store.getSettings().uiTheme, 'dark');
       assert.equal(store.getSettings().colorScheme, 'app');
       assert.equal(store.getSettings().themeAnimations, true);
-      for (const uiTheme of animatedIds) {
+      for (const uiTheme of customIds) {
         store.setSettings({ uiTheme, themeAnimations: false });
         const saved = reload().getSettings();
         assert.equal(saved.uiTheme, uiTheme);
@@ -211,7 +242,15 @@ async function runThemeTests(test) {
     assert.equal(tab.wrap.style.background, scheme('light').background);
     assert.equal(highlightBackground, scheme('light').background);
     assert.equal(classes.has('theme-output-enabled'), false, 'Classic themes must remove the animated output layer');
-    assert.equal(refits, 3);
+    for (const uiTheme of staticIds) {
+      tab.applySettings({ ...settings, uiTheme });
+      const colors = scheme('app', uiTheme);
+      assert.deepEqual(tab.term.options.theme, colors);
+      assert.equal(tab.wrap.style.background, colors.background);
+      assert.equal(highlightBackground, colors.background, 'Cisco highlighting must use the actual static terminal surface');
+      assert.equal(classes.has('theme-output-enabled'), false);
+    }
+    assert.equal(refits, 3 + staticIds.length);
   });
 }
 

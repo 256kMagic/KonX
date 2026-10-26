@@ -22,6 +22,7 @@ async function main() {
     ['docs/RUNBOOKS.md', 'RUNBOOKS.md'],
     ['docs/CAPTURE_COMPARISON.md', 'CAPTURE_COMPARISON.md'],
     ['docs/WORKSPACE_LAYOUTS.md', 'WORKSPACE_LAYOUTS.md'],
+    ['docs/THEMES.md', 'THEMES.md'],
     ['docs/SESSION_MANAGEMENT.md', 'SESSION_MANAGEMENT.md'],
     ['docs/SSH_COMPATIBILITY.md', 'SSH_COMPATIBILITY.md'],
     ['docs/CISCO_HIGHLIGHTING.md', 'CISCO_HIGHLIGHTING.md'],
