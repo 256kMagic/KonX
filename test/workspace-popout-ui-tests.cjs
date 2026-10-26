@@ -2,6 +2,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), net = require('node:net');
 const { spawn } = require('node:child_process');
+const { atmospheric, motionSnapshot, assertMoving, assertFrozen } = require('./lib/theme-motion.cjs');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(read, label, timeout = 12000) {
   const end = Date.now() + timeout;
@@ -32,10 +33,11 @@ async function runWorkspacePopoutUiTests(test) {
   });
 }
 async function fixture() {
-  const { app, BrowserWindow, dialog, shell } = require('electron');
+  const { app, BrowserWindow, dialog, shell, ipcMain } = require('electron');
   const root = fs.realpathSync(process.env.KONX_POPOUT_UI_ROOT);
   assert.equal(path.dirname(root), fs.realpathSync(os.tmpdir())); assert.ok(path.basename(root).startsWith('konx-popout-ui-'));
-  const peers = new Set(); let connections = 0, closes = 0, written = '', finished = false, main;
+  const peers = new Set(); let connections = 0, closes = 0, written = '', finished = false, main, copied;
+  const logFile = path.join(root, 'theme-output.txt');
   const server = net.createServer(socket => {
     connections++; peers.add(socket); socket.on('error', () => {});
     socket.on('close', () => { closes++; peers.delete(socket); });
@@ -58,6 +60,7 @@ async function fixture() {
   process.on('unhandledRejection', error => { void finish(1, error); });
   app.on('browser-window-created', (_event, win) => {
     win.setOpacity(0); win.setFocusable(false); win.setSkipTaskbar(true);
+    win.webContents.setBackgroundThrottling(false);
     if (main) return;
     main = win;
     main.webContents.once('did-finish-load', async () => {
@@ -71,8 +74,11 @@ async function fixture() {
       };
       try {
         await until(() => run('Boolean(window.__app?.popouts)'), 'application ready');
-        await run(`window.__t=__app.openTerminal({protocol:'raw',host:'127.0.0.1',port:${server.address().port}},{name:'Pop-out terminal',protocol:'raw'});true;`);
+        // Exercise the real copy route without replacing the user's clipboard.
+        ipcMain.removeHandler('clipboard:write'); ipcMain.handle('clipboard:write', (_event, text) => { copied = text; });
+        await run(`window.__t=__app.openTerminal({protocol:'raw',host:'127.0.0.1',port:${server.address().port},logging:{path:${JSON.stringify(logFile)}}},{name:'Pop-out terminal',protocol:'raw'});true;`);
         await until(() => run('__t.state==="connected"'), 'loopback terminal');
+        await run('__t.toggleLog()'); await until(() => run('!!__t.info.logging'), 'isolated console logging');
         await run('window.__termObject=__t.term; window.__tabNode=__t.tabElement;true;');
         // Actual tab menu, not a second app/connection, opens the native window.
         await run(`__t.tabElement.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:200,clientY:100}));[...document.querySelectorAll('.ctx .item')].find(e=>e.textContent.includes('Pop out to window')).click();true;`);
@@ -98,14 +104,65 @@ async function fixture() {
             'Pop-out must inherit the complete static palette and light/dark appearance');
           assert.equal(await run('__t.term===__termObject&&__t.state==="connected"'), true);
         }
+        for (const [theme, animationName] of Object.entries(atmospheric)) {
+          main.hide();
+          await run(`__app.saveSettings({uiTheme:${JSON.stringify(theme)},themeAnimations:true,colorScheme:'app'})`);
+          const selector = '.theme-atmosphere[data-effect="' + theme + '"]';
+          const snapshot = () => child.webContents.executeJavaScript(`(${motionSnapshot.toString()})(${JSON.stringify(selector)})`);
+          await until(() => child.webContents.executeJavaScript('document.documentElement.dataset.themeVisible==="true"'), theme + ' visible child while parent hidden');
+          assert.equal(main.isVisible(), false, 'Main window must remain hidden for independent child lifecycle');
+          assert.equal(await run('document.documentElement.dataset.themeVisible'), 'false');
+          assert.equal(await run(`(()=>{const before=__app.popouts.visibility;__app.popouts.updateVisibility({revision:before.revision-1,primary:!before.primary,
+            popouts:before.popouts.map(item=>({...item,visible:!item.visible}))});document.dispatchEvent(new Event('visibilitychange'));
+            return __app.popouts.visibility===before&&document.documentElement.dataset.themeVisible==='false';})()`), true,
+          'Late native snapshots and fallback visibility events must not overwrite current native state');
+          assert.equal(await child.webContents.executeJavaScript('document.querySelectorAll(".term-wrap > .theme-output-fx").length'), 1);
+          const before = await snapshot(); await pause(180); assertMoving(before, await snapshot(), animationName, theme + ' native child');
+          await run('__app.saveSettings({themeAnimations:false})'); await pause(60);
+          await until(async () => (await snapshot()).every(animation => !animation.pending), theme + ' child pause committed');
+          const paused = await snapshot(); await pause(180); assertFrozen(paused, await snapshot(), theme + ' child pause');
+          await run('__app.saveSettings({themeAnimations:true})'); await pause(60);
+          child.hide(); assert.equal(child.isVisible(), false);
+          await until(() => child.webContents.executeJavaScript('document.documentElement.dataset.themeVisible==="false"'), theme + ' hidden child');
+          await run(`__app.saveSettings({uiTheme:${JSON.stringify(theme)}})`);
+          assert.equal(await child.webContents.executeJavaScript('document.documentElement.dataset.themeVisible'), 'false', 'Theme synchronization must preserve native child visibility');
+          await until(async () => (await snapshot()).every(animation => !animation.pending), theme + ' hidden child pause committed');
+          await pause(60); const hidden = await snapshot(); await pause(180); assertFrozen(hidden, await snapshot(), theme + ' minimized child');
+          child.showInactive();
+          await until(() => child.webContents.executeJavaScript('document.documentElement.dataset.themeVisible==="true"'), theme + ' restored child');
+          const restored = await snapshot(); await pause(180); assertMoving(restored, await snapshot(), animationName, theme + ' restored child');
+          if (theme === 'ghost-circuit') {
+            child.minimize(); await until(() => child.isMinimized(), 'native child minimized');
+            await until(() => child.webContents.executeJavaScript('document.documentElement.dataset.themeVisible==="false"'), 'native child minimized theme state');
+            await until(async () => (await snapshot()).every(animation => !animation.pending), 'native child minimize pause committed');
+            const minimized = await snapshot(); await pause(180); assertFrozen(minimized, await snapshot(), 'native minimized child');
+            child.restore(); await until(() => child.webContents.executeJavaScript('document.documentElement.dataset.themeVisible==="true"'), 'native child restored theme state');
+          }
+          for (const peer of peers) peer.write('THEME_OUTPUT_KEEP_' + theme + '\r\n');
+          await until(() => run(`(()=>{__t.term.selectAll();return __t.term.getSelection().includes(${JSON.stringify('THEME_OUTPUT_KEEP_' + theme)});})()`), theme + ' unchanged terminal output');
+          await run('__t.copy();true;');
+          await until(() => copied?.includes('THEME_OUTPUT_KEEP_' + theme), theme + ' real clipboard route');
+          assert.ok(!copied.includes('theme-atmosphere') && !copied.includes('01010'), 'Decorative text must not enter the clipboard');
+          await run('__t.term.clearSelection();true;');
+          assert.equal(await run('__t.term===__termObject&&__t.state==="connected"'), true);
+        }
+        await run('__t.toggleLog()'); await until(() => run('!__t.info.logging'), 'console logging stopped');
+        const log = fs.readFileSync(logFile, 'utf8');
+        for (const theme of Object.keys(atmospheric)) assert.equal(log.split('THEME_OUTPUT_KEEP_' + theme).length - 1, 1, theme + ' original stream logged exactly once');
+        assert.ok(!log.includes('theme-atmosphere') && !log.includes('01010'), 'Decoration must not enter the log');
         await run(`__app.saveSettings({uiTheme:'light'})`);
         assert.equal(await child.webContents.executeJavaScript('document.documentElement.dataset.theme'), 'light');
-        main.restore();
+        await run(`__app.saveSettings({uiTheme:'ghost-circuit',themeAnimations:true})`);
+        main.restore(); main.showInactive();
         app.quit(); await pause(150); // existing connection confirmation returns Cancel
         assert.equal(child.isDestroyed(), false); assert.equal(await run('__t.state'), 'connected');
         child.close();
         await until(() => !popup(), 'native X docks panel');
         assert.equal(await run('__t.el.ownerDocument===document&&__t.term===__termObject&&__t.state==="connected"'), true);
+        assert.equal(await run('__t.wrap.querySelectorAll(":scope > .theme-output-fx").length'), 1);
+        const redocked = await run(`(${motionSnapshot.toString()})('.term-wrap .theme-atmosphere[data-effect="ghost-circuit"]')`);
+        await pause(180);
+        assertMoving(redocked, await run(`(${motionSnapshot.toString()})('.term-wrap .theme-atmosphere[data-effect="ghost-circuit"]')`), atmospheric['ghost-circuit'], 'redocked original terminal');
         assert.equal(connections, 1); assert.equal(closes, 0);
         await run(`__app.workspaceLayout.float(__t);__app.workspaceLayout.float(__t);true;`);
         assert.equal(await run(`document.querySelectorAll('.workspace-floating').length`), 1);

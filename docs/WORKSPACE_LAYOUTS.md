@@ -56,7 +56,7 @@ The layout preference survives restart. Open connection and tool placement is se
 
 ## Window sizes and themes
 
-All layouts use the selected application theme. KonX 0.29.0 adds five static choices: **Obsidian Gold**, **Arctic Glass**, **Deep Ocean**, **Sandstone**, and **Crimson Circuit**, alongside the six animated themes and classic Dark/Light. The same theme applies to floating panels and native pop-outs. Reduced-motion and pause settings continue to control the animated themes. See [Themes and terminal colors](THEMES.md).
+All layouts use the selected application theme. KonX 0.30.0 adds **Ion Storm**, **Solar Flare**, **Aurora Flux**, **Hyperdrive**, and **Ghost Circuit**, bringing the animated choices to 11. The five static palettes introduced in 0.29.0 and classic Dark/Light remain available. The same theme applies to floating panels and native pop-outs. Header pause/resume, **Animate theme effects**, and Windows reduced motion control animation while retaining the selected colors and decorative background. See [Themes and terminal colors](THEMES.md).
 
 Smaller windows stack the panes in a scrollable workspace; expand a pane when its tool needs more room. Context opens as a collapsible overlay in small Workbench and Focus windows. Tab overflow controls keep all open tabs reachable.
 

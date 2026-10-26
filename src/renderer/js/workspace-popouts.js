@@ -1,4 +1,5 @@
 import { h, icon, api, toast, errMsg, registerUiWindow, returnUiToMain } from './ui.js';
+import { applyThemeVisibility } from './theme-effects.js';
 
 /** A child hosts live DOM; App remains the sole owner of tabs and their work. */
 export class WorkspacePopouts {
@@ -7,6 +8,13 @@ export class WorkspacePopouts {
     this.entries = new Map();
     this.pending = new Map();
     this.closing = new Map();
+    this.visibility = null;
+    // Subscribe before fetching; a later native event must not be overwritten
+    // by an older in-flight snapshot. Keep child state even before DOM adoption.
+    const releaseVisibility = api.on('app:windowVisibility', state => this.updateVisibility(state));
+    window.addEventListener('unload', releaseVisibility, { once: true });
+    void api.invoke('app:windowVisibility').then(state => this.updateVisibility(state),
+      error => console.warn('Could not read native window visibility:', errMsg(error)));
     api.on('app:popoutDock', ({ id }) => {
       const entry = [...this.entries.values()].find(value => value.id === id);
       if (entry) this.dock(entry.tab);
@@ -58,15 +66,18 @@ export class WorkspacePopouts {
         activate(); this.app.onGlobalKey(event);
       };
       const resize = () => { if (!tab.disposed) tab.refit?.(); };
+      const visibility = () => applyThemeVisibility(doc);
       child.addEventListener('focus', activate);
       child.addEventListener('pointerdown', activate, true);
       child.addEventListener('keydown', key, true);
       child.addEventListener('resize', resize);
+      doc.addEventListener('visibilitychange', visibility);
       entry.releaseEvents = () => {
         child.removeEventListener('focus', activate);
         child.removeEventListener('pointerdown', activate, true);
         child.removeEventListener('keydown', key, true);
         child.removeEventListener('resize', resize);
+        doc.removeEventListener('visibilitychange', visibility);
       };
       this.syncTheme(entry);
       const previous = tab.el.ownerDocument.defaultView;
@@ -91,7 +102,7 @@ export class WorkspacePopouts {
     const root = doc.documentElement;
     for (const attribute of [...root.attributes]) if (attribute.name !== 'lang' && !document.documentElement.hasAttribute(attribute.name)) root.removeAttribute(attribute.name);
     for (const attribute of document.documentElement.attributes) root.setAttribute(attribute.name, attribute.value);
-    root.dataset.themeVisible = 'true';
+    applyThemeVisibility(doc, this.visibility?.popouts.find(value => value.id === entry.id)?.visible);
     const sources = new Set(document.head.querySelectorAll('link[rel="stylesheet"],style,meta[http-equiv="Content-Security-Policy"]'));
     for (const [source, copy] of entry.styles) if (!sources.has(source)) { copy.remove(); entry.styles.delete(source); }
     for (const source of sources) {
@@ -102,6 +113,15 @@ export class WorkspacePopouts {
         doc.head.append(copy); entry.styles.set(source, copy);
         if (source.tagName === 'LINK') copy.addEventListener('load', () => entry.tab.refit?.());
       } else if (source.tagName === 'STYLE' && copy.textContent !== source.textContent) copy.textContent = source.textContent;
+    }
+  }
+
+  updateVisibility(state) {
+    if (!state || !Number.isSafeInteger(state.revision) || state.revision <= (this.visibility?.revision ?? -1)) return;
+    this.visibility = state;
+    applyThemeVisibility(document, state.primary);
+    for (const entry of this.entries.values()) {
+      if (!entry.window.closed) applyThemeVisibility(entry.window.document, state.popouts.find(value => value.id === entry.id)?.visible);
     }
   }
 

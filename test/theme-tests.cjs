@@ -10,6 +10,7 @@ const { Store } = require('../src/main/store');
 const animatedIds = [
   'arc-reactor', 'chroma-rgb', 'matrix-mainframe',
   'synthwave-grid', 'hologram-prism', 'plasma-forge',
+  'ion-storm', 'solar-flare', 'aurora-flux', 'hyperdrive', 'ghost-circuit',
 ];
 const staticIds = ['obsidian-gold', 'arctic-glass', 'deep-ocean', 'sandstone', 'crimson-circuit'];
 const customIds = [...animatedIds, ...staticIds];
@@ -61,11 +62,41 @@ function terminalPrototype(themes) {
   return context.TestTerminalTab.prototype;
 }
 
+function visibilityOwner(themes) {
+  const filename = path.join(__dirname, '../src/renderer/js/theme-effects.js');
+  const source = fs.readFileSync(filename, 'utf8').replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');
+  const context = vm.createContext({ ...themes });
+  vm.runInContext(source + '\nglobalThis.owner = { applyThemeVisibility, applyApplicationTheme };', context, { filename });
+  return context.owner;
+}
+
 async function runThemeTests(test) {
   const themes = await loadThemes();
   const { APP_THEMES, SCHEMES, applicationTheme, scheme, terminalTheme, usesThemeEffects } = themes;
 
-  await test('themes: five static and six animated choices coexist with classic Dark and Light', () => {
+  await test('themes: native and browser hiding independently stop motion and survive theme saves per document', () => {
+    const { applyThemeVisibility, applyApplicationTheme } = visibilityOwner(themes);
+    const document = () => ({ hidden: false, documentElement: { dataset: {},
+      classList: { toggle() {} }, style: { setProperty() {}, removeProperty() {} } } });
+    const primary = document(), child = document();
+    applyThemeVisibility(primary, false); applyThemeVisibility(child, true);
+    assert.equal(primary.documentElement.dataset.themeVisible, 'false', 'Native-hidden unthrottled primary must pause');
+    assert.equal(child.documentElement.dataset.themeVisible, 'true', 'Visible child stays independent');
+    applyApplicationTheme({ uiTheme: 'ghost-circuit', themeAnimations: true }, primary);
+    assert.equal(primary.documentElement.dataset.themeVisible, 'false', 'Saving a theme cannot restart native-hidden output');
+    child.hidden = true; applyThemeVisibility(child);
+    assert.equal(child.documentElement.dataset.themeVisible, 'false', 'Browser-hidden output pauses even with a native-visible snapshot');
+    applyApplicationTheme({ uiTheme: 'ion-storm', themeAnimations: true }, child);
+    assert.equal(child.documentElement.dataset.themeVisible, 'false');
+    child.hidden = false; applyThemeVisibility(child);
+    assert.equal(child.documentElement.dataset.themeVisible, 'true');
+    applyThemeVisibility(primary);
+    assert.equal(primary.documentElement.dataset.themeVisible, 'false', 'Fallback browser events cannot erase native authority');
+    applyThemeVisibility(primary, true);
+    assert.equal(primary.documentElement.dataset.themeVisible, 'true');
+  });
+
+  await test('themes: five static and eleven animated choices coexist with classic Dark and Light', () => {
     assert.deepEqual(Object.keys(APP_THEMES).sort(), ['dark', 'light', ...customIds].sort());
     assert.equal(applicationTheme('dark').animated, false);
     assert.equal(applicationTheme('light').animated, false);
@@ -80,7 +111,7 @@ async function runThemeTests(test) {
       }
       signatures.add(value.background + value.accent);
     }
-    assert.equal(signatures.size, 11, 'Each custom theme must have its own palette');
+    assert.equal(signatures.size, 16, 'Each custom theme must have its own palette');
   });
 
   await test('themes: new static palettes remain opaque, distinguish light and dark, and keep output readable', () => {
@@ -242,15 +273,15 @@ async function runThemeTests(test) {
     assert.equal(tab.wrap.style.background, scheme('light').background);
     assert.equal(highlightBackground, scheme('light').background);
     assert.equal(classes.has('theme-output-enabled'), false, 'Classic themes must remove the animated output layer');
-    for (const uiTheme of staticIds) {
+    for (const uiTheme of customIds) {
       tab.applySettings({ ...settings, uiTheme });
       const colors = scheme('app', uiTheme);
-      assert.deepEqual(tab.term.options.theme, colors);
+      assert.deepEqual(tab.term.options.theme, terminalTheme({ ...settings, uiTheme }));
       assert.equal(tab.wrap.style.background, colors.background);
-      assert.equal(highlightBackground, colors.background, 'Cisco highlighting must use the actual static terminal surface');
-      assert.equal(classes.has('theme-output-enabled'), false);
+      assert.equal(highlightBackground, colors.background, 'Cisco highlighting must use the actual terminal surface');
+      assert.equal(classes.has('theme-output-enabled'), animatedIds.includes(uiTheme));
     }
-    assert.equal(refits, 3 + staticIds.length);
+    assert.equal(refits, 3 + customIds.length);
   });
 }
 

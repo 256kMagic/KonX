@@ -6,8 +6,9 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { setViewport } = require('./lib/electron-viewport.cjs');
+const { atmospheric, motionSnapshot, assertMoving, assertFrozen } = require('./lib/theme-motion.cjs');
 
-const themeIds = ['arc-reactor', 'chroma-rgb', 'matrix-mainframe', 'synthwave-grid', 'hologram-prism', 'plasma-forge'];
+const themeIds = ['arc-reactor', 'chroma-rgb', 'matrix-mainframe', 'synthwave-grid', 'hologram-prism', 'plasma-forge', ...Object.keys(atmospheric)];
 const staticIds = ['obsidian-gold', 'arctic-glass', 'deep-ocean', 'sandstone', 'crimson-circuit'];
 const pause = (ms = 20) => new Promise((resolve) => setTimeout(resolve, ms));
 async function until(check, description, timeout = 12000) {
@@ -33,14 +34,14 @@ async function runFixture(reduced) {
     const collect = (data) => { output = (output + data).slice(-1024 * 1024); };
     child.stdout.on('data', collect); child.stderr.on('data', collect);
     const code = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { child.kill(); reject(new Error('Theme UI fixture timed out\n' + output)); }, 85000);
+      const timer = setTimeout(() => { child.kill(); reject(new Error('Theme UI fixture timed out\n' + output)); }, 150000);
       child.once('error', (error) => { clearTimeout(timer); reject(error); });
       child.once('exit', (value) => { clearTimeout(timer); resolve(value); });
     });
     assert.equal(code, 0, output);
     assert.match(output, reduced ? /THEME_REDUCED_UI_PASS/ : /THEME_UI_PASS/);
     const saved = JSON.parse(fs.readFileSync(path.join(fixtureRoot, 'profile', 'settings.json'), 'utf8'));
-    assert.equal(saved.uiTheme, reduced ? 'arc-reactor' : 'plasma-forge');
+    assert.equal(saved.uiTheme, reduced ? 'ghost-circuit' : 'plasma-forge');
     assert.equal(saved.colorScheme, 'app');
     assert.equal(saved.themeAnimations, reduced);
   } finally {
@@ -52,7 +53,7 @@ async function runFixture(reduced) {
 }
 
 async function runThemeUiTests(test) {
-  await test('real theme UI: eleven custom themes, picker save, terminal/editor output, compact toolbar, pause persistence and classic palettes', () => runFixture(false));
+  await test('real theme UI: sixteen custom themes, real effect frames, bright output contrast, pause/hidden lifecycle, picker and explicit palettes', () => runFixture(false));
   await test('real theme UI: Windows reduced motion stops effects and disables the motion toggle', () => runFixture(true));
 }
 
@@ -128,7 +129,7 @@ async function electronFixture() {
         const chooseTheme = async (id) => {
           await click(`document.querySelector('#toolbar button[title="Settings"]')`);
           await until(() => run(`Boolean(${picker})`), 'application theme picker');
-          assert.deepEqual(await run(`[...(${picker}).options].map(option=>option.value)`), ['dark', 'light', ...themeIds, ...staticIds]);
+          assert.deepEqual(await run(`[...(${picker}).options].map(option=>option.value).sort()`), ['dark', 'light', ...themeIds, ...staticIds].sort());
           // Select a real option after verifying that the form control is
           // reachable, then use native input for Save. The form owns persistence.
           assert.equal(await run(`(()=>{const e=${picker};e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)===e;})()`), true);
@@ -144,7 +145,64 @@ async function electronFixture() {
           // through two paint opportunities before capturing this inactive window.
           await run('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
           await pause(100);
-          fs.writeFileSync(path.join(screenshots, name + '.png'), (await win.webContents.capturePage(undefined, { stayHidden: true })).toPNG());
+          fs.writeFileSync(path.join(screenshots, (reduced ? 'reduced-' : '') + name + '.png'), (await win.webContents.capturePage(undefined, { stayHidden: true })).toPNG());
+        };
+        const snapshot = selector => run(`(${motionSnapshot.toString()})(${JSON.stringify(selector)})`);
+        const moving = async (selector, id, label) => {
+          const before = await snapshot(selector); await pause(180);
+          assertMoving(before, await snapshot(selector), atmospheric[id], label);
+        };
+        const frozen = async (selector, label) => {
+          await until(async () => (await snapshot(selector)).every(animation => !animation.pending), label + ' animation pause committed');
+          await pause(60); const before = await snapshot(selector); await pause(180);
+          assertFrozen(before, await snapshot(selector), label);
+        };
+        const brightReports = [];
+        const brightOutput = async id => {
+          const palette = await run(`window.__themeModule.scheme('app',${JSON.stringify(id)})`);
+          const luminance = rgb => rgb.map(v => v / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4)
+            .reduce((sum, value, i) => sum + value * [.2126, .7152, .0722][i], 0);
+          const hex = color => color.slice(1, 7).match(/../g).map(value => parseInt(value, 16));
+          const ratio = (a, b) => (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
+          const setup = await run(`(()=>{const host=window.__term.wrap,fx=host.querySelector('.theme-output-fx'),r=host.getBoundingClientRect();
+            window.__brightAnimations=fx.getAnimations({subtree:true});for(const a of window.__brightAnimations)a.pause();
+            window.__brightXterm=host.querySelector('.xterm');window.__brightXterm.style.opacity='0';
+            return{opacity:Number(getComputedStyle(fx).opacity),rect:{x:Math.ceil(r.x),y:Math.ceil(r.y),width:Math.floor(r.width)-2,height:Math.floor(r.height)-2}};})()`);
+          let maximum = -1, brightest, brightestImage;
+          try {
+            for (const phase of [0, .25, .5, .75, .99]) {
+              await run(`for(const a of window.__brightAnimations)a.currentTime=Number(a.effect.getTiming().duration)*${phase};void 0;`);
+              await run('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))'); await pause(50);
+              const frame = await win.webContents.capturePage(setup.rect, { stayHidden: true }), pixels = frame.toBitmap();
+              for (let i = 0; i < pixels.length; i += 4) {
+                const rgb = [pixels[i + 2], pixels[i + 1], pixels[i]], light = luminance(rgb);
+                if (light > maximum) { maximum = light; brightest = rgb; brightestImage = frame; }
+              }
+            }
+            // All-white decoration at the actual compositing opacity bounds even
+            // unsampled keyframe intersections, before the additional output mask.
+            const upper = luminance(hex(palette.background).map(v => Math.round(v * (1 - setup.opacity) + 255 * setup.opacity)));
+            const channels = ['foreground', 'brightBlack', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan',
+              'brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brightMagenta', 'brightCyan', 'white', 'brightWhite'];
+            const report = { theme: id, phases: [0, .25, .5, .75, .99], opacity: setup.opacity, brightestSample: brightest, channels: {} };
+            for (const channel of channels) {
+              const foreground = luminance(hex(palette[channel]));
+              const measured = ratio(foreground, maximum), bounded = ratio(foreground, upper);
+              report.channels[channel] = { sampledContrast: measured, allWhiteDecorationBound: bounded };
+              assert.ok(measured >= 4.5, `${id}.${channel}: sampled bright-frame contrast ${measured.toFixed(2)}:1`);
+              assert.ok(bounded >= 4.5, `${id}.${channel}: fully bright decoration contrast ${bounded.toFixed(2)}:1 at opacity ${setup.opacity}`);
+            }
+            brightReports.push(report);
+            if (screenshots) {
+              fs.writeFileSync(path.join(screenshots, id + '-brightest-background.png'), brightestImage.toPNG());
+              fs.writeFileSync(path.join(screenshots, 'bright-output-contrast.json'), JSON.stringify(brightReports, null, 2));
+            }
+          } finally {
+            // Web Animations pause/play overrides CSS play-state. Recreate the
+            // sampled CSS animations so lifecycle checks observe native CSS ownership.
+            await run(`(()=>{window.__brightXterm.style.removeProperty('opacity');const fx=window.__term.wrap.querySelector('.theme-output-fx');
+              fx.style.display='none';void fx.offsetWidth;fx.style.removeProperty('display');delete window.__brightAnimations;delete window.__brightXterm;})()`);
+          }
         };
         const readable = async (expression, label) => {
           const result = await run(`(()=>{
@@ -169,11 +227,11 @@ async function electronFixture() {
         await until(() => run("!!document.querySelector('.update-status')?.textContent.includes('packaged')"), 'header opens development update status');
         await click(`document.querySelector('.modal footer button')`);
         await until(() => run("!document.querySelector('.update-panel')"), 'header update dialog closes');
-        await save({ copyOnSelect: false, colorScheme: 'app', themeAnimations: true });
+        await save({ copyOnSelect: false, colorScheme: 'app', themeAnimations: true, cursorBlink: false });
         await run(`(async()=>{
           window.__themeModule=await import('./js/themes.js');
           window.__np=await window.__app.openNotepad();
-          window.__np.newDoc({title:'Theme fixture.ios',text:'hostname theme-fixture\\ninterface GigabitEthernet1/0/1\\n description Synthetic preview\\n ip address 192.0.2.1 255.255.255.0\\n!',language:'ios'});
+          window.__np.newDoc({title:'Theme fixture.ios',text:'hostname theme-fixture\\ninterface GigabitEthernet1/0/1\\n description Synthetic preview\\n ip address 192.0.2.1 255.255.255.0\\n mtu 1500\\n!',language:'ios'});
           const {TerminalTab}=await import('./js/terminal.js');
           window.__term=new TerminalTab(window.__app,{}, {name:'Theme fixture',protocol:'ssh'});
           window.__app.addTab(window.__term);
@@ -205,9 +263,9 @@ async function electronFixture() {
               'Toolbar control clipped at ' + width + ': ' + JSON.stringify(control));
           }
         };
-        for (const id of reduced ? ['arc-reactor'] : [...themeIds, ...staticIds]) {
+        for (const id of reduced ? ['arc-reactor', ...Object.keys(atmospheric)] : [...themeIds, ...staticIds]) {
           const animated = themeIds.includes(id);
-          if (animated) await save({ uiTheme: id, colorScheme: 'app', themeAnimations: true });
+          if (animated && (reduced || !atmospheric[id])) await save({ uiTheme: id, colorScheme: 'app', themeAnimations: true });
           else await chooseTheme(id);
           await run('window.__app.activate(window.__term);void 0;');
           const terminal = await run(`(() => { const fx=window.__term.wrap.querySelector('.theme-output-fx'),root=document.documentElement;
@@ -234,6 +292,36 @@ async function electronFixture() {
           assert.equal(await run('window.__term.term.getSelection()'), '');
           await until(() => run('window.__term.term.element.querySelector(".xterm-selection").childElementCount===0'), 'terminal selection paint cleared');
           await geometry(1400, 880); await capture(id + '-terminal-1400');
+          if (atmospheric[id]) {
+            const selector = '.term-wrap .theme-atmosphere[data-effect="' + id + '"]';
+            assert.equal(await run(`(()=>{const fx=window.__term.wrap.querySelector('.theme-output-fx');return [...fx.querySelectorAll('.theme-atmosphere')].filter(e=>e.dataset.effect!==${JSON.stringify(id)}).every(e=>e.getAnimations({subtree:true}).length===0);})()`), true, id + ': unselected scenes must do no animation work');
+            if (reduced) {
+              assert.deepEqual(await snapshot(selector), [], id + ': reduced motion must remove animation work');
+            } else {
+              await moving(selector, id, id + ' active terminal');
+              await brightOutput(id);
+              await click('window.__app.themeMotion');
+              await until(() => run('window.__app.settings.themeAnimations===false&&!window.__app.savingThemeMotion'), id + ' pause saved');
+              await frozen(selector, id + ' paused terminal');
+              await capture(id + '-paused-terminal-1400');
+              await click('window.__app.themeMotion');
+              await until(() => run('window.__app.settings.themeAnimations===true&&!window.__app.savingThemeMotion'), id + ' resume saved');
+              await moving(selector, id, id + ' resumed terminal');
+              win.hide(); assert.equal(win.isVisible(), false);
+              await until(() => run('document.documentElement.dataset.themeVisible==="false"'), id + ' hidden window');
+              await save({ uiTheme: id });
+              assert.equal(await run('document.documentElement.dataset.themeVisible'), 'false', id + ': saving theme must preserve native hidden state');
+              await frozen(selector, id + ' hidden window');
+              win.showInactive(); await until(() => run('document.documentElement.dataset.themeVisible==="true"'), id + ' visible window');
+              await moving(selector, id, id + ' restored window');
+              if (id === 'ghost-circuit') {
+                win.minimize(); await until(() => win.isMinimized(), 'native main minimized');
+                await until(() => run('document.documentElement.dataset.themeVisible==="false"'), 'minimized main theme visibility');
+                await frozen(selector, 'native minimized main');
+                win.restore(); await until(() => run('document.documentElement.dataset.themeVisible==="true"'), 'native main restored');
+              }
+            }
+          }
           await geometry(1101, 560);
           await geometry(1361, 560);
           await geometry(1401, 560);
@@ -253,7 +341,26 @@ async function electronFixture() {
           if (animated) assert.equal(editor.pointer, 'none');
           assert.equal(editor.fxCount, 1); assert.equal(editor.selection, 'hostname');
           await setViewport(win, run, 1400, 880); await pause(60); await capture(id + '-notepad-1400');
-          if (!animated) {
+          if (atmospheric[id]) {
+            const tokenColors = await run(`(()=>{const palette=window.__themeModule.scheme('app',${JSON.stringify(id)}),tokens=[...window.__np.host.querySelectorAll('.view-line span')];
+              const css=color=>{const el=document.createElement('span');el.style.color=color;document.body.append(el);const value=getComputedStyle(el).color;el.remove();return value;};
+              const string=tokens.find(el=>el.textContent.replace(/\\s/g,' ').trim()==='Synthetic preview'),number=tokens.find(el=>el.textContent.trim()==='1500');
+              return{string:string&&getComputedStyle(string).color,number:number&&getComputedStyle(number).color,expectedString:css(palette.green),expectedNumber:css(palette.blue)};})()`);
+            assert.equal(tokenColors.string, tokenColors.expectedString, id + ': rendered Monaco string follows catalog palette');
+            assert.equal(tokenColors.number, tokenColors.expectedNumber, id + ': rendered Monaco number follows catalog palette');
+            await frozen('.term-wrap .theme-atmosphere[data-effect="' + id + '"]', id + ' inactive terminal');
+            const editorSelector = '.np-editor .theme-atmosphere[data-effect="' + id + '"]';
+            if (reduced) assert.deepEqual(await snapshot(editorSelector), [], id + ': reduced motion editor');
+            else {
+              await moving(editorSelector, id, id + ' active editor');
+              await run(`if(!window.__comparison)window.__comparison=window.__np.createDoc({title:'Compare fixture.ios',text:'hostname comparison\\n!',language:'ios'});window.__np.compare(window.__comparison);void 0;`);
+              await frozen('.np-editor.hidden .theme-atmosphere[data-effect="' + id + '"]', id + ' editor hidden by compare');
+              await moving('.np-editor:not(.hidden) .theme-atmosphere[data-effect="' + id + '"]', id, id + ' compare editor');
+              await run('window.__np.closeCompare();void 0;');
+              await frozen('.np-editor.hidden .theme-atmosphere[data-effect="' + id + '"]', id + ' closed compare editor');
+            }
+          }
+          if (!reduced && (!animated || atmospheric[id])) {
             await run('window.__app.activate(window.__cap);window.__cap.select(0);void 0;');
             await until(() => run('Boolean(window.__cap.el.querySelector(".prows .prow.sel"))'), 'selected packet row');
             await readable('window.__cap.el.querySelector(".prows .prow.sel")', id + ' selected packet');
@@ -263,10 +370,12 @@ async function electronFixture() {
             await until(() => run('Boolean(document.querySelector(".sip-call-row.active"))'), 'sample SIP call');
             await readable('document.querySelector(".sip-call-row.active .sip-call-id")', id + ' selected SIP call ID');
             await readable('document.querySelector(".sip-call-row.active .sip-call-meta")', id + ' selected SIP call metadata');
+            await readable('document.querySelector(".sip-call-row.active .sip-call-top strong")', id + ' selected SIP call outcome');
             await readable('document.querySelector(".sip-message-detail")', id + ' SIP message detail');
             await capture(id + '-sip-1400');
             await click(`[...document.querySelectorAll('.modal footer button')].find(button=>button.textContent==='Close')`);
             await until(() => run('!document.querySelector(".sip-workspace")'), 'SIP dialog closes');
+            if (atmospheric[id]) await frozen('.np-editor .theme-atmosphere[data-effect="' + id + '"]', id + ' inactive editor');
           }
         }
         if (reduced) {
@@ -278,6 +387,7 @@ async function electronFixture() {
           assert.deepEqual(failures, []);
           console.log('THEME_REDUCED_UI_PASS'); finish(0); return;
         }
+        if (screenshots) fs.writeFileSync(path.join(screenshots, 'bright-output-contrast.json'), JSON.stringify(brightReports, null, 2));
         await run('window.__app.activate(window.__term);void 0;');
         await save({ uiTheme: 'arc-reactor', themeAnimations: true });
         assert.equal(await run('getComputedStyle(document.querySelector("#app"),"::after").animationPlayState'), 'running');
@@ -312,7 +422,19 @@ async function electronFixture() {
         assert.equal(await run('getComputedStyle(window.__term.wrap.querySelector(".theme-output-fx")).display'), 'none');
         assert.equal(await run('window.__app.jobs.size'), 0);
         assert.deepEqual(failures, []);
-        console.log('THEME_UI_PASS: eleven custom themes, Appearance save, static/animated xterm and Monaco, text selection, compact header, five viewport sizes, pause/resume persistence and classic overrides');
+        for (const id of Object.keys(atmospheric)) {
+          await save({ uiTheme: id, colorScheme: 'solarized' });
+          assert.equal(await run('window.__term.term.options.theme.background'), '#000000', 'Session Classic override persists under ' + id);
+          assert.equal(await run('window.__np.theme()'), 'konx-' + id, 'Terminal override must not override Monaco theme');
+          await run('delete window.__term.meta.colorScheme;void 0;');
+          await save({ colorScheme: 'app' });
+          await save({ uiTheme: id, colorScheme: 'solarized' });
+          assert.equal(await run('window.__term.term.options.theme.background'), '#002b36', 'Global Solarized override persists under ' + id);
+          assert.equal(await run('getComputedStyle(window.__term.wrap.querySelector(".theme-output-fx")).display'), 'none');
+          await run('window.__term.meta.colorScheme="classic";void 0;');
+        }
+        await save({ uiTheme: 'plasma-forge', colorScheme: 'app', themeAnimations: false });
+        console.log('THEME_UI_PASS: sixteen custom themes, actual motion, paused/hidden/inactive/reduced work, bright-frame text contrast, Appearance save, xterm and Monaco, packet/SIP status, five viewport sizes and explicit overrides');
         finish(0);
       } catch (error) { finish(1, error); }
     });

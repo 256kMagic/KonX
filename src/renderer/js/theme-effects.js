@@ -1,7 +1,17 @@
 // Decorative layers never receive pointer/keyboard events or enter tool output.
 import { APP_THEMES, applicationTheme, scheme } from './themes.js';
+import { mountThemeAtmospheres } from './theme-atmospheres.js';
 
 const chromeProperties = new Set(Object.values(APP_THEMES).flatMap(theme => Object.keys(theme.ui || {})));
+const nativeVisibility = new WeakMap();
+
+// Either native or browser-hidden state pauses motion. Native snapshots cover
+// minimized unthrottled windows whose document.hidden remains false; browser
+// state still covers occlusion. Theme saves and DOM adoption use this same owner.
+export function applyThemeVisibility(doc = document, visible) {
+  if (typeof visible === 'boolean') nativeVisibility.set(doc, visible);
+  doc.documentElement.dataset.themeVisible = String(nativeVisibility.get(doc) !== false && !doc.hidden);
+}
 
 export function applyApplicationTheme(settings, doc = document) {
   const theme = applicationTheme(settings.uiTheme);
@@ -9,13 +19,14 @@ export function applyApplicationTheme(settings, doc = document) {
   root.dataset.theme = theme.id;
   root.dataset.appearance = theme.appearance;
   root.classList.toggle('theme-animated', theme.animated);
-  root.classList.toggle('theme-static', !!theme.ui);
+  root.classList.toggle('theme-static', !!theme.ui && !theme.animated);
+  root.classList.toggle('theme-atmospheric', !!theme.effect);
   for (const name of chromeProperties) {
     if (theme.ui?.[name]) root.style.setProperty(name, theme.ui[name]);
     else root.style.removeProperty(name);
   }
   root.dataset.themeMotion = settings.themeAnimations === false ? 'paused' : 'running';
-  root.dataset.themeVisible = String(!doc.hidden);
+  applyThemeVisibility(doc);
   return theme;
 }
 
@@ -36,6 +47,7 @@ export function mountThemeOutput(host) {
   make('theme-horizon', fx);
   const engine = make('theme-engine', fx);
   for (const name of ['theme-engine-glow', 'theme-plasma-field', 'theme-orbit', 'theme-orbit theme-orbit-inner', 'theme-engine-core']) make(name, engine);
+  mountThemeAtmospheres(fx);
   host.prepend(fx);
 }
 
@@ -61,7 +73,7 @@ export function editorTheme(monaco, settings) {
         { token: 'number.ip', foreground: (theme.animated ? palette.blue : theme.accent).slice(1) },
         { token: 'number.mac', foreground: palette.magenta.slice(1) },
         { token: 'type.interface', foreground: palette.yellow.slice(1) },
-        ...(!theme.animated ? [
+        ...(theme.palette || !theme.animated ? [
           { token: 'number', foreground: palette.blue.slice(1) },
           { token: 'string', foreground: palette.green.slice(1) },
         ] : []),

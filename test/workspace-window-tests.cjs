@@ -8,7 +8,7 @@ const event = () => ({ defaultPrevented: false, preventDefault() { this.defaultP
 
 class Window extends EventEmitter {
   constructor() {
-    super(); this.destroyed = false;
+    super(); this.destroyed = false; this.visible = true;
     this.webContents = new EventEmitter(); this.webContents.mainFrame = {};
     this.webContents.setWindowOpenHandler = handler => { this.openWindow = handler; };
     this.webContents.getBackgroundThrottling = () => this.throttling;
@@ -17,6 +17,11 @@ class Window extends EventEmitter {
     this.bounds = { x: 100, y: 100, width: 1000, height: 700 }; this.boundsWrites = [];
   }
   isDestroyed() { return this.destroyed; }
+  isVisible() { return this.visible; }
+  show() { this.visible = true; this.emit('show'); }
+  hide() { this.visible = false; this.emit('hide'); }
+  minimize() { this.minimized = true; this.emit('minimize'); }
+  restore() { this.minimized = false; this.emit('restore'); }
   getBounds() { return { ...this.bounds }; }
   setBounds(bounds) { this.bounds = { ...bounds }; this.boundsWrites.push({ ...bounds }); }
   isMinimized() { return !!this.minimized; }
@@ -44,8 +49,50 @@ function nativePopup(f) {
   const child = new Window(); f.window.webContents.emit('did-create-window', child, details);
   return { ...permit, child };
 }
+const ownershipEvents = events => events.filter(([channel]) => channel !== 'app:windowVisibility');
 
 async function runWorkspaceWindowTests(test) {
+  await test('Workspace native visibility snapshots remain independent of live renderer throttling and release their listeners', () => {
+    const h = harness();
+    try {
+      assert.deepEqual(h.owner.visibilityState(), { revision: 0, primary: true, popouts: [] });
+      const popup = h.open();
+      let revision = 0;
+      const check = (primary, child) => {
+        const snapshot = h.owner.visibilityState();
+        assert.ok(snapshot.revision > revision, 'native visibility revisions increase');
+        revision = snapshot.revision;
+        assert.deepEqual(snapshot, { revision, primary, popouts: [{ id: popup.id, visible: child }] });
+        assert.deepEqual(h.events.at(-1), ['app:windowVisibility', snapshot], 'event and read-only snapshot agree');
+        assert.equal(h.primary.throttling, false, 'primary remains available for child input');
+        assert.equal(popup.child.throttling, false, 'child retains production live-renderer preference');
+      };
+      check(true, true);
+      h.primary.minimize(); check(false, true);
+      popup.child.minimize(); check(false, false);
+      popup.child.restore(); check(false, true);
+      popup.child.hide(); check(false, false);
+      popup.child.show(); check(false, true);
+      h.primary.restore(); check(true, true);
+      h.primary.hide(); check(false, true);
+      h.primary.show(); check(true, true);
+      const restoreListeners = popup.child.listenerCount('restore');
+      h.owner.close(popup.id);
+      assert.deepEqual(h.owner.visibilityState(), { revision: revision + 1, primary: true, popouts: [] });
+      assert.equal(h.primary.throttling, true, 'last child restores original throttling');
+      for (const name of ['show', 'hide', 'minimize']) assert.equal(popup.child.listenerCount(name), 0, name + ' child listener removed');
+      assert.equal(popup.child.listenerCount('restore'), restoreListeners - 1, 'native visibility restore callback removed');
+      const retained = h.open();
+      const beforeDispose = h.events.length;
+      h.owner.dispose(); h.owner.dispose();
+      assert.equal(retained.child.destroyed, true);
+      for (const name of ['show', 'hide', 'minimize', 'restore']) assert.equal(h.primary.listenerCount(name), 0, name + ' primary listener removed');
+      for (const name of ['show', 'hide', 'minimize']) assert.equal(retained.child.listenerCount(name), 0, name + ' remaining child listener removed');
+      h.primary.emit('show'); retained.child.emit('hide');
+      assert.equal(h.events.length, beforeDispose, 'disposed native visibility cannot emit late snapshots');
+    } finally { h.owner.dispose(); }
+  });
+
   await test('Workspace native bounds recover from removed displays and smaller work areas using DIP coordinates', () => {
     const screen = new EventEmitter();
     let area = { x: -1280, y: -200, width: 1280, height: 984 };
@@ -66,7 +113,7 @@ async function runWorkspaceWindowTests(test) {
       screen.emit('display-metrics-changed', {}, {}, ['workArea']);
       assert.equal(popup.child.boundsWrites.length, writes, 'unaffected and already-clamped events do not churn bounds');
       assert.equal(h.owner.windows.get(popup.id).child, popup.child);
-      assert.deepEqual(h.events, [], 'bounds recovery does not dock or replace the live window');
+      assert.deepEqual(ownershipEvents(h.events), [], 'bounds recovery does not dock or replace the live window');
     } finally { h.owner.dispose(); }
     assert.equal(screen.listenerCount('display-removed'), 0);
     assert.equal(screen.listenerCount('display-metrics-changed'), 0);
@@ -130,10 +177,10 @@ async function runWorkspaceWindowTests(test) {
       const popup = h.open(); assert.equal(h.primary.throttling, false); assert.equal(popup.child.throttling, false);
       assert.equal(popup.child.close().defaultPrevented, true); popup.child.close();
       assert.equal(popup.child.destroyed, false); assert.equal(h.owner.hasOwnership, true);
-      assert.deepEqual(h.events, [['app:popoutDock', { id: popup.id }]]);
+      assert.deepEqual(ownershipEvents(h.events), [['app:popoutDock', { id: popup.id }]]);
       assert.equal(h.owner.close(popup.id), true); assert.equal(h.owner.close(popup.id), false);
       assert.equal(popup.child.destroyed, true); assert.equal(h.owner.hasOwnership, false); assert.equal(h.primary.throttling, true);
-      assert.equal(h.events.length, 1, 'normal acknowledgement does not report unexpected closure');
+      assert.equal(ownershipEvents(h.events).length, 1, 'normal acknowledgement does not report unexpected closure');
     } finally { h.owner.dispose(); }
   });
 
@@ -146,7 +193,7 @@ async function runWorkspaceWindowTests(test) {
       Window.focused = popup.child; assert.equal(h.owner.dialogOwner(), popup.child);
       Window.focused = new Window(); assert.equal(h.owner.dialogOwner(), h.primary);
       popup.child.destroy();
-      assert.deepEqual(h.events, [['app:popoutClosed', { id: popup.id }]]);
+      assert.deepEqual(ownershipEvents(h.events), [['app:popoutClosed', { id: popup.id }]]);
       assert.equal(h.owner.hasOwnership, false); assert.equal(h.primary.throttling, true);
     } finally { Window.focused = null; h.owner.dispose(); }
   });
@@ -171,12 +218,13 @@ async function runWorkspaceWindowTests(test) {
     assert.equal(isPrimaryFrame(primary, f.window), true);
     for (const invalid of [{}, { sender: {}, senderFrame: primary.senderFrame }, { sender: primary.sender, senderFrame: {} }]) {
       assert.equal(isPrimaryFrame(invalid, f.window), false);
-      for (const channel of ['app:popoutPrepare', 'app:popoutClose', 'conn:open', 'settings:get', 'ui:promptResponse']) assert.throws(() => f.invokeFrom(invalid, channel, 'fixture'), /primary KonX window/);
+      for (const channel of ['app:popoutPrepare', 'app:popoutClose', 'app:windowVisibility', 'conn:open', 'settings:get', 'ui:promptResponse']) assert.throws(() => f.invokeFrom(invalid, channel, 'fixture'), /primary KonX window/);
       for (const channel of ['conn:write', 'conn:resize', 'np:backup']) assert.doesNotThrow(() => f.sendFrom(invalid, channel, 'fixture', 'payload'));
     }
     assert.deepEqual(f.calls, []);
     f.sendFrom(primary, 'conn:write', 'fixture', 'owned input'); assert.deepEqual(f.calls, ['write-connection']);
     const popup = nativePopup(f);
+    assert.deepEqual(f.invoke('app:windowVisibility').popouts, [{ id: popup.id, visible: true }], 'primary reads native visibility through the real IPC registration');
     assert.throws(() => f.invokeFrom({ sender: popup.child.webContents, senderFrame: popup.child.webContents.mainFrame }, 'app:popoutClose', popup.id), /primary KonX window/);
     f.invoke('app:popoutClose', popup.id);
   });

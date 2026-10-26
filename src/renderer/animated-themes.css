@@ -355,6 +355,128 @@
 .theme-engine-core::after { inset: 27px; background: var(--accent); }
 .theme-code-rain, .theme-horizon, .theme-plasma-field { display: none; }
 
+/* The atmospheric collection uses a single composited brightness ceiling.
+   Even overlapping white SVG strokes cannot exceed 22% over the opaque output
+   background. The mask reduces distraction at the prompt; it is not the
+   readability guarantee. Output glyphs remain above this entire layer. */
+.theme-atmosphere { display: none; }
+:root.theme-atmospheric :is(.term-wrap, .np-editor) { background-color: var(--theme-output-background); }
+:root.theme-atmospheric :is(.term-wrap, .np-editor) > .theme-output-fx {
+  opacity: .22;
+  mask-image: linear-gradient(90deg, transparent 4%, #000 74%);
+}
+:root.theme-atmospheric .theme-output-fx::before,
+:root.theme-atmospheric .theme-output-fx::after { display: none; animation: none; }
+:root.theme-atmospheric :is(.theme-engine, .theme-code-rain, .theme-horizon) { display: none; }
+:root[data-theme="ion-storm"] .theme-atmosphere[data-effect="ion-storm"],
+:root[data-theme="solar-flare"] .theme-atmosphere[data-effect="solar-flare"],
+:root[data-theme="aurora-flux"] .theme-atmosphere[data-effect="aurora-flux"],
+:root[data-theme="hyperdrive"] .theme-atmosphere[data-effect="hyperdrive"],
+:root[data-theme="ghost-circuit"] .theme-atmosphere[data-effect="ghost-circuit"] {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.theme-atmosphere path { stroke-linecap: round; stroke-linejoin: round; }
+.theme-atmosphere [style] { animation-delay: var(--effect-delay, 0s); }
+
+/* The stronger glow lives around controls and edges, clear of tool output. */
+:root.theme-atmospheric {
+  --theme-glow: color-mix(in srgb, var(--accent) 48%, transparent);
+}
+:root.theme-atmospheric #app::after { padding: 2px; }
+:root.theme-atmospheric #toolbar {
+  box-shadow: 0 4px 24px color-mix(in srgb, var(--accent) 20%, transparent), inset 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+:root.theme-atmospheric #toolbar::after { height: 3px; box-shadow: 0 0 16px var(--theme-glow); }
+:root.theme-atmospheric #sidebar { box-shadow: inset -1px 0 16px color-mix(in srgb, var(--theme-secondary) 7%, transparent); }
+:root.theme-atmospheric :is(.tab.active, .np-tab.active) {
+  box-shadow: inset 0 2px var(--accent), inset 0 -7px 15px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+:root.theme-atmospheric .theme-header-name::before { box-shadow: 0 0 5px var(--accent), 0 0 13px var(--theme-secondary); }
+:root.theme-atmospheric .brand { text-shadow: 0 0 8px var(--theme-glow), 0 0 24px var(--theme-glow); }
+:root.theme-atmospheric .btn.danger,
+:root.theme-atmospheric .ctx .item.danger:hover { color: var(--theme-danger-text); }
+
+/* Ion Storm: branching electric filaments with continuous traveling current. */
+.theme-atmosphere[data-effect="ion-storm"] {
+  background: radial-gradient(ellipse at 85% 55%, color-mix(in srgb, var(--theme-third) 35%, transparent), transparent 65%);
+}
+.theme-ion-branch { animation: konx-ion-sway var(--effect-duration) ease-in-out infinite; }
+.theme-ion-halo { stroke: var(--theme-third); stroke-width: 12; filter: blur(6px); }
+.theme-ion-trace { stroke: var(--accent); stroke-width: 1.3; opacity: .7; }
+.theme-ion-fork { stroke: var(--theme-secondary); stroke-width: 1; opacity: .65; }
+.theme-ion-pulse {
+  stroke: var(--theme-secondary); stroke-width: 3;
+  stroke-dasharray: 9 91; stroke-dashoffset: -35;
+  filter: drop-shadow(0 0 4px var(--theme-secondary));
+  animation: konx-ion-current var(--effect-duration) linear infinite;
+}
+.theme-ion-branch:nth-child(even) .theme-ion-pulse { stroke: var(--theme-third); }
+
+/* Solar Flare: a dark solar disc, a bright crescent and breathing corona arcs. */
+.theme-atmosphere[data-effect="solar-flare"] {
+  background: radial-gradient(ellipse at 81% 73%, color-mix(in srgb, var(--theme-secondary) 70%, transparent), transparent 39%);
+}
+.theme-solar-flare {
+  transform-origin: 805px 440px;
+  animation: konx-solar-flare var(--effect-duration) ease-in-out infinite;
+}
+.theme-solar-flare-halo { stroke: var(--theme-secondary); stroke-width: 18; filter: blur(7px); }
+.theme-solar-flare-line { stroke: var(--accent); stroke-width: 2; opacity: .9; }
+.theme-solar-flare:nth-child(even) .theme-solar-flare-line { stroke: var(--theme-secondary); stroke-width: 4; }
+.theme-solar-disc { fill: var(--theme-output-background); }
+.theme-solar-crescent { fill: var(--accent); opacity: .8; filter: blur(2px); }
+.theme-solar-limb { stroke: var(--theme-third); stroke-width: 3; filter: drop-shadow(0 0 7px var(--accent)); }
+
+/* Aurora Flux: broad curtains and fine parallel filaments flow together. */
+.theme-atmosphere[data-effect="aurora-flux"] {
+  background: radial-gradient(ellipse at 80% 35%, color-mix(in srgb, var(--theme-third) 28%, transparent), transparent 67%);
+}
+.theme-aurora-curtain {
+  transform-box: fill-box; transform-origin: center;
+  animation: konx-aurora-flow var(--effect-duration) ease-in-out infinite;
+}
+.theme-aurora-bloom { stroke: var(--accent); stroke-width: 64; opacity: .6; filter: blur(16px); }
+.theme-aurora-ribbon { stroke: var(--accent); stroke-width: 22; opacity: .6; filter: blur(3px); }
+.theme-aurora-filament { stroke: var(--accent); stroke-width: .8; opacity: .8; }
+.theme-aurora-curtain:nth-child(even) :is(.theme-aurora-bloom, .theme-aurora-ribbon, .theme-aurora-filament) { stroke: var(--theme-secondary); }
+.theme-aurora-curtain:nth-child(3) :is(.theme-aurora-bloom, .theme-aurora-ribbon, .theme-aurora-filament) { stroke: var(--theme-third); }
+
+/* Hyperdrive: independent outward streaks from one stable vanishing point. */
+.theme-atmosphere[data-effect="hyperdrive"] {
+  background: radial-gradient(ellipse at 81% 65%, color-mix(in srgb, var(--theme-secondary) 40%, transparent), transparent 48%);
+}
+.theme-star-streak {
+  stroke: var(--accent); stroke-dasharray: 3 97; stroke-dashoffset: -40;
+  animation: konx-hyperdrive-flight var(--effect-duration) linear infinite;
+}
+.theme-star-streak:nth-child(3n) { stroke: var(--theme-third); }
+.theme-star-streak:nth-child(5n) { stroke: var(--theme-secondary); stroke-dasharray: 5 95; }
+
+/* Ghost Circuit: visible board traces, square nodes and routed packet pulses. */
+.theme-atmosphere[data-effect="ghost-circuit"] {
+  background: radial-gradient(ellipse at 80% 60%, color-mix(in srgb, var(--theme-third) 24%, transparent), transparent 65%);
+}
+.theme-circuit-trace { stroke: var(--theme-third); stroke-width: 1.2; opacity: .75; }
+.theme-circuit-node { fill: var(--theme-output-background); stroke: var(--accent); stroke-width: 1.2; }
+.theme-circuit-packet {
+  stroke: var(--accent); stroke-width: 3; stroke-dasharray: 4 96; stroke-dashoffset: -35;
+  filter: drop-shadow(0 0 4px var(--accent));
+  animation: konx-circuit-packet var(--effect-duration) linear infinite;
+}
+.theme-circuit-packet:nth-of-type(4n) { stroke: var(--theme-secondary); }
+
+@keyframes konx-ion-sway { 0%, 100% { transform: translateX(-7px); } 50% { transform: translateX(7px); } }
+@keyframes konx-ion-current { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -100; } }
+@keyframes konx-solar-flare { 0%, 100% { transform: rotate(-5deg) scale(.97); } 50% { transform: rotate(5deg) scale(1.07); } }
+@keyframes konx-aurora-flow { 0%, 100% { transform: translateX(-18px) skewX(-4deg) scaleX(.94); } 50% { transform: translateX(18px) skewX(4deg) scaleX(1.08); } }
+@keyframes konx-hyperdrive-flight { 0% { stroke-dashoffset: 0; opacity: 0; } 15%, 75% { opacity: 1; } 100% { stroke-dashoffset: -100; opacity: 0; } }
+@keyframes konx-circuit-packet { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -100; } }
+
 :root[data-theme="arc-reactor"] .theme-orbit { border: 5px double var(--accent); }
 :root[data-theme="arc-reactor"] .theme-orbit-inner { border: 2px dotted var(--theme-secondary); }
 :root[data-theme="arc-reactor"] .theme-engine-core { border-radius: 14px; }
@@ -452,7 +574,7 @@
 @keyframes konx-theme-prism-turn { 0%, 100% { transform: rotate(-18deg) skewY(-6deg); } 50% { transform: rotate(18deg) skewY(6deg); } }
 @keyframes konx-theme-plasma-drift { 0%, 100% { transform: translate(-10px, -5px) scale(.9); } 50% { transform: translate(10px, 7px) scale(1.12); } }
 
-/* Unfocused/hidden windows and inactive output tabs do no animation work.
+/* Hidden windows and inactive output tabs do no animation work.
    Reduced motion is a hard stop even when the saved preference is running. */
 :root.theme-animated[data-theme-motion="paused"] #app::after,
 :root.theme-animated[data-theme-motion="paused"] #toolbar::after,

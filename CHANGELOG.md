@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.30.0 — 2026-10-26
+
+- Add five animated application themes: **Ion Storm**, **Solar Flare**, **Aurora Flux**, **Hyperdrive**, and **Ghost Circuit**, each with distinct glow, motion, and coordinated terminal/editor colors.
+- Add electrical arcs, a solar corona, aurora curtains, a starfield, and circuit traces behind terminal and editor output, with quieter surfaces for tools and explanations.
+- Retain header and Appearance pause/resume controls and Windows reduced-motion support. Pausing keeps the chosen colors and decorative background visible.
+- Support all five workspace layouts, floating panels, and native pop-outs while preserving explicit terminal palettes and per-session overrides.
+- Pause theme animation when a native pop-out is hidden or minimized, using that window's own visibility; resume when it becomes visible if motion is enabled.
+- Keep all 13 earlier themes and saved appearance preferences. KonX now offers 18 application themes, including 11 animated choices.
+
+See the [theme guide](docs/THEMES.md), [user guide](docs/USER_GUIDE.md#appearance-and-motion), and [release notes](docs/releases/0.30.0.md).
+
 ## 0.29.0 — 2026-10-26
 
 - Add five static application themes: **Obsidian Gold**, **Arctic Glass**, **Deep Ocean**, **Sandstone**, and **Crimson Circuit**.

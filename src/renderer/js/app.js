@@ -7,7 +7,7 @@ import { TOOLS, createTool, hostMenuItems } from './tools.js';
 import { settingsDialog } from './settings.js';
 import { NotepadTab } from './notepad/notepad.js';
 import { toolContext } from './tool-context.mjs';
-import { applyApplicationTheme } from './theme-effects.js';
+import { applyApplicationTheme, applyThemeVisibility } from './theme-effects.js';
 import { updateKonx } from './updates.js';
 import { incidentEvidence } from './incident-evidence.mjs';
 import { WorkspaceLayout } from './workspace-layout.js';
@@ -261,7 +261,7 @@ class App {
     this.motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
     this.motionPreference.addEventListener('change', () => this.updateThemeHeader());
     document.addEventListener('visibilitychange', () => {
-      document.documentElement.dataset.themeVisible = String(!document.hidden);
+      applyThemeVisibility(document);
     });
     this.presets = await api.invoke('tools:presets');
     document.title = this.info.name;

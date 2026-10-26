@@ -48,7 +48,7 @@ function fixture() {
   };
   class BrowserWindow extends EventEmitter {
     constructor() {
-      super(); window = this; this.destroyed = false;
+      super(); window = this; this.destroyed = false; this.visible = false;
       this.webContents = new EventEmitter();
       this.webContents.mainFrame = {};
       this.webContents.isDestroyed = () => this.destroyed;
@@ -58,8 +58,10 @@ function fixture() {
       this.webContents.setBackgroundThrottling = value => { this.throttling = value; };
     }
     isDestroyed() { return this.destroyed; }
+    isVisible() { return this.visible; }
+    isMinimized() { return !!this.minimized; }
     loadFile() {}
-    show() {}
+    show() { this.visible = true; this.emit('show'); }
     static getFocusedWindow() { return null; }
   }
   const connections = {

@@ -8,7 +8,8 @@ const { setViewport } = require('./lib/electron-viewport.cjs');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const layouts = ['classic', 'workbench', 'incident-desk', 'operations-wall', 'focus'];
 const themes = ['dark', 'light', 'arc-reactor', 'chroma-rgb', 'matrix-mainframe', 'synthwave-grid', 'hologram-prism', 'plasma-forge',
-  'obsidian-gold', 'arctic-glass', 'deep-ocean', 'sandstone', 'crimson-circuit'];
+  'obsidian-gold', 'arctic-glass', 'deep-ocean', 'sandstone', 'crimson-circuit',
+  'ion-storm', 'solar-flare', 'aurora-flux', 'hyperdrive', 'ghost-circuit'];
 async function until(check, description, timeout = 12000) {
   const end = Date.now() + timeout;
   while (!(await check())) { if (Date.now() >= end) throw new Error('Timed out: ' + description); await pause(25); }
@@ -37,7 +38,7 @@ async function runWorkspaceLayoutUiTests(test) {
         assert.equal(code, 0, output); assert.match(output, new RegExp('LAYOUT_UI_PASS ' + phase));
       }
       const saved = JSON.parse(fs.readFileSync(path.join(root, 'profile', 'settings.json'), 'utf8'));
-      assert.equal(saved.uiLayout, 'focus'); assert.equal(saved.uiTheme, 'plasma-forge'); assert.equal(saved.colorScheme, 'solarized');
+      assert.equal(saved.uiLayout, 'focus'); assert.equal(saved.uiTheme, 'ghost-circuit'); assert.equal(saved.colorScheme, 'solarized');
       assert.equal(saved.themeAnimations, false);
     } finally {
       if (child && child.exitCode == null) child.kill();
@@ -92,7 +93,7 @@ async function fixture() {
         await until(() => run('Boolean(window.__app?.workspaceLayout)'), 'workspace owner ready');
         if (phase === 'restart') {
           assert.equal(await run('window.__app.workspaceLayout.get().layout'), 'focus');
-          assert.equal(await run('document.documentElement.dataset.theme'), 'plasma-forge');
+          assert.equal(await run('document.documentElement.dataset.theme'), 'ghost-circuit');
           assert.equal(await run('window.__app.settings.colorScheme'), 'solarized');
           assert.equal(await run('window.__app.settings.themeAnimations'), false);
           assert.equal(await run('window.__app.tabs.filter(t=>t.kind==="terminal").length'), 0);
@@ -208,7 +209,7 @@ async function fixture() {
         assert.equal(await run('window.__app.tabs.includes(window.__b)'), false);
         assert.equal(await run('window.__app.workspaceLayout.get().visibleIds.includes(window.__b.id)'), false);
         assert.equal(await run('window.__a.state'), 'connected');
-        await save({ uiLayout: 'focus', uiTheme: 'plasma-forge', themeAnimations: false });
+        await save({ uiLayout: 'focus', uiTheme: 'ghost-circuit', themeAnimations: false });
         await run(`window.__app.activate(window.__cap);window.__a.disconnect();true;`);
         await until(() => run('window.__a.state==="disconnected"'), 'fixture SSH cleanup');
         assert.equal(await run('window.__app.workspaceLayout.get().layout'), 'focus');

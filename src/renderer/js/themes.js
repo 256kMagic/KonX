@@ -54,13 +54,14 @@ export const APP_THEMES = Object.fromEntries([
     appearance: id === 'light' ? 'light' : 'dark',
     terminalScheme: id === 'dark' ? 'konx' : id === 'light' ? 'light' : null }]));
 
-// Static themes own their chrome and output colors together. Consumers use this
-// catalog rather than treating every non-animated theme as classic Dark/Light.
-function staticTheme({ id, label, appearance = 'dark', background, panel, terminal,
-  foreground, muted, accent, selection, secondary, ok, warn, error, radius, palette }) {
+// Catalog palettes own chrome and output colors together; animation is a
+// separate capability, not a consequence of having a custom palette.
+function catalogTheme({ id, label, animated = false, appearance = 'dark', background, panel, terminal,
+  foreground, muted, accent, selection, secondary, third, ok, warn, error, radius, palette }) {
   const light = appearance === 'light';
-  return { id, label, animated: false, appearance, background: terminal, foreground,
+  return { id, label, animated, appearance, background: terminal, foreground,
     accent, muted, selection, secondary, palette,
+    ...(animated ? { effect: id } : {}),
     ui: {
       '--bg': background, '--panel': panel,
       '--panel-2': `color-mix(in srgb, ${panel} 80%, ${background})`,
@@ -76,6 +77,7 @@ function staticTheme({ id, label, appearance = 'dark', background, panel, termin
       '--theme-button-text': light ? '#ffffff' : terminal,
       '--theme-danger-text': light ? '#ffffff' : terminal,
       '--theme-secondary': secondary, '--radius': radius + 'px',
+      ...(animated ? { '--theme-third': third, '--theme-output-background': terminal } : {}),
       '--shadow': light ? '0 12px 40px #18283a2e' : '0 12px 40px #0008',
     },
   };
@@ -102,7 +104,29 @@ for (const value of [
     foreground: '#f2e8ef', muted: '#b3a0b1', accent: '#e87089', selection: '#52303f', secondary: '#96bdf3',
     ok: '#79cbaa', warn: '#e6bc70', error: '#ff9582', radius: 2,
     palette: { red: '#ff9582', green: '#79cbaa', yellow: '#e6bc70', blue: '#96bdf3', magenta: '#d5a3e7', cyan: '#82cad0' } },
-]) APP_THEMES[value.id] = staticTheme(value);
+]) APP_THEMES[value.id] = catalogTheme(value);
+
+for (const value of [
+  { id: 'ion-storm', label: 'Ion Storm', background: '#080a1b', panel: '#11162b', terminal: '#060915',
+    accent: '#a9bcff', secondary: '#50dfff', third: '#b875ff', selection: '#323d68', radius: 7,
+    blue: '#a9bcff', magenta: '#d0a9ff', cyan: '#50dfff' },
+  { id: 'solar-flare', label: 'Solar Flare', background: '#160c08', panel: '#241711', terminal: '#100907',
+    accent: '#ffd18b', secondary: '#ff7657', third: '#ffe8ba', selection: '#58402a', radius: 4,
+    blue: '#a9d5ff', magenta: '#f6b5dc', cyan: '#9ee5e5' },
+  { id: 'aurora-flux', label: 'Aurora Flux', background: '#071715', panel: '#102521', terminal: '#06110f',
+    accent: '#86f7cb', secondary: '#c9a0ff', third: '#48c9d9', selection: '#254c45', radius: 10,
+    blue: '#a7d9ff', magenta: '#c9a0ff', cyan: '#79deeb' },
+  { id: 'hyperdrive', label: 'Hyperdrive', background: '#060c19', panel: '#111c30', terminal: '#050914',
+    accent: '#b9e3ff', secondary: '#718fff', third: '#d4b4ff', selection: '#2c4164', radius: 3,
+    blue: '#a9c2ff', magenta: '#d4b4ff', cyan: '#9ae6ff' },
+  { id: 'ghost-circuit', label: 'Ghost Circuit', background: '#101516', panel: '#1b2425', terminal: '#090f10',
+    accent: '#cbf5e8', secondary: '#ffca7b', third: '#6cbaa5', selection: '#344e47', radius: 2,
+    blue: '#a5ceff', magenta: '#d7b4f2', cyan: '#a0dfcf' },
+]) APP_THEMES[value.id] = catalogTheme({
+  ...value, animated: true, foreground: '#ebf3ff', muted: '#a9bbcb',
+  ok: '#83e8b7', warn: '#ffd08b', error: '#ff989f',
+  palette: { red: '#ff989f', green: '#83e8b7', yellow: '#ffd08b', blue: value.blue, magenta: value.magenta, cyan: value.cyan },
+});
 
 export function applicationTheme(name) {
   return Object.hasOwn(APP_THEMES, name) ? APP_THEMES[name] : APP_THEMES.dark;

@@ -243,6 +243,7 @@ function registerIpc() {
     return workspaceWindows.prepare();
   });
   handle('app:popoutClose', id => workspaceWindows.close(id));
+  handle('app:windowVisibility', () => workspaceWindows.visibilityState());
   handle('app:supportPreview', (options = {}) => collectSupportReport({
     info: { version: VERSION, platform: process.platform, arch: process.arch, electron: process.versions.electron, node: process.versions.node,
       mode: app.isPackaged ? updates?.target?.mode || 'unknown' : 'development',

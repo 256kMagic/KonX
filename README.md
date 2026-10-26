@@ -8,19 +8,19 @@ Connect to a switch, move files over SFTP, edit its configuration, and investiga
 
 [Download the latest release](https://github.com/256kMagic/KonX/releases/latest) · [User guide](docs/USER_GUIDE.md) · [Report an issue](https://github.com/256kMagic/KonX/issues)
 
-**KonX 0.29.0** adds five application themes: Obsidian Gold, Arctic Glass, Deep Ocean, Sandstone, and Crimson Circuit. Choose a dark or light workspace with coordinated terminal and editor colors, without animation. See the [theme guide](docs/THEMES.md), [update guide](docs/UPDATING.md), and [release notes](docs/releases/0.29.0.md).
+**KonX 0.30.0** adds five animated themes: Ion Storm, Solar Flare, Aurora Flux, Hyperdrive, and Ghost Circuit. Each brings distinct glow, motion, and coordinated terminal and editor colors. All earlier themes remain available. See the [theme guide](docs/THEMES.md), [update guide](docs/UPDATING.md), and [release notes](docs/releases/0.30.0.md).
 
 ![KonX terminal workspace](docs/screenshots/terminal.png)
 
 ## Download and install
 
-The **0.29.0** release targets **Windows x64**. Node.js is only needed when running from source.
+The **0.30.0** release targets **Windows x64**. Node.js is only needed when running from source.
 
 | Download | Use it for |
 | --- | --- |
-| [KonX-Setup-0.29.0.exe](https://github.com/256kMagic/KonX/releases/download/v0.29.0/KonX-Setup-0.29.0.exe) | A per-user installation with Start menu and desktop shortcuts, an uninstaller, and a choice of installation folder. |
-| [KonX-0.29.0-portable.exe](https://github.com/256kMagic/KonX/releases/download/v0.29.0/KonX-0.29.0-portable.exe) | Run without installing, including from a USB drive. Application settings are still stored in the Windows user profile. |
-| [SHA256SUMS.txt](https://github.com/256kMagic/KonX/releases/download/v0.29.0/SHA256SUMS.txt) | SHA-256 checksums for the release files. |
+| [KonX-Setup-0.30.0.exe](https://github.com/256kMagic/KonX/releases/download/v0.30.0/KonX-Setup-0.30.0.exe) | A per-user installation with Start menu and desktop shortcuts, an uninstaller, and a choice of installation folder. |
+| [KonX-0.30.0-portable.exe](https://github.com/256kMagic/KonX/releases/download/v0.30.0/KonX-0.30.0-portable.exe) | Run without installing, including from a USB drive. Application settings are still stored in the Windows user profile. |
+| [SHA256SUMS.txt](https://github.com/256kMagic/KonX/releases/download/v0.30.0/SHA256SUMS.txt) | SHA-256 checksums for the release files. |
 | [SIP sample capture](https://github.com/256kMagic/KonX/releases/download/v0.2.0/sip-demo.pcapng) | Three synthetic calls for trying the ladder, SDP details, and call exports. |
 
 1. Download the installer or portable executable from the release above.
@@ -32,28 +32,30 @@ The current executables are unsigned. Windows SmartScreen may show an unrecogniz
 To calculate a downloaded file's checksum in PowerShell:
 
 ~~~powershell
-Get-FileHash .\KonX-Setup-0.29.0.exe -Algorithm SHA256
+Get-FileHash .\KonX-Setup-0.30.0.exe -Algorithm SHA256
 ~~~
 
-Compare the hash with `SHA256SUMS.txt`. Installed 0.6.0 and 0.6.1 copies need one manual upgrade because their update button is broken: save your work, close KonX, and run the 0.29.0 installer using the existing installation folder and mode. Installed 0.6.2 and portable 0.6.0 or later copies can use **Update KonX**. Version 0.5.0 and earlier also need a manual installer upgrade or portable-file replacement. An all-users installation in Program Files can require administrator approval.
+Compare the hash with `SHA256SUMS.txt`. Installed 0.6.0 and 0.6.1 copies need one manual upgrade because their update button is broken: save your work, close KonX, and run the 0.30.0 installer using the existing installation folder and mode. Installed 0.6.2 and portable 0.6.0 or later copies can use **Update KonX**. Version 0.5.0 and earlier also need a manual installer upgrade or portable-file replacement. An all-users installation in Program Files can require administrator approval.
 
 ### Update from inside KonX
 
 In installed 0.6.2 or later, or portable 0.6.0 or later, choose **Update KonX** at the top right of the header, or under **Settings → Updates**. Versions before 0.28.0 have the shortcut on Home. One press checks the public GitHub release, downloads the appropriate Windows x64 file, verifies its SHA-256 checksum, then updates and restarts when no work is active. Installed copies keep their installation folder and mode; portable copies keep the same executable filename and location. Both retain the existing Windows profile, settings, sessions, credentials, and Knowledge library. Save documents and notes, disconnect sessions, and stop captures or jobs first. KonX keeps a verified update ready when these steps are still needed.
 
-No GitHub token or background update check is used. The updater runs only in installed or portable releases; a source checkout or unpacked build explains why updating is unavailable. See the [0.29.0 release notes](docs/releases/0.29.0.md) and [update guide](docs/UPDATING.md) for the current release and upgrade path.
+No GitHub token or background update check is used. The updater runs only in installed or portable releases; a source checkout or unpacked build explains why updating is unavailable. See the [0.30.0 release notes](docs/releases/0.30.0.md) and [update guide](docs/UPDATING.md) for the current release and upgrade path.
 
-## What's new in 0.29.0
+## What's new in 0.30.0
 
-| Theme | Appearance |
+| Theme | Colors and motion |
 | --- | --- |
-| **Obsidian Gold** | Charcoal surfaces and warm gold accents |
-| **Arctic Glass** | Cool light surfaces and cobalt accents, with a light terminal |
-| **Deep Ocean** | Dark petrol surfaces and seafoam accents |
-| **Sandstone** | Warm paper surfaces and clay accents, with a light terminal |
-| **Crimson Circuit** | Plum-charcoal surfaces and rose-red accents |
+| **Ion Storm** | Violet and ice blue with branching electrical arcs |
+| **Solar Flare** | Amber and copper with a glowing solar corona |
+| **Aurora Flux** | Mint and violet with flowing aurora curtains |
+| **Hyperdrive** | Ice blue and indigo with a moving starfield |
+| **Ghost Circuit** | Mint and amber with pulses along circuit traces |
 
-Select **Settings → Appearance → Application theme**, then **Save**. These five themes are static and work with every workspace layout, including floating panels and pop-outs. Use **Terminal color scheme → Follow application theme** for a matching terminal; explicit global and per-session terminal palettes remain selected until you change them. Your saved application theme and layout are retained when upgrading. See [themes and terminal colors](docs/THEMES.md).
+Select **Settings → Appearance → Application theme**, then **Save**. The themes work with every workspace layout, including floating panels and pop-outs. Use **Terminal color scheme → Follow application theme** for matching terminal colors and effects; explicit global and per-session palettes remain selected until you change them. Pause or resume motion from the header or **Animate theme effects** in Appearance. Windows reduced motion is respected, and paused themes keep their colors and decorative backgrounds.
+
+All 13 earlier themes remain available, including **Obsidian Gold**, **Arctic Glass**, **Deep Ocean**, **Sandstone**, and **Crimson Circuit**, the static palettes introduced in 0.29.0. Your saved application theme, layout, terminal palettes, and motion preference are retained when upgrading. See [themes and terminal colors](docs/THEMES.md).
 
 The 0.28.0 improvements remain available:
 
@@ -102,7 +104,7 @@ Existing workspace features remain available:
 - **Packet, SIP, and RTP analysis:** readable reassembled traffic, clickable call ladders, SDP details, call exports, directional media analysis, G.711 playback, and WAV export. [RTP media guide](docs/RTP_MEDIA.md).
 - **Incident workspaces:** retain selected captures, terminal text, tool results, syslog, and notes with a source timeline, integrity checks, and HTML/JSON reports. [Incident guide](docs/INCIDENT_WORKSPACES.md).
 - **Remote capture:** collect bounded traffic through an existing Linux SSH session and open verified local results while keeping the terminal available. [Remote capture guide](docs/REMOTE_CAPTURE.md).
-- **Six animated themes:** Arc Reactor, Chroma RGB, Matrix Mainframe, Synthwave Grid, Hologram Prism, and Plasma Forge bring distinct palettes, glow, and motion. A compact top header keeps tools in view; decorative backgrounds sit behind terminal and editor output, with quieter surfaces for data and explanations.
+- **Eleven animated themes:** Ion Storm, Solar Flare, Aurora Flux, Hyperdrive, and Ghost Circuit join Arc Reactor, Chroma RGB, Matrix Mainframe, Synthwave Grid, Hologram Prism, and Plasma Forge. A compact top header keeps tools in view; decorative backgrounds sit behind terminal and editor output, with quieter surfaces for data and explanations.
 - **Motion and classic choices:** pause/resume effects from the header or save the setting in Appearance. Windows reduced-motion preferences are respected. Dark and Light themes and all existing terminal palettes remain available.
 - **Coordinated terminals:** choose **Settings → Appearance → Terminal color scheme → Follow application theme** for matching terminal colors and backgrounds. It is the default for new profiles; upgrades preserve existing global and per-session palettes. See the [Appearance guide](docs/USER_GUIDE.md#appearance-and-motion).
 
@@ -111,7 +113,7 @@ Existing workspace features remain available:
 - **AI & Knowledge:** encrypted connections for OpenAI, Claude, Gemini, Nyquest, and a custom OpenAI-compatible endpoint; 46 bundled articles and editable notes in an offline background SQLite vector index; and **Explain with AI** with explicit context sharing. Library search works without an AI key. [AI and knowledge guide](docs/AI_KNOWLEDGE_GUIDE.md).
 - **Reliability fixes and diagnostics:** improved SFTP cancellation and file preservation, editor recovery, connection and capture handling, and local JavaScript error logs. See the [changelog](CHANGELOG.md) for these fixes and earlier packet/SIP improvements.
 
-See the [0.29.0 release notes](docs/releases/0.29.0.md) and [user guide](docs/USER_GUIDE.md) for workflows and limitations. To try SIP immediately, open the downloadable sample in **Packet Capture** and click **SIP Calls**.
+See the [0.30.0 release notes](docs/releases/0.30.0.md) and [user guide](docs/USER_GUIDE.md) for workflows and limitations. To try SIP immediately, open the downloadable sample in **Packet Capture** and click **SIP Calls**.
 
 ## Start working
 
@@ -257,7 +259,7 @@ Then retry `npm start`. Serial support depends on the optional `serialport` pack
 npm run dist
 ~~~
 
-The build creates versioned executables under `dist/`, such as `KonX-Setup-0.29.0.exe` and `KonX-0.29.0-portable.exe` for the current source version. `npm run dist:dir` creates the unpacked Windows application for inspection. Published release executables are attached to [GitHub Releases](https://github.com/256kMagic/KonX/releases); they are not checked into the source tree.
+The build creates versioned executables under `dist/`, such as `KonX-Setup-0.30.0.exe` and `KonX-0.30.0-portable.exe` for the current source version. `npm run dist:dir` creates the unpacked Windows application for inspection. Published release executables are attached to [GitHub Releases](https://github.com/256kMagic/KonX/releases); they are not checked into the source tree.
 
 ### Test and try a local device
 
@@ -308,9 +310,9 @@ Connect to `127.0.0.1` on port `2222`, username `test`, password `test`. These c
 
 KonX is an early **0.x** project. The Windows x64 release is the currently tested distribution. Packet filters implement KonX's supported syntax rather than the complete Wireshark filter language, capture insights are diagnostic aids, and serial/capture support depends on the available hardware and drivers.
 
-Version **0.29.0** adds five static application themes alongside the six animated themes and classic Dark/Light. Existing theme, layout, terminal palette, and clipboard preferences are retained when upgrading. KonX-AI, reviewed actions, and network workflows remain available. Release checks use isolated profiles and owned test connections; they do not upgrade your installed copy. Physical device and multi-monitor compatibility still need field testing. A complete installed upgrade with Windows elevation remains unverified. Validation and coverage limits are recorded in the [release notes](docs/releases/0.29.0.md).
+Version **0.30.0** adds five animated application themes for a total of 18 choices, including 11 animated themes. Existing theme, layout, motion, terminal palette, and clipboard preferences are retained when upgrading. KonX-AI, reviewed actions, and network workflows remain available. Release checks use isolated profiles and owned test connections; they do not upgrade your installed copy. Physical device and multi-monitor compatibility still need field testing. A complete installed upgrade with Windows elevation remains unverified. Validation and coverage limits are recorded in the [release notes](docs/releases/0.30.0.md).
 
-Detailed version history and validation limits are recorded in the [changelog](CHANGELOG.md) and [release notes](docs/releases/0.29.0.md).
+Detailed version history and validation limits are recorded in the [changelog](CHANGELOG.md) and [release notes](docs/releases/0.30.0.md).
 
 For help, start with the [user guide](docs/USER_GUIDE.md). Common first checks:
 

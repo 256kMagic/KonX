@@ -21,6 +21,8 @@ class WorkspaceWindows {
     this.waiters = new Set();
     this.disposed = false;
     this.stopping = false;
+    this.visibilityRevision = 0;
+    this.releasePrimaryVisibility = this._watchVisibility(primary);
     this.originalThrottling = primary.webContents.getBackgroundThrottling();
     primary.webContents.setWindowOpenHandler(details => this._allow(details));
     primary.webContents.on('did-create-window', (child, details) => this._created(child, details));
@@ -39,6 +41,28 @@ class WorkspaceWindows {
     for (const entries of [this.permits, this.opening]) for (const [name, permit] of entries) {
       if (permit.expires <= this.now()) entries.delete(name);
     }
+  }
+
+  // Unthrottled shared renderers report document.hidden=false even when a
+  // native window is minimized. BrowserWindow owns visibility; animation must
+  // not change the throttling required for live input in another window.
+  visibilityState() {
+    const visible = window => !window.isDestroyed() && window.isVisible() && !window.isMinimized();
+    return { revision: this.visibilityRevision, primary: visible(this.primary),
+      popouts: [...this.windows.values()].map(({ id, child }) => ({ id, visible: visible(child) })) };
+  }
+
+  _publishVisibility() {
+    if (this.disposed) return;
+    this.visibilityRevision++;
+    this.emit('app:windowVisibility', this.visibilityState());
+  }
+
+  _watchVisibility(window) {
+    const changed = () => this._publishVisibility();
+    const events = ['show', 'hide', 'minimize', 'restore'];
+    for (const event of events) window.on(event, changed);
+    return () => { for (const event of events) window.removeListener(event, changed); };
   }
 
   prepare() {
@@ -73,6 +97,7 @@ class WorkspaceWindows {
     if (this.disposed || url !== 'about:blank' || !permit || permit.expires <= this.now()) { child.destroy(); this._changed(); return; }
     const record = { ...permit, child, approved: false, requested: false };
     this.windows.set(record.id, record);
+    record.releaseVisibility = this._watchVisibility(child);
     this._keepVisible(child);
     this.primary.webContents.setBackgroundThrottling(false);
     // about:blank can inherit its opener's preferences; enforce live rendering
@@ -88,10 +113,13 @@ class WorkspaceWindows {
       this._requestDock(record);
     });
     child.once('closed', () => {
+      record.releaseVisibility();
       this.windows.delete(record.id);
       if (!this.disposed && !record.approved) this.emit('app:popoutClosed', { id: record.id });
+      this._publishVisibility();
       this._changed();
     });
+    this._publishVisibility();
     if (this.stopping) this._requestDock(record);
   }
 
@@ -167,9 +195,10 @@ class WorkspaceWindows {
   dispose() {
     if (this.disposed) return;
     this.disposed = true; this.permits.clear(); this.opening.clear();
+    this.releasePrimaryVisibility();
     this.screen?.removeListener('display-removed', this.recoverDisplays);
     this.screen?.removeListener('display-metrics-changed', this.metricsChanged);
-    for (const record of this.windows.values()) record.child.destroy();
+    for (const record of this.windows.values()) { record.releaseVisibility(); record.child.destroy(); }
     this.windows.clear(); this._changed();
   }
 }
