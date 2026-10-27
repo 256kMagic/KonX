@@ -522,6 +522,7 @@ const fakeCrypt = {
   await require('./ssh-host-key-tests.cjs').runSshHostKeyTests(test);
   await require('./credential-store-tests.cjs').runCredentialStoreTests(test);
   await require('./session-management-ui-tests.cjs').runSessionManagementUiTests(test);
+  await require('./save-connection-session-ui-tests.cjs').runSaveConnectionSessionUiTests(test);
   await require('./home-sections-ui-tests.cjs').runHomeSectionsUiTests(test);
   await require('./home-settings-tests.cjs').runHomeSettingsTests(test);
   await require('./layout-focus-tests.cjs').runLayoutFocusTests(test);

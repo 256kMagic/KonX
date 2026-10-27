@@ -297,7 +297,7 @@ export class SessionTree {
 const BAUDS = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600];
 
 /** Session editor. Resolves {session, connect} or null. */
-export async function editSessionDialog(app, input = {}) {
+export async function editSessionDialog(app, input = {}, options = {}) {
   const s = { protocol: 'ssh', port: 22, auth: 'password', keepalive: 30, termType: 'xterm-256color', baudRate: 9600, dataBits: 8, parity: 'none', stopBits: 1, flowControl: 'none', ...input };
   const isNew = !s.id;
   const canSaveSecrets = app.info.encryption === true;
@@ -356,6 +356,8 @@ export async function editSessionDialog(app, input = {}) {
 
   // ---- authentication
   const pw = h('input', { type: 'password', name: 'password', 'aria-label': 'Password', placeholder: s.hasPassword ? 'Saved password — leave blank to keep' : 'Enter a password or leave blank to be asked', autocomplete: 'off' });
+  if (options.saveOnly && isNew && typeof s.password === 'string') pw.value = s.password;
+  if (options.saveOnly && !canSaveSecrets) pw.disabled = true;
   const savePw = h('input', { type: 'checkbox', name: 'savePassword', 'aria-label': 'Remember username and password', checked: canSaveSecrets && (s.hasPassword || isNew), disabled: !canSaveSecrets });
   const removePw = h('input', { type: 'checkbox', name: 'removePassword', 'aria-label': 'Remove saved password' });
   const credentialHint = h('div.hint');
@@ -372,6 +374,7 @@ export async function editSessionDialog(app, input = {}) {
     { name: 'keyPath', label: 'Private key file', browse: 'file', placeholder: 'C:\\Users\\you\\.ssh\\id_ed25519' },
   ], s);
   const passphrase = h('input', { type: 'password', name: 'passphrase', 'aria-label': 'Key passphrase', placeholder: s.hasPassphrase ? 'Saved passphrase — leave blank to keep' : 'Leave blank to be asked', autocomplete: 'off', disabled: !canSaveSecrets });
+  if (options.saveOnly && isNew && canSaveSecrets && typeof s.passphrase === 'string') passphrase.value = s.passphrase;
   const authBox = h(
     'div.mpane',
     auth.els[0],
@@ -450,10 +453,14 @@ export async function editSessionDialog(app, input = {}) {
     savePw.disabled = !canSaveSecrets || removePw.checked;
     savedStatus.textContent = removePw.checked ? 'Password will be removed' : s.hasPassword ? 'Password saved' : 'No saved password';
     const messages = [];
-    if (removePw.checked) messages.push('The saved password will be removed when you save. A typed password is used only by Save & Connect.');
-    else if (!canSaveSecrets) messages.push('Password saving is unavailable because secure encryption is unavailable. A typed password is used only by Save & Connect. Username is saved with the session.');
+    if (removePw.checked) messages.push(options.saveOnly ? 'The saved password will be removed when you save.'
+      : 'The saved password will be removed when you save. A typed password is used only by Save & Connect.');
+    else if (!canSaveSecrets) messages.push(options.saveOnly
+      ? 'Password saving is unavailable because secure encryption is unavailable. Username is saved with the session.'
+      : 'Password saving is unavailable because secure encryption is unavailable. A typed password is used only by Save & Connect. Username is saved with the session.');
     else if (savePw.checked) messages.push('Username is always saved with the session. A typed password is saved encrypted on this computer.');
-    else messages.push('Username is always saved with the session. A typed password is used only by Save & Connect and is not saved.');
+    else messages.push(options.saveOnly ? 'Username is always saved with the session. The password is not saved.'
+      : 'Username is always saved with the session. A typed password is used only by Save & Connect and is not saved.');
     if (s.hasPassword && !removePw.checked) messages.push('Leave Password blank to keep the saved password. Select Remove saved password to delete it.');
     if (proto.value === 'telnet') messages.push('Telnet uses these credentials to answer login prompts automatically.');
     else if (proto.value === 'ssh') messages.push(`SSH method: ${auth.inputs.auth.selectedOptions[0].textContent}. Change it on Authentication.`);
@@ -491,6 +498,8 @@ export async function editSessionDialog(app, input = {}) {
     const g = general.read();
     const out = {
       ...(s.id ? { id: s.id } : {}),
+      ...(options.saveOnly && s.agentPath !== undefined ? { agentPath: s.agentPath } : {}),
+      ...(options.saveOnly && s.autoLogin !== undefined ? { autoLogin: s.autoLogin } : {}),
       ...g,
       name: g.name || (g.protocol === 'serial' ? serialPort.value : g.host),
       port: g.port || undefined,
@@ -538,10 +547,12 @@ export async function editSessionDialog(app, input = {}) {
       .filter(control => control.textContent !== 'Cancel');
     const disabled = controls.map(control => [control, control.disabled]);
     saving = true;
+    options.onSaving?.(true);
     saveError.classList.add('hidden');
     saveStatus.classList.remove('hidden');
     for (const control of controls) control.disabled = true;
     void api.invoke('sessions:save', value).then(async saved => {
+      options.onSaved?.(saved);
       if (!dialogOpen) {
         try {
           await app.sessions.load();
@@ -564,6 +575,7 @@ export async function editSessionDialog(app, input = {}) {
       saveError.scrollIntoView({ block: 'nearest' });
     }).finally(() => {
       saving = false;
+      options.onSaving?.(false);
       saveStatus.classList.add('hidden');
       for (const [control, wasDisabled] of disabled) control.disabled = wasDisabled;
     });
@@ -571,14 +583,16 @@ export async function editSessionDialog(app, input = {}) {
     return false;
   };
   const result = await modal({
-    title: isNew ? 'New session' : `Edit session — ${s.name || s.host}`,
+    title: options.saveOnly ? (isNew ? 'Save session' : `Edit saved session — ${s.name || s.host}`)
+      : isNew ? 'New session' : `Edit session — ${s.name || s.host}`,
     icon: 'server',
     width: 720,
-    body: [h('div.mtabs', tabBtns), saveError, saveStatus, ...Object.values(panes)],
+    body: [options.saveOnly ? h('p.hint', 'Save reusable connection details without reconnecting. Changes apply when opening the saved session. Passwords entered only in login prompts are not available here; enter one to remember it.') : null,
+      h('div.mtabs', tabBtns), saveError, saveStatus, ...Object.values(panes)],
     buttons: [
       { label: 'Cancel', value: null },
-      { label: 'Save', value: 'save' },
-      { label: 'Save & Connect', value: 'connect', primary: true },
+      { label: 'Save', value: 'save', primary: options.saveOnly === true },
+      ...(!options.saveOnly ? [{ label: 'Save & Connect', value: 'connect', primary: true }] : []),
     ],
     onReady: ({ close }) => { closeDialog = close; },
     onSubmit: submitSave,

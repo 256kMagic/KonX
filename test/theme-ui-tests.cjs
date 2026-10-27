@@ -247,9 +247,14 @@ async function electronFixture() {
           await setViewport(win, run, width, height); await pause(60);
           const bounds = await run(`(() => { const toolbar=document.querySelector('#toolbar'),r=toolbar.getBoundingClientRect();
             const controls=[...toolbar.querySelectorAll('button')].filter(el=>getComputedStyle(el).display!=='none'&&el.getBoundingClientRect().width);
+            const app=window.__app,term=window.__term,rect=el=>{const b=el.getBoundingClientRect();return {top:b.top,bottom:b.bottom,height:b.height}};
+            const logStyle=getComputedStyle(term.logbar),logControls=[...term.logbar.querySelectorAll('button')].filter(el=>el.getBoundingClientRect().width);
             return {width:innerWidth,height:innerHeight,documentWidth:document.documentElement.scrollWidth,toolbar:[r.left,r.top,r.right,r.bottom],
               controls:controls.map(el=>({name:el.title||el.textContent,rect:(()=>{const b=el.getBoundingClientRect();return[b.left,b.top,b.right,b.bottom]})()})),
-              headerInside:window.__app.themeHeader.parentElement===toolbar,viewTop:window.__term.wrap.getBoundingClientRect().top,
+              headerInside:app.themeHeader.parentElement===toolbar,layout:app.workspaceLayout.model.layout,
+              workspaceBar:rect(app.workspaceLayout.bar),tabs:rect(app.tabstrip),views:rect(app.views),terminal:rect(term.el),logbar:rect(term.logbar),output:rect(term.wrap),rows:term.term.rows,
+              logRowHeight:Math.max(...logControls.map(el=>el.getBoundingClientRect().height)),logRowGap:parseFloat(logStyle.rowGap)||0,
+              logEdges:['paddingTop','paddingBottom','borderTopWidth','borderBottomWidth'].reduce((n,key)=>n+(parseFloat(logStyle[key])||0),0),
               updateAtRight:toolbar.lastElementChild.matches('[data-action="update-konx"]'),
               updateReachable:(()=>{const b=toolbar.lastElementChild,r=b.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return b===hit||b.contains(hit)})()};})()`);
           assert.ok(bounds.documentWidth <= bounds.width + 2, JSON.stringify(bounds));
@@ -257,7 +262,22 @@ async function electronFixture() {
           assert.equal(bounds.headerInside, true);
           assert.equal(bounds.updateAtRight, true);
           assert.equal(bounds.updateReachable, true, 'Header updater must remain reachable at ' + width + ': ' + JSON.stringify(bounds));
-          assert.ok(bounds.viewTop < 180, 'A hero banner must not push terminal output down: ' + JSON.stringify(bounds));
+          // Check the actual chrome/output boundary, not an absolute output Y:
+          // connection actions legitimately wrap at narrow window widths.
+          assert.equal(bounds.layout, 'classic', 'This geometry fixture checks the classic single-pane workspace');
+          const adjacent = (bottom, top, label) => assert.ok(Math.abs(bottom - top) <= 2,
+            label + ' must be adjacent; decorative banners must not consume output space: ' + JSON.stringify(bounds));
+          adjacent(bounds.toolbar[3], bounds.workspaceBar.top, 'Header and workspace controls');
+          adjacent(bounds.workspaceBar.bottom, bounds.tabs.top, 'Workspace controls and tabs');
+          adjacent(bounds.tabs.bottom, bounds.views.top, 'Tabs and workspace');
+          adjacent(bounds.views.top, bounds.terminal.top, 'Workspace and terminal');
+          adjacent(bounds.terminal.top, bounds.logbar.top, 'Terminal and connection controls');
+          adjacent(bounds.logbar.bottom, bounds.output.top, 'Connection controls and output');
+          adjacent(bounds.output.bottom, bounds.terminal.bottom, 'Output and terminal bottom');
+          assert.ok(bounds.logbar.height <= 2 * bounds.logRowHeight + bounds.logRowGap + bounds.logEdges + 2,
+            'Connection controls must fit within two rows at supported widths: ' + JSON.stringify(bounds));
+          assert.ok(bounds.output.height >= bounds.height / 2 && bounds.rows >= 12,
+            'Terminal output must retain at least half the viewport and twelve readable rows: ' + JSON.stringify(bounds));
           for (const control of bounds.controls) {
             assert.ok(control.rect[0] >= -2 && control.rect[2] <= bounds.width + 2 && control.rect[1] >= -2 && control.rect[3] <= bounds.toolbar[3] + 2,
               'Toolbar control clipped at ' + width + ': ' + JSON.stringify(control));

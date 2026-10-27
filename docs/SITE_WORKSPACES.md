@@ -10,6 +10,8 @@ Available from KonX 0.19.0. Open **Saved Site Workspaces** from Home or Network 
 4. Arrange your panels and choose **Capture current panels** to record their placement. Terminal and SFTP panel types are retained separately.
 5. Choose **Save**. Changes are local to the current KonX profile.
 
+To include an on-demand terminal or SFTP connection, first choose **Save session** in its tab. Then use **Capture current panels** to retain the saved-session reference in the site. See [Save an on-demand connection](SESSION_MANAGEMENT.md#save-an-on-demand-connection).
+
 ## Reopen and work
 
 Select a site, then choose **Open workspace** to restore its working context without connecting to devices or starting collection. Review the session references, then choose **Connect**. Replace a missing session by removing that reference and adding the correct saved session; names alone do not establish identity.

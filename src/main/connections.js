@@ -568,7 +568,7 @@ class ConnectionManager {
   /** The ssh2 Client behind an open SSH tab, so SFTP can ride the same connection. */
   sshClient(id) {
     const c = this.conns.get(id);
-    return c && c.client && !c.closed ? { client: c.client, session: c.session } : null;
+    return c && c.client && !c.closed ? { client: c.client, session: c.session, username: c.sshInfo?.username || c.session.username } : null;
   }
 
   close(id) {

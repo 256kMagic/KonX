@@ -2,6 +2,7 @@ import { installInvestigationContext, investigationChanged } from './copilot-inv
 import { h, icon, api, modal, toast, errMsg } from './ui.js';
 import { APP_LAYOUTS } from './workspace-layouts.mjs';
 import { normalizeWorkspaceGeometry, contractFloatBounds, expandFloatBounds } from './workspace-panels-model.mjs';
+import { savedSessionId } from './connection-session-model.mjs';
 
 const copy = value => JSON.parse(JSON.stringify(value));
 const uid = () => crypto.randomUUID();
@@ -33,7 +34,7 @@ export function captureSiteLayout(app, refs = {}, toolKinds = []) {
         ...(p.kind === 'session' ? { sessionMode: p.sessionMode || 'terminal' } : {}) };
     }
     if (!descriptor && ['terminal', 'sftp'].includes(tab.kind)) {
-      const session = saved.find(s => s.id === tab.spec?.sessionId);
+      const session = saved.find(s => s.id === savedSessionId(tab));
       if (session) { if (!sessions.some(s => s.id === session.id)) sessions.push({ id: session.id, name: session.name || 'Saved session', group: '' });
         descriptor = { key: uid(), kind: 'session', referenceId: session.id, sessionMode: tab.kind === 'sftp' ? 'sftp' : 'terminal' }; }
       else { omissions.push('An unsaved or unavailable connection was omitted. Save it in Sessions before adding it here.'); continue; }

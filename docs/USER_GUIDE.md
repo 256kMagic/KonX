@@ -1,12 +1,12 @@
 # KonX User Guide
 
-Version 0.31.0 adds closable Home sections and saved visibility choices. Use a section's × button to hide it and **Customize Home** to bring it back. See [Customize Home](#customize-home) and the [release notes](releases/0.31.0.md).
+Version 0.32.0 adds **Save session** to open terminal and SFTP connections. Save a connection created on demand while keeping it running. See [Save an on-demand connection](#save-an-on-demand-connection) and the [release notes](releases/0.32.0.md).
 
 Version 0.30.0 adds **Ion Storm**, **Solar Flare**, **Aurora Flux**, **Hyperdrive**, and **Ghost Circuit** animated themes. All 18 application themes remain available. See [Appearance and motion](#appearance-and-motion) and the [theme guide](THEMES.md).
 
 Version 0.27.1 renames the contextual assistant to **KonX-AI** and improves encrypted provider-key management. See the [KonX-AI guide](KONX_AI.md), [provider setup](AI_KNOWLEDGE_GUIDE.md#connect-a-provider), and [release validation](releases/0.27.1.md).
 
-This guide covers KonX 0.31.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one application. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
+This guide covers KonX 0.32.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one application. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
 
 Version 0.27.0 adds reviewed diagnostics, undoable editor replacements and saved answer notes to KonX-AI. See the [KonX-AI guide](KONX_AI.md) and [release validation](releases/0.27.0.md).
 
@@ -108,7 +108,7 @@ Examples use reserved documentation addresses such as `192.0.2.10`, `198.51.100.
 
 ## Install, run, and update
 
-Download a Windows x64 executable from the [0.31.0 release](https://github.com/256kMagic/KonX/releases/tag/v0.31.0).
+Download a Windows x64 executable from the [0.32.0 release](https://github.com/256kMagic/KonX/releases/tag/v0.32.0).
 
 | Download | Use it when | How to start |
 | --- | --- | --- |
@@ -117,7 +117,7 @@ Download a Windows x64 executable from the [0.31.0 release](https://github.com/2
 
 The portable executable still uses a Windows user profile for settings, saved sessions, and editor recovery. It does **not** automatically place all data beside the executable or make encrypted credentials transferable between computers. See [Application data and backups](#application-data-and-backups).
 
-**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.31.0.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
+**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.32.0.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
 
 For updates from **installed 0.6.2 or later**, or **portable 0.6.0 or later**:
 
@@ -130,7 +130,7 @@ From 0.16.1, staged update filenames include KonX and the version being installe
 
 Installed copies retain their installation folder and mode. Portable copies retain their filename and location; the containing folder must be writable. Both continue to use the existing Windows profile. No update is applied just because you close KonX, and no release checks run in the background. See [Updating KonX](UPDATING.md) for cancellation, failures, and release preparation.
 
-Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.31.0 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
+Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.32.0 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
 
 Npcap is optional for packet capture; SSH, SFTP, Notepad, and the other tools do not require it. Updating KonX does not install or update Npcap.
 
@@ -163,6 +163,12 @@ For an unknown server, **New host key** shows the key type and SHA-256 fingerpri
 If the fingerprint differs from one already saved, KonX shows **Host key changed** with both fingerprints. Establish why it changed before using **Replace & connect**. A reinstalled server is one possible cause; an intercepted connection is another.
 
 Saved keys are managed under **Settings → Known Hosts**. Removing a key makes KonX ask again on the next connection; removal does not verify the replacement key.
+
+### Save an on-demand connection
+
+Open the connection's terminal or SFTP tab and choose **Save session**. The action is also available from the application tab's right-click menu. Review the filled-in connection details, set **Name** and **Folder**, and choose **Save**. The current connection keeps running.
+
+The same control becomes **Edit saved session** after saving. Use it to update that record; saving again does not create another copy. These edits apply when opening the saved session from Sessions. See [Session management](SESSION_MANAGEMENT.md#save-an-on-demand-connection) for credential handling and recovery after a failed save.
 
 ### Save a session
 
@@ -809,7 +815,7 @@ For an isolated profile, advanced users can launch from PowerShell with a separa
 
 ```powershell
 $env:KONX_USERDATA = Join-Path $env:LOCALAPPDATA 'KonX-TestProfile'
-& '.\KonX-0.31.0-portable.exe'
+& '.\KonX-0.32.0-portable.exe'
 ```
 
 Run this from the folder containing the portable executable. The environment variable applies to that PowerShell process and launches from it; use a normal shortcut or a separate shell for your normal profile. This setting does not make Windows-encrypted credentials portable.

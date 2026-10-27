@@ -23,6 +23,8 @@ export function requestedConnectionMetadata(tab) {
   const saved = tab.spec?.sessionId ? tab.app.sessions?.data?.sessions.find(session => session.id === tab.spec.sessionId) : null;
   const source = saved || (tab.spec?.sessionId || tab.spec?.fromConn ? {} : tab.spec);
   return { savedSessionId: tab.spec?.sessionId || null, fromConnectionId: tab.spec?.fromConn || null,
+    ...(tab.sessionReference?.savedId && tab.sessionReference.savedId !== tab.spec?.sessionId
+      ? { associatedSavedSessionId: tab.sessionReference.savedId } : {}),
     configurationAvailable: Boolean(saved || !tab.spec?.sessionId && !tab.spec?.fromConn), requested: safeSessionMetadata(source) };
 }
 

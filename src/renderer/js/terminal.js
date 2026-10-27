@@ -6,6 +6,8 @@ import { mountThemeOutput } from './theme-effects.js';
 import { CiscoOutputHighlighter } from './cisco-highlighting.mjs';
 import { bridgeTerminalMouse } from './terminal-mouse-host.mjs';
 import { createWorkspaceEvidence, requestedConnectionMetadata, captureTerminalContext, workspaceCopilotItems, workspaceContextChoices } from './copilot-workspace.mjs';
+import { connectionSessionButton, connectionSessionMenuItem } from './connection-session.js';
+import { observeConnectionSession } from './connection-session-model.mjs';
 
 let seq = 0;
 
@@ -81,7 +83,8 @@ export class TerminalTab {
       'aria-checked': 'false', onclick: () => this.toggleCiscoHighlighting(),
     }, h('span.term-log-track', { 'aria-hidden': 'true' }), 'Cisco colors', this.ciscoState);
     this.copilotButton = h('button.btn.sm.ghost', { type: 'button', 'aria-label': 'Choose terminal evidence for KonX-AI', onclick: e => { const r = e.currentTarget.getBoundingClientRect(); contextMenu(r.left, r.bottom, workspaceCopilotItems(this)); } }, icon('insight'), 'Ask KonX-AI');
-    this.logbar = h('div.term-logbar', this.logSwitch, this.ciscoSwitch, this.copilotButton, this.logPath, this.logReveal, this.logErrorEl);
+    this.saveSessionButton = connectionSessionButton(this);
+    this.logbar = h('div.term-logbar', this.saveSessionButton, this.logSwitch, this.ciscoSwitch, this.copilotButton, this.logPath, this.logReveal, this.logErrorEl);
     this.el = h('div.view', this.logbar, this.wrap);
     this._renderLogging();
     this.term.open(this.wrap);
@@ -164,6 +167,7 @@ export class TerminalTab {
     this.state = st.state;
     this.statusMessage = st.message || '';
     if (st.info) this.info = st.info;
+    observeConnectionSession(this, st.info);
     if (st.baudDetect) this.baudDetection = { phase: st.baudDetect.phase, baudRate: st.baudDetect.baudRate, index: st.baudDetect.index, total: st.baudDetect.total, message: st.baudDetect.message };
     if (this.info?.logging) this.lastLogPath = this.info.logging;
     if (st.state === 'connected') {
@@ -540,6 +544,7 @@ export class TerminalTab {
       { label: 'Find…', icon: 'search', shortcut: 'Ctrl+Shift+F', action: () => this.openFind() },
       { label: 'Clear Scrollback', action: () => { this.term.clear(); this.ciscoHighlighter.refresh(); this.copilot.touch(); } },
       { label: 'Open scrollback in Notepad', icon: 'edit', action: () => this.openScrollback() },
+      connectionSessionMenuItem(this),
       '-',
       this.protocol === 'ssh' && { label: 'Open SFTP Tab', icon: 'file-transfer', disabled: !connected, action: () => this.app.openSftpFromTerminal(this) },
       { label: this.info && this.info.logging ? 'Stop Logging' : 'Start Logging', icon: 'log', disabled: !connected || !!this.logRequest, action: () => this.toggleLog() },

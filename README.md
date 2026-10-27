@@ -8,19 +8,19 @@ Connect to a switch, move files over SFTP, edit its configuration, and investiga
 
 [Download the latest release](https://github.com/256kMagic/KonX/releases/latest) · [User guide](docs/USER_GUIDE.md) · [Report an issue](https://github.com/256kMagic/KonX/issues)
 
-**KonX 0.31.0** lets you hide Home sections and bring them back when needed. Close a section with its × button, then use **Customize Home** to choose what appears. Your choices stay saved between launches. See the [Home guide](docs/USER_GUIDE.md#customize-home), [update guide](docs/UPDATING.md), and [release notes](docs/releases/0.31.0.md).
+**KonX 0.32.0** lets you save a connection after opening it on demand. Choose **Save session** in its terminal or SFTP tab, review the name, folder and login, then save it to Sessions while the current connection keeps running. See the [session guide](docs/SESSION_MANAGEMENT.md#save-an-on-demand-connection), [update guide](docs/UPDATING.md), and [release notes](docs/releases/0.32.0.md).
 
 ![KonX terminal workspace](docs/screenshots/terminal.png)
 
 ## Download and install
 
-The **0.31.0** release targets **Windows x64**. Node.js is only needed when running from source.
+The **0.32.0** release targets **Windows x64**. Node.js is only needed when running from source.
 
 | Download | Use it for |
 | --- | --- |
-| [KonX-Setup-0.31.0.exe](https://github.com/256kMagic/KonX/releases/download/v0.31.0/KonX-Setup-0.31.0.exe) | A per-user installation with Start menu and desktop shortcuts, an uninstaller, and a choice of installation folder. |
-| [KonX-0.31.0-portable.exe](https://github.com/256kMagic/KonX/releases/download/v0.31.0/KonX-0.31.0-portable.exe) | Run without installing, including from a USB drive. Application settings are still stored in the Windows user profile. |
-| [SHA256SUMS.txt](https://github.com/256kMagic/KonX/releases/download/v0.31.0/SHA256SUMS.txt) | SHA-256 checksums for the release files. |
+| [KonX-Setup-0.32.0.exe](https://github.com/256kMagic/KonX/releases/download/v0.32.0/KonX-Setup-0.32.0.exe) | A per-user installation with Start menu and desktop shortcuts, an uninstaller, and a choice of installation folder. |
+| [KonX-0.32.0-portable.exe](https://github.com/256kMagic/KonX/releases/download/v0.32.0/KonX-0.32.0-portable.exe) | Run without installing, including from a USB drive. Application settings are still stored in the Windows user profile. |
+| [SHA256SUMS.txt](https://github.com/256kMagic/KonX/releases/download/v0.32.0/SHA256SUMS.txt) | SHA-256 checksums for the release files. |
 | [SIP sample capture](https://github.com/256kMagic/KonX/releases/download/v0.2.0/sip-demo.pcapng) | Three synthetic calls for trying the ladder, SDP details, and call exports. |
 
 1. Download the installer or portable executable from the release above.
@@ -32,18 +32,27 @@ The current executables are unsigned. Windows SmartScreen may show an unrecogniz
 To calculate a downloaded file's checksum in PowerShell:
 
 ~~~powershell
-Get-FileHash .\KonX-Setup-0.31.0.exe -Algorithm SHA256
+Get-FileHash .\KonX-Setup-0.32.0.exe -Algorithm SHA256
 ~~~
 
-Compare the hash with `SHA256SUMS.txt`. Installed 0.6.0 and 0.6.1 copies need one manual upgrade because their update button is broken: save your work, close KonX, and run the 0.31.0 installer using the existing installation folder and mode. Installed 0.6.2 and portable 0.6.0 or later copies can use **Update KonX**. Version 0.5.0 and earlier also need a manual installer upgrade or portable-file replacement. An all-users installation in Program Files can require administrator approval.
+Compare the hash with `SHA256SUMS.txt`. Installed 0.6.0 and 0.6.1 copies need one manual upgrade because their update button is broken: save your work, close KonX, and run the 0.32.0 installer using the existing installation folder and mode. Installed 0.6.2 and portable 0.6.0 or later copies can use **Update KonX**. Version 0.5.0 and earlier also need a manual installer upgrade or portable-file replacement. An all-users installation in Program Files can require administrator approval.
 
 ### Update from inside KonX
 
 In installed 0.6.2 or later, or portable 0.6.0 or later, choose **Update KonX** at the top right of the header, or under **Settings → Updates**. Versions before 0.28.0 have the shortcut on Home. One press checks the public GitHub release, downloads the appropriate Windows x64 file, verifies its SHA-256 checksum, then updates and restarts when no work is active. Installed copies keep their installation folder and mode; portable copies keep the same executable filename and location. Both retain the existing Windows profile, settings, sessions, credentials, and Knowledge library. Save documents and notes, disconnect sessions, and stop captures or jobs first. KonX keeps a verified update ready when these steps are still needed.
 
-No GitHub token or background update check is used. The updater runs only in installed or portable releases; a source checkout or unpacked build explains why updating is unavailable. See the [0.31.0 release notes](docs/releases/0.31.0.md) and [update guide](docs/UPDATING.md) for the current release and upgrade path.
+No GitHub token or background update check is used. The updater runs only in installed or portable releases; a source checkout or unpacked build explains why updating is unavailable. See the [0.32.0 release notes](docs/releases/0.32.0.md) and [update guide](docs/UPDATING.md) for the current release and upgrade path.
 
-## What's new in 0.31.0
+## What's new in 0.32.0
+
+- **Save an open connection:** keep a session opened from Home, the quick-connect bar, or a network-tool action without typing its connection settings again.
+- **Review before saving:** choose a name and folder, review protocol settings, and optionally retain a password using the existing encrypted local store.
+- **Keep working:** saving does not reconnect or interrupt the current terminal or SFTP connection.
+- **Edit the saved record:** subsequent uses open the saved session for editing instead of creating another copy.
+
+See [Save an on-demand connection](docs/SESSION_MANAGEMENT.md#save-an-on-demand-connection) for instructions.
+
+The Home controls introduced in 0.31.0 remain available:
 
 - **Closable Home sections:** hide Introduction, Quick connect, Recent sessions, Sessions, Network tools, or Keyboard with the section's × button.
 - **Customize Home:** choose which sections are visible and restore all sections when wanted. The control remains available even when every section is hidden.
@@ -122,7 +131,7 @@ Existing workspace features remain available:
 - **AI & Knowledge:** encrypted connections for OpenAI, Claude, Gemini, Nyquest, and a custom OpenAI-compatible endpoint; 46 bundled articles and editable notes in an offline background SQLite vector index; and **Explain with AI** with explicit context sharing. Library search works without an AI key. [AI and knowledge guide](docs/AI_KNOWLEDGE_GUIDE.md).
 - **Reliability fixes and diagnostics:** improved SFTP cancellation and file preservation, editor recovery, connection and capture handling, and local JavaScript error logs. See the [changelog](CHANGELOG.md) for these fixes and earlier packet/SIP improvements.
 
-See the [0.31.0 release notes](docs/releases/0.31.0.md) and [user guide](docs/USER_GUIDE.md) for workflows and limitations. To try SIP immediately, open the downloadable sample in **Packet Capture** and click **SIP Calls**.
+See the [0.32.0 release notes](docs/releases/0.32.0.md) and [user guide](docs/USER_GUIDE.md) for workflows and limitations. To try SIP immediately, open the downloadable sample in **Packet Capture** and click **SIP Calls**.
 
 ## Start working
 
@@ -268,7 +277,7 @@ Then retry `npm start`. Serial support depends on the optional `serialport` pack
 npm run dist
 ~~~
 
-The build creates versioned executables under `dist/`, such as `KonX-Setup-0.31.0.exe` and `KonX-0.31.0-portable.exe` for the current source version. `npm run dist:dir` creates the unpacked Windows application for inspection. Published release executables are attached to [GitHub Releases](https://github.com/256kMagic/KonX/releases); they are not checked into the source tree.
+The build creates versioned executables under `dist/`, such as `KonX-Setup-0.32.0.exe` and `KonX-0.32.0-portable.exe` for the current source version. `npm run dist:dir` creates the unpacked Windows application for inspection. Published release executables are attached to [GitHub Releases](https://github.com/256kMagic/KonX/releases); they are not checked into the source tree.
 
 ### Test and try a local device
 
@@ -319,9 +328,9 @@ Connect to `127.0.0.1` on port `2222`, username `test`, password `test`. These c
 
 KonX is an early **0.x** project. The Windows x64 release is the currently tested distribution. Packet filters implement KonX's supported syntax rather than the complete Wireshark filter language, capture insights are diagnostic aids, and serial/capture support depends on the available hardware and drivers.
 
-Version **0.31.0** adds closable Home sections with saved visibility choices and restoration controls. All 18 application themes and existing theme, layout, motion, terminal palette, and clipboard preferences are retained when upgrading. KonX-AI, reviewed actions, and network workflows remain available. Release checks use isolated profiles and owned test connections; they do not upgrade your installed copy. Physical device and multi-monitor compatibility still need field testing. A complete installed upgrade with Windows elevation remains unverified. Validation and coverage limits are recorded in the [release notes](docs/releases/0.31.0.md).
+Version **0.32.0** adds saving on-demand terminal and SFTP connections. The closable Home sections introduced in 0.31.0 remain available. All 18 application themes and existing theme, layout, motion, terminal palette, and clipboard preferences are retained when upgrading. KonX-AI, reviewed actions, and network workflows remain available. Release checks use isolated profiles and owned test connections; they do not upgrade your installed copy. Physical device and multi-monitor compatibility still need field testing. A complete installed upgrade with Windows elevation remains unverified. Validation and coverage limits are recorded in the [release notes](docs/releases/0.32.0.md).
 
-Detailed version history and validation limits are recorded in the [changelog](CHANGELOG.md) and [release notes](docs/releases/0.31.0.md).
+Detailed version history and validation limits are recorded in the [changelog](CHANGELOG.md) and [release notes](docs/releases/0.32.0.md).
 
 For help, start with the [user guide](docs/USER_GUIDE.md). Common first checks:
 

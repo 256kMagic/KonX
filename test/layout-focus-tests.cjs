@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-let evidenceContext, workspaceEvidence;
+let evidenceContext, workspaceEvidence, connectionSessions;
 
 function deferred() {
   let resolve, reject;
@@ -25,6 +25,7 @@ function harness() {
   };
   const globals = {
     requestedConnectionMetadata: (...args) => workspaceEvidence.requestedConnectionMetadata(...args),
+    observeConnectionSession: (...args) => connectionSessions.observeConnectionSession(...args),
     api, requestAnimationFrame: (fn) => frames.push(fn),
     setTimeout: (fn) => { timers.push(fn); return fn; },
     clearTimeout: (fn) => { const i = timers.indexOf(fn); if (i >= 0) timers.splice(i, 1); },
@@ -103,6 +104,7 @@ function harness() {
 
 async function runLayoutFocusTests(test) {
   evidenceContext = await import('../src/renderer/js/copilot-context.mjs');
+  connectionSessions = await import('../src/renderer/js/connection-session-model.mjs');
   const source = fs.readFileSync(path.join(__dirname, '../src/renderer/js/copilot-workspace.mjs'), 'utf8').replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');
   const module = { exports: {} };
   vm.runInNewContext(source + '\nmodule.exports = { requestedConnectionMetadata };', { module, ...evidenceContext });
@@ -139,20 +141,22 @@ async function runLayoutFocusTests(test) {
   await test('connection status preserves current child focus and ignores disposed completions', async () => {
     const h = harness(); const { tab, counts } = h.terminal();
     tab.show({ focus: false }); h.drainFrames();
-    tab.onStatus({ state: 'connected', info: { host: 'fixture' } });
+    tab.onStatus({ state: 'connected', info: { host: 'fixture', username: 'fixture-user' } });
     tab.app.active = tab;
     tab.onStatus({ state: 'connected' });
     assert.equal(tab.info.host, 'fixture'); assert.equal(counts.focus, 0);
+    assert.equal(tab.sessionReference.info.username, 'fixture-user', 'real metadata owner observes the live connection');
     const open = deferred();
     h.api.invoke = (channel) => channel === 'conn:open' ? open.promise : Promise.resolve();
     const connecting = tab.connect();
     tab.dispose();
     open.resolve({ ok: false, error: 'late failure' });
     await connecting;
-    tab.onStatus({ state: 'connected' });
+    tab.onStatus({ state: 'connected', info: { username: 'late-user' } });
     tab.onStatus({ state: 'disconnected', message: 'late close' });
     tab.onData('late packet');
     assert.equal(counts.focus, 0); assert.equal(counts.write, 0);
+    assert.equal(tab.sessionReference.info.username, 'fixture-user', 'disposed status cannot rewrite the saved-session draft owner');
   });
 
   await test('explicit reconnect focuses only its live command target', async () => {

@@ -2,6 +2,8 @@
 import { h, icon, api, DataTable, contextMenu, confirmDialog, promptText, modal, toast, errMsg, fmtBytes, fmtDate, debounce } from './ui.js';
 
 import { createWorkspaceEvidence, requestedConnectionMetadata, captureSftpContext, workspaceCopilotItems, workspaceContextChoices, recordListingRequest } from './copilot-workspace.mjs';
+import { connectionSessionButton } from './connection-session.js';
+import { observeConnectionSession } from './connection-session-model.mjs';
 
 let seq = 0;
 const IS_WIN = api.platform === 'win32';
@@ -510,7 +512,8 @@ export class SftpTab {
     this.remote = new FilePane(this, 'remote');
     this.xfers = new TransferPanel(this);
     this.copilotButton = h('button.btn.sm', { type: 'button', 'aria-label': 'Choose SFTP evidence for KonX-AI', onclick: e => { const r = e.currentTarget.getBoundingClientRect(); contextMenu(r.left, r.bottom, workspaceCopilotItems(this)); } }, icon('insight'), 'Ask KonX-AI');
-    this.el = h('div.view', h('div.tool-summary', this.copilotButton), h('div.sftp', h('div.sftp-panes', this.local.el, this.remote.el), this.xfers.el));
+    this.saveSessionButton = connectionSessionButton(this);
+    this.el = h('div.view', h('div.tool-summary', this.saveSessionButton, this.copilotButton), h('div.sftp', h('div.sftp-panes', this.local.el, this.remote.el), this.xfers.el));
     this.refreshLocalSoon = debounce(() => this.local.refresh(), 300);
     this.refreshRemoteSoon = debounce(() => this.remote.refresh(), 300);
   }
@@ -536,6 +539,7 @@ export class SftpTab {
       this.remote.setMessage(null);
       this.state = 'connected';
       this.info = r;
+      observeConnectionSession(this, r);
       await this.remote.navigate(this.remote.cwd || r.home);
     } catch (e) {
       if (this.disposed || generation !== this.connectionGeneration) return;

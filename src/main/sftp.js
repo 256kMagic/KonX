@@ -340,6 +340,7 @@ class SftpManager {
     let sftp;
     let sess;
     let session;
+    let username;
     const owned = !spec.fromConn;
     let clientEnded = false;
     let channelEnded = false;
@@ -404,6 +405,7 @@ class SftpManager {
         if (!shared) throw new Error('That terminal tab is not connected over SSH');
         connected(shared.client);
         session = shared.session;
+        username = shared.username;
       } else {
         session = this.deps.connections.resolveSession(spec);
         if ((session.protocol || 'ssh') !== 'ssh') throw new Error('SFTP needs an SSH session');
@@ -418,7 +420,10 @@ class SftpManager {
           },
           log: () => {},
         };
-        await wait(ssh.connectChain(session, hooks, (jid) => this.deps.store.getSessionSecret(jid)).then((r) => connected(r.client)));
+        await wait(ssh.connectChain(session, hooks, (jid) => this.deps.store.getSessionSecret(jid)).then((r) => {
+          username = r.info?.username;
+          return connected(r.client);
+        }));
       }
       sftp = await wait(p((cb) => client.sftp(cb)).then((channel) => {
         sftp = channel;
@@ -434,7 +439,8 @@ class SftpManager {
       this.sessions.set(id, sess);
       return {
         home: sess.home,
-        title: `${session.username || ''}@${session.host}`,
+        title: `${username || session.username || ''}@${session.host}`,
+        username: username || session.username || '',
         name: session.name || session.host,
       };
     } catch (error) {

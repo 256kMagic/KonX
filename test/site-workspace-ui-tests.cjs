@@ -174,7 +174,7 @@ async function fixture() {
   const store = new SiteWorkspaceStore(path.join(root, 'profile'));
   const capturePath = path.join(root, 'owned.pcap'); fs.writeFileSync(capturePath, 'SYNTHETIC_CAPTURE');
   const js = path.join(root, 'js'); fs.mkdirSync(js);
-  for (const file of ['ui.js', 'workspace-layout.js', 'workspace-layouts.mjs', 'workspace-panels-model.mjs', 'site-workspaces.js', 'copilot-context.mjs', 'copilot-investigations.mjs']) fs.copyFileSync(source('src/renderer/js/' + file), path.join(js, file));
+  for (const file of ['ui.js', 'workspace-layout.js', 'workspace-layouts.mjs', 'workspace-panels-model.mjs', 'site-workspaces.js', 'connection-session-model.mjs', 'copilot-context.mjs', 'copilot-investigations.mjs']) fs.copyFileSync(source('src/renderer/js/' + file), path.join(js, file));
   fs.writeFileSync(path.join(root, 'preload.cjs'), `const {contextBridge,ipcRenderer}=require('electron');contextBridge.exposeInMainWorld('api',{invoke:(...args)=>ipcRenderer.invoke('site-fixture',...args)});`);
   fs.writeFileSync(path.join(root, 'index.html'), '<!doctype html><meta charset="UTF-8"><style>body{margin:0}#views{width:1200px;height:700px;position:relative}.hidden,.workspace-parking{display:none}.view{background:white}.workspace-panes{display:grid}.workspace-float{position:absolute}</style><div id="app"><nav><span id="theme"></span></nav><main><div id="tabs"></div><div id="views"></div></main></div>');
   let settings = { uiLayout: 'classic' }, missingSession = false, failSave = false, delaySave = false, imports = 0, exports = 0, captureReads = 0;

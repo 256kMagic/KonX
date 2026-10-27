@@ -17,6 +17,7 @@ import { CopilotController } from './copilot.js';
 import { applyReviewedEditorAction } from './copilot-editor-actions.mjs';
 import { captureCopilotContext, copilotContextSupport } from './copilot-context.mjs';
 import { HOME_SECTIONS, hiddenHomeSections } from './home-sections.mjs';
+import { connectionSessionMenuItem, saveConnectionSession } from './connection-session.js';
 
 const RECENT_KEY = 'konx.recent';
 
@@ -763,6 +764,7 @@ class App {
         const n = await promptText('Rename tab', 'Title', t.title, 'Rename');
         if (n) this.setTabTitle(t, n);
       } },
+      ['terminal', 'sftp'].includes(t.kind) && connectionSessionMenuItem(t),
       t.kind === 'terminal' && { label: 'Clone', icon: 'copy', action: () => this.openTerminal(t.spec, t.cloneMeta()) },
       (t.kind === 'terminal' || t.kind === 'capture' || (t.kind === 'tool' && !['ai', 'incidents'].includes(t.toolKind))) && { label: 'Add evidence to incident…', icon: 'file', action: () => this.addToIncident(t) },
       t.kind === 'terminal' && t.protocol === 'ssh' && { label: 'Open SFTP tab', icon: 'file-transfer', disabled: t.state !== 'connected', action: () => this.openSftpFromTerminal(t) },
@@ -965,6 +967,8 @@ class App {
     this.sessions.render();
     if (r.connect) this.connectSession(r.session);
   }
+
+  saveConnectionSession(tab) { return saveConnectionSession(this, tab); }
 
   rememberRecent(id) {
     if (typeof id !== 'string' || !id) return;

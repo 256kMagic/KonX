@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.32.0 — 2026-10-27
+
+- Add **Save session** to on-demand terminal and SFTP connections, including the tab menu.
+- Prefill connection settings and offer a name, folder and optional encrypted login retention in the existing session editor.
+- Save without reconnecting or interrupting active work; subsequent edits target the saved record.
+- Preserve existing Home visibility, themes, layouts, sessions and credentials.
+
+See [Session management](docs/SESSION_MANAGEMENT.md#save-an-on-demand-connection), the [user guide](docs/USER_GUIDE.md), and [release notes](docs/releases/0.32.0.md).
+
 ## 0.31.0 — 2026-10-27
 
 - Add a close control to every Home section: Introduction, Quick connect, Recent sessions, Sessions, Network tools, and Keyboard.
