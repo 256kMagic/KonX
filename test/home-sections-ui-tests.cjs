@@ -255,6 +255,12 @@ async function fixture() {
           assert.ok(geometry.scroll<=geometry.width+2&&geometry.left>=0&&geometry.right<=geometry.width+2&&geometry.top>=0&&geometry.bottom<=geometry.height+2, JSON.stringify({layout,theme,geometry}));
           if (layout==='classic') await capture('customize-' + theme + '-900');
           await click(footer('Cancel'));
+          if (screenshots && layout === 'classic' && theme === 'dark') {
+            for (const id of ids) {
+              await run(`${section(id)}.scrollIntoView({block:'start'});true;`);
+              await capture('home-panel-' + id + '-900');
+            }
+          }
         }
         await run(`window.__app.saveSettings({uiLayout:'classic',uiTheme:'ion-storm'}).then(()=>undefined)`);
         await setViewport(win, run, 1400, 880);

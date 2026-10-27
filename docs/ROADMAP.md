@@ -69,6 +69,7 @@ Opening a prepared tool is separate from starting work. Proposed actions show th
 | 0.30.0 | Five animated application themes with distinct glow and motion, coordinated palettes, and pause/reduced-motion controls | Complete; 1,077 tests and packaged checks passed |
 | 0.31.0 | Closable Home sections with saved visibility and restoration controls | Complete; 1,081 tests and packaged checks passed |
 | 0.32.0 | Save on-demand terminal and SFTP connections to Sessions | Complete; 1,082 tests and packaged checks passed |
+| 0.33.0 | Split-screen and pop-out shortcuts with smaller Home close controls | Complete; 1,083 tests and packaged checks passed |
 
 See the [theme guide](THEMES.md), [terminal clipboard guide](USER_GUIDE.md#copy-paste-search-and-links), and [update guide](UPDATING.md).
 

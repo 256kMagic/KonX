@@ -61,11 +61,15 @@ async function fixture() {
   app.on('browser-window-created', (_event, win) => {
     win.setOpacity(0); win.setFocusable(false); win.setSkipTaskbar(true);
     win.webContents.setBackgroundThrottling(false);
+    const execute = win.webContents.executeJavaScript.bind(win.webContents);
+    win.webContents.executeJavaScript = (code, ...args) => execute(code, ...args).catch(error => {
+      throw new Error(error.message + '\nWindow: ' + win.id + '\nRenderer check: ' + code);
+    });
+    win.webContents.on('console-message', event => { if (event.level === 'error') console.error('Renderer window ' + win.id + ': ' + event.message); });
     if (main) return;
     main = win;
     main.webContents.once('did-finish-load', async () => {
-      const run = code => main.webContents.executeJavaScript(code).catch(error => { throw new Error(error.message + '\nRenderer check: ' + code); });
-      main.webContents.on('console-message', event => { if (event.level === 'error') console.error('Renderer: ' + event.message); });
+      const run = code => main.webContents.executeJavaScript(code);
       const popup = () => BrowserWindow.getAllWindows().find(win => win !== main);
       const click = async (win, selector) => {
         const point = await win.webContents.executeJavaScript(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return{x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}})()`);

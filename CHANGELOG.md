@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.33.0 — 2026-10-27
+
+- Add visible **Split screen**, **Single view** and **Pop out** workspace shortcuts, reusing open views and the existing divider and native-window behavior.
+- Keep live console connections and their work intact while arranging, popping out and docking views.
+- Put smaller close controls inside the top-right corner of each Home section panel, with keyboard focus and existing hide/restore behavior retained.
+
+See the [workspace guide](docs/WORKSPACE_LAYOUTS.md#split-screen-shortcut), [user guide](docs/USER_GUIDE.md), and [release notes](docs/releases/0.33.0.md).
+
 ## 0.32.0 — 2026-10-27
 
 - Add **Save session** to on-demand terminal and SFTP connections, including the tab menu.

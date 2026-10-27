@@ -257,7 +257,7 @@ class WelcomeTab {
       },
     }, icon('x'));
     const section = h('section.welcome-section', { 'data-home-section': id, 'aria-label': label },
-      h('div.welcome-section-head', h('h3', label), action, close), body);
+      h('div.welcome-section-head', h('h3', label), action), body, close);
     this.sections.set(id, section);
     return section;
   }
@@ -755,10 +755,12 @@ class App {
   }
 
   tabMenu(x, y, t) {
+    const placing = Boolean(this.workspaceLayout.layoutAction || this.workspaceLayout.popoutAction);
     contextMenu(x, y, [
-      { label: 'Float in workspace', icon: 'columns', action: () => this.workspaceLayout.float(t) },
-      { label: 'Pop out to window', icon: 'upload', action: () => this.popouts.open(t) },
-      this.workspaceLayout.placement?.(t) !== 'docked' && { label: 'Dock back', icon: 'download', action: () => this.workspaceLayout.dock(t) },
+      { label: 'Split screen', icon: 'columns', disabled: placing, action: () => this.workspaceLayout.split(t) },
+      { label: 'Float in workspace', icon: 'columns', disabled: placing, action: () => this.workspaceLayout.requestPlacement(() => this.workspaceLayout.float(t)) },
+      { label: 'Pop out to window', icon: 'upload', disabled: placing, action: () => this.workspaceLayout.requestPlacement(() => this.popouts.open(t)) },
+      this.workspaceLayout.placement?.(t) !== 'docked' && { label: 'Dock back', icon: 'download', disabled: placing, action: () => this.workspaceLayout.requestPlacement(() => this.workspaceLayout.dock(t)) },
       '-',
       { label: 'Rename…', icon: 'edit', action: async () => {
         const n = await promptText('Rename tab', 'Title', t.title, 'Rename');

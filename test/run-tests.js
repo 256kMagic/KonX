@@ -543,6 +543,7 @@ const fakeCrypt = {
   await require('./workspace-panels-ui-tests.cjs').runWorkspacePanelsUiTests(test);
   await require('./workspace-window-tests.cjs').runWorkspaceWindowTests(test);
   await require('./workspace-popout-ui-tests.cjs').runWorkspacePopoutUiTests(test);
+  await require('./workspace-shortcuts-ui-tests.cjs').runWorkspaceShortcutsUiTests(test);
   await require('./widget-host-ui-tests.cjs').runWidgetHostUiTests(test);
   await require('./support-report-tests.cjs').runSupportReportTests(test);
   await require('./support-ui-tests.cjs').runSupportUiTests(test);

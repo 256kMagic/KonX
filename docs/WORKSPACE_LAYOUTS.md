@@ -6,6 +6,19 @@ The **Workspace layout** dropdown in the top toolbar is a shortcut. A choice the
 
 Existing profiles keep **Classic** until you choose another layout. **Cancel** discards a layout choice made in Settings. An unknown layout value falls back to Classic.
 
+## Split screen shortcut
+
+From **KonX 0.33.0**, use the controls above the tabs:
+
+1. Select the console or tool you want to show and click **Split screen**. The same action is available from the tab's right-click menu.
+2. KonX opens Workbench with your selected view and another existing view when available. A new split prefers another open console; an existing Workbench pair stays in place. It does not create or connect a new session. If there is no second view, open one and choose it from the empty pane's dropdown.
+3. Use the pane dropdowns to select different open views. Drag the divider to change their relative sizes; narrow windows stack panes vertically. Click inside a console to make it the command target before typing.
+4. Use **Single view** to return to the previous Classic or Focus arrangement when remembered, otherwise Classic. Both tabs remain open.
+
+**Pop out** moves the active console or tool into a separate Windows window. Drag the native title bar to move it to another monitor or beside another application. **Dock back** returns it to KonX; the live connection is preserved. Existing right-click and pane-header actions remain available.
+
+The chosen workspace layout and divider sizes are saved. Restarting does not reopen connections or child windows automatically. Splitting or docking a console does not reconnect it.
+
 ## Move, resize, and pop out panels
 
 From **KonX 0.18.0**, right-click any open tab and choose **Float in workspace** or **Pop out to window**. Pane headers also provide **Float** and **Pop out** controls. These actions move the existing view: terminal connections, capture packets, editor models, and tool results stay with it.
@@ -64,4 +77,4 @@ The release notes describe executed validation and remaining coverage. Real netw
 
 ## Home sections
 
-Home visibility choices apply to every workspace layout. Close any Home section with its × button, then use **Customize Home** to show it again or restore all sections. Hiding a Home group changes only the landing page; saved sessions, tool access, and open work remain available. See [Customize Home](USER_GUIDE.md#customize-home).
+Home visibility choices apply to every workspace layout. Close any Home section with the small × inside its panel's top-right corner, then use **Customize Home** to show it again or restore all sections. Hiding a Home group changes only the landing page; saved sessions, tool access, and open work remain available. See [Customize Home](USER_GUIDE.md#customize-home).

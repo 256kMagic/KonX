@@ -1,12 +1,12 @@
 # KonX User Guide
 
-Version 0.32.0 adds **Save session** to open terminal and SFTP connections. Save a connection created on demand while keeping it running. See [Save an on-demand connection](#save-an-on-demand-connection) and the [release notes](releases/0.32.0.md).
+Version 0.33.0 adds **Split screen**, **Single view** and **Pop out** shortcuts above the tabs, plus smaller × controls inside each Home section panel. See [Split screen and separate windows](#split-screen-and-separate-windows) and the [release notes](releases/0.33.0.md).
 
 Version 0.30.0 adds **Ion Storm**, **Solar Flare**, **Aurora Flux**, **Hyperdrive**, and **Ghost Circuit** animated themes. All 18 application themes remain available. See [Appearance and motion](#appearance-and-motion) and the [theme guide](THEMES.md).
 
 Version 0.27.1 renames the contextual assistant to **KonX-AI** and improves encrypted provider-key management. See the [KonX-AI guide](KONX_AI.md), [provider setup](AI_KNOWLEDGE_GUIDE.md#connect-a-provider), and [release validation](releases/0.27.1.md).
 
-This guide covers KonX 0.32.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one application. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
+This guide covers KonX 0.33.0 for Windows x64. KonX combines terminal sessions, SFTP, a text editor, packet capture, security assessments, wireless diagnostics, and AI-assisted troubleshooting in one application. The [Security Suite](SECURITY_SUITE.md) and [Wi-Fi/Mist tools](WIRELESS_MIST_GUIDE.md) require 0.3.0 or later.
 
 Version 0.27.0 adds reviewed diagnostics, undoable editor replacements and saved answer notes to KonX-AI. See the [KonX-AI guide](KONX_AI.md) and [release validation](releases/0.27.0.md).
 
@@ -108,7 +108,7 @@ Examples use reserved documentation addresses such as `192.0.2.10`, `198.51.100.
 
 ## Install, run, and update
 
-Download a Windows x64 executable from the [0.32.0 release](https://github.com/256kMagic/KonX/releases/tag/v0.32.0).
+Download a Windows x64 executable from the [0.33.0 release](https://github.com/256kMagic/KonX/releases/tag/v0.33.0).
 
 | Download | Use it when | How to start |
 | --- | --- | --- |
@@ -117,7 +117,7 @@ Download a Windows x64 executable from the [0.32.0 release](https://github.com/2
 
 The portable executable still uses a Windows user profile for settings, saved sessions, and editor recovery. It does **not** automatically place all data beside the executable or make encrypted credentials transferable between computers. See [Application data and backups](#application-data-and-backups).
 
-**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.32.0.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
+**Installed 0.6.0 or 0.6.1:** save work and close KonX, then run `KonX-Setup-0.33.0.exe` manually using your existing installation folder and per-user/all-users mode. Do not uninstall KonX or delete its profile first. These older update buttons cannot install their own fix. All-users installations may require Windows administrator approval.
 
 For updates from **installed 0.6.2 or later**, or **portable 0.6.0 or later**:
 
@@ -130,7 +130,7 @@ From 0.16.1, staged update filenames include KonX and the version being installe
 
 Installed copies retain their installation folder and mode. Portable copies retain their filename and location; the containing folder must be writable. Both continue to use the existing Windows profile. No update is applied just because you close KonX, and no release checks run in the background. See [Updating KonX](UPDATING.md) for cancellation, failures, and release preparation.
 
-Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.32.0 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
+Version 0.5.0 and earlier do not have the updater. Save your work, close KonX, then run the 0.33.0 installer or replace the portable executable once to obtain the update button. See the [upgrade table](UPDATING.md) for downloads, checksums, and troubleshooting.
 
 Npcap is optional for packet capture; SSH, SFTP, Notepad, and the other tools do not require it. Updating KonX does not install or update Npcap.
 
@@ -202,9 +202,17 @@ Double-click the saved session to connect again. Right-click it for **Edit…**,
 - Background activity preserves your position in the tab strip. Selecting a tab or resizing the workspace reveals the active tab as needed.
 - The status bar describes the active view, including connection state and active transfers.
 
+### Split screen and separate windows
+
+Choose **Split screen** above the tabs to place the current view beside another open view in Workbench. Use each pane's dropdown to choose which open tab appears there, and drag the divider to resize the panes. If only one view is open, the other pane stays empty until you open and select another tab. Splitting does not start another connection. Narrow windows stack the panes vertically.
+
+Choose **Pop out** above the tabs to move the active console or tool into its own Windows window. Drag that window's title bar to another monitor, or position it beside another application. **Dock back** returns it to KonX. The live connection stays open; closing the pop-out using the Windows × also docks it back.
+
+Use **Single view** to return from Workbench to one view without closing either tab. See [Workspace layouts and windows](WORKSPACE_LAYOUTS.md#split-screen-shortcut) for shortcuts, resizing and saved-layout behavior.
+
 ### Customize Home
 
-Home has six optional sections: **Introduction**, **Quick connect**, **Recent sessions**, **Sessions**, **Network tools**, and **Keyboard**. Use the × button beside a section heading to hide the entire section. Its heading and contents leave the page.
+Home has six optional sections: **Introduction**, **Quick connect**, **Recent sessions**, **Sessions**, **Network tools**, and **Keyboard**. Use the small × inside the top-right corner of a section panel to hide the entire section. Its heading and contents leave the page.
 
 To bring a section back, open **Home → Customize Home**, select the sections you want, and choose **Save**. **Restore all** selects every checkbox; choose **Save** to apply that choice. **Cancel** leaves your current Home unchanged. **Customize Home** stays available when every section is hidden, and the empty Home page explains how to restore content.
 
@@ -815,7 +823,7 @@ For an isolated profile, advanced users can launch from PowerShell with a separa
 
 ```powershell
 $env:KONX_USERDATA = Join-Path $env:LOCALAPPDATA 'KonX-TestProfile'
-& '.\KonX-0.32.0-portable.exe'
+& '.\KonX-0.33.0-portable.exe'
 ```
 
 Run this from the folder containing the portable executable. The environment variable applies to that PowerShell process and launches from it; use a normal shortcut or a separate shell for your normal profile. This setting does not make Windows-encrypted credentials portable.

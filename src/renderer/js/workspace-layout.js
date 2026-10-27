@@ -71,6 +71,7 @@ export class WorkspaceLayout {
     this.geometry = normalizeWorkspaceGeometry(app.settings.workspaceGeometry);
     this.contextHidden = { classic: true, workbench: false, 'incident-desk': true, 'operations-wall': true, focus: true };
     this.focusGeneration = 0; this.borrowed = null;
+    this.layoutAction = null; this.popoutAction = null; this.singleLayout = 'classic';
     this.layoutSelect = h('select.input.workspace-layout-select', { 'aria-label': 'Workspace layout', title: 'Workspace layout', onchange: async () => {
       const chosen = this.layoutSelect.value; this.layoutSelect.disabled = true;
       try { await app.saveSettings({ uiLayout: chosen }); } catch (error) { this.layoutSelect.value = this.model.layout; toast(errMsg(error), 'err'); }
@@ -80,11 +81,18 @@ export class WorkspaceLayout {
     this.target = h('span.workspace-target', { role: 'status' });
     this.contextToggle = h('button.btn.sm.workspace-context-toggle', { onclick: () => this.toggleContext() }, 'Context');
     this.sessionToggle = h('button.btn.sm.workspace-sessions-toggle', { onclick: () => app.toggleSidebar() }, 'Sessions');
-    this.wallCount = h('select.input.workspace-wall-count', { 'aria-label': 'Operations Wall pane count', onchange: () => this.setPaneCount(Number(this.wallCount.value)) }, [1, 2, 3, 4].map(n => h('option', { value: n }, `${n} pane${n === 1 ? '' : 's'}`)));
-    this.restoreButton = h('button.btn.sm', { onclick: () => this.expand(null) }, 'Restore panes');
-    this.floatButton = h('button.btn.sm.workspace-float-active', { onclick: () => this.app.active && this.float(this.app.active) }, 'Float panel');
-    this.resetButton = h('button.btn.sm.workspace-reset', { onclick: () => this.reset() }, 'Reset workspace');
-    this.bar = h('div.workspace-bar', this.sessionToggle, this.contextToggle, this.wallCount, this.restoreButton, this.floatButton, this.resetButton, this.target);
+    this.wallCount = h('select.input.workspace-wall-count', { 'aria-label': 'Operations Wall pane count', onchange: () => this.requestPlacement(() => this.setPaneCount(Number(this.wallCount.value))) }, [1, 2, 3, 4].map(n => h('option', { value: n }, `${n} pane${n === 1 ? '' : 's'}`)));
+    this.restoreButton = h('button.btn.sm', { onclick: () => this.requestPlacement(() => this.expand(null)) }, 'Restore panes');
+    this.splitButton = h('button.btn.sm.workspace-split-active', { type: 'button', 'data-action': 'split-screen',
+      title: 'Show two open views. Drag the divider to resize; narrow windows stack the panes.', onclick: () => this.split() }, 'Split screen');
+    this.singleButton = h('button.btn.sm.workspace-single-active', { type: 'button', 'data-action': 'single-view',
+      title: 'Return to one docked view without closing other tabs', onclick: () => this.singleView() }, 'Single view');
+    this.popoutButton = h('button.btn.sm.workspace-popout-active', { type: 'button', 'data-action': 'popout-active',
+      onclick: () => this.popoutActive() }, 'Pop out');
+    this.floatButton = h('button.btn.sm.workspace-float-active', { onclick: () => this.requestPlacement(() => this.app.active && this.float(this.app.active)) }, 'Float panel');
+    this.resetButton = h('button.btn.sm.workspace-reset', { onclick: () => this.requestPlacement(() => this.reset()) }, 'Reset workspace');
+    this.bar = h('div.workspace-bar', this.sessionToggle, this.contextToggle, this.wallCount, this.restoreButton,
+      this.splitButton, this.singleButton, this.popoutButton, this.floatButton, this.resetButton, this.target);
     app.main.insertBefore(this.bar, app.tabstrip);
     this.navigationTitle = h('strong', 'Case navigation');
     this.navigationHint = h('p.hint', 'Choose an existing Incident Workspace in the dossier pane. Its saved cases will appear here.');
@@ -132,6 +140,110 @@ export class WorkspaceLayout {
   }
   _dockable() { return this.app.tabs.filter(tab => !this.floating.has(tab) && !this.external.has(tab)); }
   placement(tab) { return this.external.has(tab) ? 'external' : this.floating.has(tab) ? 'floating' : 'docked'; }
+  requestPlacement(action) {
+    // Only user controls pass through this gate. Internal docking and native
+    // cleanup must remain available while a layout action owns the transition.
+    if (this.layoutAction || this.popoutAction) return false;
+    return action();
+  }
+  async split(tab = this.app.active) {
+    if (this.layoutAction || this.popoutAction || !tab || tab.disposed || !this.app.tabs.includes(tab)) return false;
+    this.gesture?.cancel();
+    const action = {}; this.layoutAction = action; this.updateActions();
+    this.layoutSelect.disabled = true;
+    const previous = this.model.layout;
+    try {
+      // Persist the requested layout before moving any live view. A failed
+      // write leaves its placement and connection completely unchanged.
+      if (previous !== 'workbench') await this.app.saveSettings({ uiLayout: 'workbench' });
+      if (this.model.layout === 'workbench' && previous !== 'workbench') this.singleLayout = ['classic', 'focus'].includes(previous) ? previous : 'classic';
+      if (this.layoutAction !== action || tab.disposed || !this.app.tabs.includes(tab) || this.model.layout !== 'workbench') return false;
+      // A later Split choice supersedes an unfinished tab-menu pop-out.
+      // The existing native owner closes any permit that arrives afterward.
+      if (this.app.popouts?.pending?.has(tab.id)) this.app.popouts.dock(tab);
+      const shown = this.model.slots().find(slot => slot.id === tab.id);
+      const other = this._dockable().find(item => item !== tab && this.model.slots().some(slot => slot.id === item.id));
+      this.contextHidden.workbench = true;
+      this.model.expandedSlot = null;
+      if (previous === 'workbench' && shown && other) {
+        // Repeated Split requests preserve the existing pair and its order.
+        this.app.activate(tab, { focus: false });
+      } else {
+        const candidates = this._dockable().filter(item => item !== tab && !item.disposed && item.kind !== 'welcome');
+        const companion = (previous === 'workbench' && other) || candidates.find(item => item.kind === 'terminal') || candidates[0];
+        if (!await this.dock(tab, 'primary')) return false;
+        if (tab.disposed || !this.app.tabs.includes(tab) || this.model.layout !== 'workbench') return false;
+        const available = companion && !companion.disposed && this._dockable().includes(companion);
+        this.model.pin('companion', available ? companion.id : null, this._dockable());
+        this.app.activate(tab, { focus: false });
+      }
+      this.refresh();
+      return true;
+    } catch (error) {
+      toast('Could not split the workspace: ' + errMsg(error), 'err'); return false;
+    } finally {
+      if (this.layoutAction === action) this.layoutAction = null;
+      this.layoutSelect.disabled = false;
+      this.updateActions();
+    }
+  }
+  async singleView() {
+    if (this.layoutAction || this.popoutAction) return false;
+    this.gesture?.cancel();
+    const action = {}; this.layoutAction = action; this.updateActions();
+    this.layoutSelect.disabled = true;
+    try {
+      await this.app.saveSettings({ uiLayout: this.singleLayout });
+      return true;
+    } catch (error) {
+      toast('Could not return to a single view: ' + errMsg(error), 'err'); return false;
+    } finally {
+      if (this.layoutAction === action) this.layoutAction = null;
+      this.layoutSelect.disabled = false;
+      this.updateActions();
+    }
+  }
+  async popoutActive(tab = this.app.active) {
+    if (this.layoutAction || this.popoutAction || !tab || tab.disposed || !this.app.tabs.includes(tab)) return false;
+    const action = {}; this.popoutAction = action; this.updateActions();
+    try {
+      if (this.external.has(tab)) { await this.app.popouts.dock(tab); return true; }
+      return await this.app.popouts.open(tab);
+    } catch (error) {
+      toast('Could not move this view: ' + errMsg(error), 'err'); return false;
+    } finally {
+      if (this.popoutAction === action) this.popoutAction = null;
+      this.updateActions();
+    }
+  }
+  updateActions() {
+    const tab = this.app.active, available = tab && !tab.disposed && this.app.tabs.includes(tab);
+    const busy = Boolean(this.layoutAction || this.popoutAction);
+    this.splitButton.disabled = !available || busy;
+    this.singleButton.disabled = busy;
+    this.singleButton.classList.toggle('hidden', this.model.layout !== 'workbench');
+    this.popoutButton.disabled = !available || busy;
+    const external = available && this.external.has(tab);
+    this.popoutButton.textContent = external ? 'Dock back' : 'Pop out';
+    this.popoutButton.title = external ? 'Return the active window to KonX without reconnecting'
+      : 'Move the active view to its own window; drag its title bar to another monitor';
+    this.popoutButton.setAttribute('aria-label', external ? 'Dock active window back to KonX' : 'Pop out active view');
+    this.floatButton.disabled = !available || busy || this.placement(tab) !== 'docked';
+    this.resetButton.disabled = this.restoreButton.disabled = busy;
+    this.wallCount.disabled = busy;
+    for (const handle of Object.values(this.splitters || {})) handle.setAttribute('aria-disabled', String(busy));
+    for (const [slot, pane] of this.paneNodes) {
+      const empty = !this.model.read(slot);
+      pane.select.disabled = busy;
+      pane.float.disabled = pane.popout.disabled = pane.expand.disabled = busy || empty;
+    }
+    for (const entry of this.floating.values()) {
+      for (const control of entry.head.querySelectorAll('[data-placement-control]')) control.disabled = busy;
+    }
+    for (const entry of this.external.values()) {
+      if (!entry.window.closed) for (const control of entry.window.document.querySelectorAll('.popout-header [data-placement-control]')) control.disabled = busy;
+    }
+  }
   pin(slot, id) {
     try {
       this.model.pin(slot, id || null, this._dockable());
@@ -178,7 +290,7 @@ export class WorkspaceLayout {
     if (refit) this.refit();
   }
   _gesture(event, element, update, finish) {
-    if (event.button !== 0 || this.gesture) return;
+    if (event.button !== 0 || this.gesture || this.layoutAction || this.popoutAction) return;
     event.preventDefault(); this.cancelFocus();
     const owner = element.ownerDocument.defaultView, pointer = event.pointerId;
     const move = next => { if (next.pointerId === pointer) update(next); };
@@ -213,11 +325,11 @@ export class WorkspaceLayout {
     this.model.remove(tab.id);
     if (this.borrowed?.tab === tab) this.restoreLibrary();
     const title = h('span.workspace-float-title', tab.title);
-    const maximize = h('button.btn.sm', { 'aria-label': 'Maximize floating panel', onclick: () => this.maximize(tab) }, 'Maximize');
+    const maximize = h('button.btn.sm', { 'data-placement-control': 'true', 'aria-label': 'Maximize floating panel', onclick: () => this.requestPlacement(() => this.maximize(tab)) }, 'Maximize');
     const body = h('div.workspace-pane-body');
     const head = h('div.workspace-pane-head.workspace-float-head', title,
-      h('button.btn.sm', { onclick: () => this.dock(tab), 'aria-label': 'Dock floating panel' }, 'Dock'),
-      h('button.btn.sm', { onclick: () => this.app.popouts?.open(tab), 'aria-label': 'Pop out floating panel' }, 'Pop out'), maximize,
+      h('button.btn.sm', { 'data-placement-control': 'true', onclick: () => this.requestPlacement(() => this.dock(tab)), 'aria-label': 'Dock floating panel' }, 'Dock'),
+      h('button.btn.sm', { 'data-placement-control': 'true', onclick: () => this.requestPlacement(() => this.app.popouts?.open(tab)), 'aria-label': 'Pop out floating panel' }, 'Pop out'), maximize,
       h('button.btn.sm', { onclick: () => this.app.closeTab(tab), 'aria-label': 'Close panel tab' }, icon('x')));
     const el = h('section.workspace-pane.workspace-floating', { 'aria-label': 'Floating panel: ' + tab.title, 'data-tab-id': tab.id }, head, body);
     const entry = { el, head, title, body, maximize, previousSlot, bounds: null, maximized: false };
@@ -231,7 +343,7 @@ export class WorkspaceLayout {
         else { this.geometry.lastFloatRect = contractFloatBounds(entry.bounds, this._viewport()); this._rememberGeometry(); }
       });
     });
-    head.addEventListener('dblclick', event => { if (!event.target.closest('button,select,input')) this.maximize(tab); });
+    head.addEventListener('dblclick', event => { if (!event.target.closest('button,select,input')) this.requestPlacement(() => this.maximize(tab)); });
     for (const edge of ['n', 'e', 's', 'w', 'ne', 'se', 'sw', 'nw']) {
       const handle = h('div.workspace-float-resize', { 'data-edge': edge, 'aria-hidden': 'true' }); el.append(handle);
       handle.addEventListener('pointerdown', event => {
@@ -312,13 +424,14 @@ export class WorkspaceLayout {
   pane(slot) {
     if (this.paneNodes.has(slot)) return this.paneNodes.get(slot);
     const title = h('span', label(slot));
-    const select = h('select.input.workspace-pane-select', { 'aria-label': `${label(slot)}: choose an open tab`, onchange: () => this.pin(slot, select.value) });
+    const select = h('select.input.workspace-pane-select', { 'aria-label': `${label(slot)}: choose an open tab`, onchange: () => this.requestPlacement(() => this.pin(slot, select.value)) });
     const focus = h('button.btn.sm.workspace-pane-focus', { onclick: () => this.focus(slot) }, 'Focus');
-    const expand = h('button.btn.sm.workspace-pane-expand', { onclick: () => this.expand(slot) }, 'Expand');
-    const float = h('button.btn.sm.workspace-pane-float', { onclick: () => this.float(this.app.tabs.find(tab => tab.id === this.model.read(slot))) }, 'Float');
-    const popout = h('button.btn.sm.workspace-pane-popout', { onclick: () => { const tab = this.app.tabs.find(tab => tab.id === this.model.read(slot)); if (tab) this.app.popouts?.open(tab); } }, 'Pop out');
+    const expand = h('button.btn.sm.workspace-pane-expand', { onclick: () => this.requestPlacement(() => this.expand(slot)) }, 'Expand');
+    const float = h('button.btn.sm.workspace-pane-float', { onclick: () => this.requestPlacement(() => this.float(this.app.tabs.find(tab => tab.id === this.model.read(slot)))) }, 'Float');
+    const popout = h('button.btn.sm.workspace-pane-popout', { onclick: () => this.requestPlacement(() => { const tab = this.app.tabs.find(tab => tab.id === this.model.read(slot)); if (tab) this.app.popouts?.open(tab); }) }, 'Pop out');
     const head = h('div.workspace-pane-head', title, select, focus, expand, float, popout);
-    const empty = h('div.workspace-empty', h('p', slot === 'dossier' ? 'Choose an existing Incident Workspace above. Opening or pinning a view never adds evidence.' : 'Choose an open tab above. Your other tabs remain available in the tab strip.'));
+    const empty = h('div.workspace-empty', h('p', slot === 'dossier' ? 'Choose an existing Incident Workspace above. Opening or pinning a view never adds evidence.'
+      : 'Choose an open tab above, or open another connection with Quick connect and choose it here. Drag the divider to resize. Narrow windows stack the panes; widen KonX for side-by-side views.'));
     const body = h('div.workspace-pane-body', empty);
     const el = h('section.workspace-pane', { 'data-slot': slot, 'aria-label': label(slot) }, head, body);
     el.addEventListener('dragover', event => { if (event.dataTransfer?.types.includes('text/x-konx-tab')) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; el.classList.add('workspace-drop-target'); } });
@@ -329,7 +442,7 @@ export class WorkspaceLayout {
       event.preventDefault(); event.stopPropagation();
       const tab = this.app.tabs.find(item => item.id === event.dataTransfer.getData('text/x-konx-tab'));
       if (!tab || (slot === 'dossier' && !incident(tab))) return;
-      Promise.resolve(this.dock(tab, slot)).catch(error => toast(errMsg(error), 'err'));
+      Promise.resolve(this.requestPlacement(() => this.dock(tab, slot))).catch(error => toast(errMsg(error), 'err'));
     });
     if (slot === 'companion') el.classList.add('workspace-companion');
     if (slot === 'dossier') el.classList.add('workspace-dossier');
@@ -405,6 +518,7 @@ export class WorkspaceLayout {
     this.wallCount.classList.toggle('hidden', this.model.layout !== 'operations-wall'); this.wallCount.value = String(this.model.wallCount);
     this.restoreButton.classList.toggle('hidden', !this.model.expandedSlot);
     this.floatButton.disabled = !this.app.active || this.placement(this.app.active) !== 'docked';
+    this.updateActions();
     this.updateContext(); this.refit();
   }
   updateContext() {
@@ -458,6 +572,7 @@ export class WorkspaceLayout {
           }, cancelled => { if (cancelled) { ratios[axis] = initial; this.refit(); } else this._rememberGeometry(); });
         });
         handle.addEventListener('keydown', event => {
+          if (this.layoutAction || this.popoutAction) return;
           const ratios = this.geometry.ratios[this.model.layout]; if (!ratios || !this.splitAxes.includes(axis)) return;
           const positive = axis === 'columns' ? event.key === 'ArrowRight' : event.key === 'ArrowDown';
           const negative = axis === 'columns' ? event.key === 'ArrowLeft' : event.key === 'ArrowUp';

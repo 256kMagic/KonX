@@ -44,7 +44,7 @@
   #app[data-layout] #toolbar .theme-motion-toggle { padding-inline:5px; font-size:10.5px; }
   #app[data-layout] #toolbar .copilot-toolbar-label { display:none; }
 }
-.workspace-bar { flex:none; min-width:0; display:flex; align-items:center; gap:7px; padding:6px 8px; border-bottom:1px solid var(--border); background:var(--panel); overflow-x:auto; overflow-y:hidden; }
+.workspace-bar { flex:none; min-width:0; display:flex; align-items:center; flex-wrap:wrap; gap:7px; padding:6px 8px; border-bottom:1px solid var(--border); background:var(--panel); }
 .workspace-bar>.btn,.workspace-bar>.tb-btn { flex:none; }
 .workspace-target { margin-left:auto; min-width:120px; max-width:36%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--accent); font-size:12px; }
 .workspace-command-target { flex:0 1 280px; min-width:90px; max-width:35%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--accent); font-size:11px; line-height:1.35; }

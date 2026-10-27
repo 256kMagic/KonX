@@ -52,8 +52,8 @@ export class WorkspacePopouts {
       const status = h('span.popout-status', { role: 'status' });
       const body = h('div.workspace-pane-body.popout-body');
       const header = h('header.popout-header', icon(tab.icon || 'columns'), title,
-        h('button.btn.sm', { onclick: () => this.dock(tab), 'aria-label': 'Dock back to KonX' }, 'Dock back'),
-        h('button.btn.sm', { onclick: () => { this.dock(tab); this.app.workspaceLayout.float(tab); } }, 'Float in KonX'),
+        h('button.btn.sm', { 'data-placement-control': 'true', onclick: () => this.app.workspaceLayout.requestPlacement(() => this.dock(tab)), 'aria-label': 'Dock back to KonX' }, 'Dock back'),
+        h('button.btn.sm', { 'data-placement-control': 'true', onclick: () => this.app.workspaceLayout.requestPlacement(() => { this.dock(tab); this.app.workspaceLayout.float(tab); }) }, 'Float in KonX'),
         h('button.btn.sm', { onclick: () => this.app.closeTab(tab), title: 'Close this tab and its work' }, 'Close tab'));
       doc.body.className = 'konx-popout';
       doc.body.append(h('main.popout-root', header, body, status));

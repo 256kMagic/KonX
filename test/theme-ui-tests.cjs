@@ -283,17 +283,38 @@ async function electronFixture() {
               'Toolbar control clipped at ' + width + ': ' + JSON.stringify(control));
           }
         };
+        const fittedTerminal = async id => {
+          let previous, stableSince = 0, current;
+          // Activation schedules both a frame refit and a 30 ms debounced
+          // ResizeObserver refit. xterm intentionally clears selection when
+          // its row count changes, so select only after fitting has settled.
+          await until(async () => {
+            current = await run(`(()=>{const t=window.__term,r=t.wrap.getBoundingClientRect();return{
+              active:t.active,visible:!!t.wrap.offsetParent,cols:t.term.cols,rows:t.term.rows,
+              expected:t.fit.proposeDimensions(),width:r.width,height:r.height,
+              pending:!!window.__app.workspaceLayout.fitFrame||!!window.__app.tabLayoutFrame};})()`);
+            const signature = JSON.stringify(current);
+            const fitted = current.active && current.visible && !current.pending && current.expected
+              && current.cols === current.expected.cols && current.rows === current.expected.rows;
+            if (!fitted || signature !== previous) { previous = signature; stableSince = Date.now(); return false; }
+            return Date.now() - stableSince >= 60;
+          }, id + ' fitted terminal before selection').catch(error => {
+            throw new Error(error.message + '\nTerminal readiness: ' + JSON.stringify(current));
+          });
+        };
         for (const id of reduced ? ['arc-reactor', ...Object.keys(atmospheric)] : [...themeIds, ...staticIds]) {
           const animated = themeIds.includes(id);
           if (animated && (reduced || !atmospheric[id])) await save({ uiTheme: id, colorScheme: 'app', themeAnimations: true });
           else await chooseTheme(id);
           await run('window.__app.activate(window.__term);void 0;');
+          await geometry(1400, 880);
+          await fittedTerminal(id);
           const terminal = await run(`(() => { const fx=window.__term.wrap.querySelector('.theme-output-fx'),root=document.documentElement;
             window.__term.term.selectAll(); return {theme:root.dataset.theme,animated:root.classList.contains('theme-animated'),
             header:window.__app.themeName.textContent,headerHidden:window.__app.themeHeader.classList.contains('hidden'),motionHidden:getComputedStyle(window.__app.themeMotion).display==='none',
             background:window.__term.term.options.theme.background,foreground:window.__term.term.options.theme.foreground,
             fxCount:window.__term.wrap.querySelectorAll(':scope > .theme-output-fx').length,display:getComputedStyle(fx).display,pointer:getComputedStyle(fx).pointerEvents,
-            aria:fx.getAttribute('aria-hidden'),selection:window.__term.term.getSelection()};})()`);
+            aria:fx.getAttribute('aria-hidden'),selection:window.__term.term.getSelection(),cols:window.__term.term.cols,rows:window.__term.term.rows};})()`);
           assert.equal(terminal.theme, id); assert.equal(terminal.animated, animated);
           assert.equal(terminal.header, await run(`window.__themeModule.applicationTheme(${JSON.stringify(id)}).label`));
           assert.equal(terminal.headerHidden, false); assert.equal(terminal.motionHidden, !animated);
@@ -303,7 +324,12 @@ async function electronFixture() {
           if (animated) assert.equal(terminal.pointer, 'none');
           assert.equal(terminal.aria, 'true');
           assert.ok(terminal.selection.includes('Synthetic output only')); assert.ok(!terminal.selection.includes('01010'));
-          await until(() => run('window.__term.term.element.querySelector(".xterm-selection").childElementCount>0'), 'terminal selection painted');
+          await until(() => run('window.__term.term.element.querySelector(".xterm-selection").childElementCount>0'), id + ' terminal selection painted').catch(async error => {
+            const current = await run(`(()=>{const t=window.__term;return{selection:t.term.getSelection(),cols:t.term.cols,rows:t.term.rows,
+              expected:t.fit.proposeDimensions(),active:t.active,visible:!!t.wrap.offsetParent,
+              selectionNodes:t.term.element.querySelector('.xterm-selection').childElementCount};})()`);
+            throw new Error(error.message + '\nSelected dimensions: ' + terminal.cols + 'x' + terminal.rows + '\nCurrent terminal: ' + JSON.stringify(current));
+          });
           // Wait for xterm's render event after clearing the temporary selection.
           // A transparent inactive fixture can otherwise be captured before its
           // old selection canvas has been repainted.
@@ -311,7 +337,7 @@ async function electronFixture() {
             window.__term.term.clearSelection();window.__term.term.refresh(0,window.__term.term.rows-1);})`);
           assert.equal(await run('window.__term.term.getSelection()'), '');
           await until(() => run('window.__term.term.element.querySelector(".xterm-selection").childElementCount===0'), 'terminal selection paint cleared');
-          await geometry(1400, 880); await capture(id + '-terminal-1400');
+          await capture(id + '-terminal-1400');
           if (atmospheric[id]) {
             const selector = '.term-wrap .theme-atmosphere[data-effect="' + id + '"]';
             assert.equal(await run(`(()=>{const fx=window.__term.wrap.querySelector('.theme-output-fx');return [...fx.querySelectorAll('.theme-atmosphere')].filter(e=>e.dataset.effect!==${JSON.stringify(id)}).every(e=>e.getAnimations({subtree:true}).length===0);})()`), true, id + ': unselected scenes must do no animation work');
