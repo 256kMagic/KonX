@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.31.0 — 2026-10-27
+
+- Add a close control to every Home section: Introduction, Quick connect, Recent sessions, Sessions, Network tools, and Keyboard.
+- Add **Customize Home** to choose visible sections and restore all sections, including when Home is otherwise empty.
+- Retain Home visibility choices across reopening, layout changes, and application restarts; new profiles and upgrades from 0.30.0 or earlier initially show all sections.
+- Keep saved sessions, recent history, active connections, and tools intact when a Home section is hidden.
+
+See [Customize Home](docs/USER_GUIDE.md#customize-home), the [user guide](docs/USER_GUIDE.md), and [release notes](docs/releases/0.31.0.md).
+
 ## 0.30.0 — 2026-10-26
 
 - Add five animated application themes: **Ion Storm**, **Solar Flare**, **Aurora Flux**, **Hyperdrive**, and **Ghost Circuit**, each with distinct glow, motion, and coordinated terminal/editor colors.

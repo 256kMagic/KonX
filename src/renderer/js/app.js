@@ -16,6 +16,7 @@ import { supportDialog } from './support.js';
 import { CopilotController } from './copilot.js';
 import { applyReviewedEditorAction } from './copilot-editor-actions.mjs';
 import { captureCopilotContext, copilotContextSupport } from './copilot-context.mjs';
+import { HOME_SECTIONS, hiddenHomeSections } from './home-sections.mjs';
 
 const RECENT_KEY = 'konx.recent';
 
@@ -72,6 +73,7 @@ class WelcomeTab {
     this.icon = 'home';
     this.state = 'idle';
     this.disposed = false;
+    this.quickGeneration = 0;
     this.el = h('div.view');
     this.render();
   }
@@ -94,6 +96,7 @@ class WelcomeTab {
     const error = h('div.qc-error.errbox.hidden', { role: 'alert' });
     let busy = false, revision = 0, savedAttempt = null;
     this.clearQuickPassword = () => { password.value = ''; };
+    this.cancelQuickConnect = () => { this.quickGeneration++; this.clearQuickPassword(); };
     const target = () => {
       const parsed = parseQuick(host.value, proto.value);
       if (parsed.protocol === 'serial') {
@@ -129,7 +132,7 @@ class WelcomeTab {
         : 'Connect once without saving. Check the box to keep this login in Sessions.';
     };
     const go = async () => {
-      if (busy || this.disposed) return;
+      if (busy || this.disposed || this.sectionHidden('quick-connect')) return;
       if (!host.value.trim()) return host.focus();
       const parsed = target();
       if (parsed.protocol === 'serial' && !validQuickBaud(parsed.baudRate)) {
@@ -141,6 +144,7 @@ class WelcomeTab {
       const q = { ...parsed, ...(login && user.value.trim() ? { username: user.value.trim() } : {}), ...(login && password.value ? { password: password.value } : {}) };
       const save = login && remember.checked && app.info.encryption === true;
       const attemptRevision = revision;
+      const attemptGeneration = this.quickGeneration;
       busy = true; error.classList.add('hidden'); sync();
       try {
         if (!save) {
@@ -160,6 +164,10 @@ class WelcomeTab {
           toast('Session saved after Home closed. Open it from Sessions.', 'ok');
           return;
         }
+        if (attemptGeneration !== this.quickGeneration || this.sectionHidden('quick-connect')) {
+          toast('Session saved. The connection was cancelled; open it from Sessions.', 'ok');
+          return;
+        }
         const saved = savedAttempt.session;
         app.sessions.selected = 's:' + saved.id;
         app.sessions.render();
@@ -173,7 +181,7 @@ class WelcomeTab {
         const message = savedAttempt?.revision === attemptRevision
           ? 'Session was saved, but could not be opened. Retry to use the saved session: ' + errMsg(failure)
           : (save ? 'Session was not saved: ' : 'Could not connect: ') + errMsg(failure);
-        if (this.disposed) toast(message, 'err');
+        if (this.disposed || attemptGeneration !== this.quickGeneration || this.sectionHidden('quick-connect')) toast(message, 'err');
         else { error.textContent = message; error.classList.remove('hidden'); }
       } finally {
         busy = false;
@@ -186,20 +194,30 @@ class WelcomeTab {
     }
     for (const control of [host, port, user, password]) control.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); void go(); } });
     sync();
+    this.sections = new Map();
     this.recentContent = h('div.welcome-recent-content');
-    this.recentHost = h('section.welcome-recent', { 'aria-label': 'Recent sessions' },
-      h('div.welcome-recent-head', h('h3', 'Recent sessions'),
-        h('button.btn.sm', { type: 'button', 'data-action': 'clear-recent-sessions', title: 'Clear connection history; keep saved sessions and open connections.', onclick: () => app.clearRecentSessions() }, icon('trash'), 'Clear recent sessions')),
-      this.recentContent);
+    this.recentHost = this.section('recent-sessions', this.recentContent,
+      h('button.btn.sm', { type: 'button', 'data-action': 'clear-recent-sessions', title: 'Clear connection history; keep saved sessions and open connections.', onclick: () => app.clearRecentSessions() }, icon('trash'), 'Clear recent sessions'));
+    this.recentHost.classList.add('welcome-recent');
+    this.recentHost.querySelector('.welcome-section-head').classList.add('welcome-recent-head');
+    this.customizeButton = h('button.btn.sm', { type: 'button', 'data-action': 'customize-home', onclick: () => this.customizeHome() }, icon('settings'), 'Customize Home');
+    this.sectionStatus = h('span.hint', { role: 'status', 'aria-live': 'polite' });
+    this.sectionError = h('div.errbox.hidden', { role: 'alert' });
+    this.emptyHome = h('div.welcome-empty.hidden', { 'data-home-empty': 'true' },
+      h('strong', 'Your Home screen is clear.'),
+      h('p.hint', 'Use Customize Home to bring sections back. Your sessions and tools are still available from the toolbar and sidebar.'));
     this.el.replaceChildren(
       h(
         'div.welcome',
-        h('h1', h('img', { src: '../../assets/logo.svg', alt: '' }), app.info.name),
-        h('p.lead', 'Terminal, file transfer and network toolkit — SSH2, Telnet, Serial, SFTP, ping, sweep, port scan and more in one window.'),
-        h('div.welcome-update', h('span.hint', `KonX ${app.info.version || ''}`),
-          h('button.btn.sm', { onclick: () => supportDialog(app) }, icon('info'), 'Report a problem')),
-        h('h3', 'Quick connect'),
-        h(
+        h('div.welcome-toolbar', h('h2', 'Home'), this.sectionStatus, this.customizeButton),
+        this.sectionError,
+        this.section('introduction', [
+          h('h1', h('img', { src: '../../assets/logo.svg', alt: '' }), app.info.name),
+          h('p.lead', 'Terminal, file transfer and network toolkit — SSH2, Telnet, Serial, SFTP, ping, sweep, port scan and more in one window.'),
+          h('div.welcome-update', h('span.hint', `KonX ${app.info.version || ''}`),
+            h('button.btn.sm', { onclick: () => supportDialog(app) }, icon('info'), 'Report a problem')),
+        ]),
+        this.section('quick-connect', h(
           'div.qc-form',
           h('label.field', h('span', 'Protocol'), proto),
           h('label.field', h('span', 'Host'), host),
@@ -207,23 +225,91 @@ class WelcomeTab {
           userField, passwordField,
           h('div.qc-actions', rememberField, serialProbeField, connect),
           hint, error
-        ),
+        )),
         this.recentHost,
-        h('h3', 'Sessions'),
-        h('div.cards',
+        this.section('sessions', h('div.cards',
           h('div.card', { onclick: () => app.editSession() }, h('div.ic', icon('plus')), h('div', h('div.t', 'New session'), h('div.d', 'Save a host with credentials, jump host, forwards and logon actions'))),
           h('div.card', { onclick: () => app.sessions.import('securecrt') }, h('div.ic', icon('import')), h('div', h('div.t', 'Import from SecureCRT'), h('div.d', 'Bring over your existing session folders'))),
           h('div.card', { onclick: () => app.sessions.import('sshconfig') }, h('div.ic', icon('import')), h('div', h('div.t', 'Import ~/.ssh/config'), h('div.d', 'Host, user, port, key and ProxyJump entries'))),
           h('div.card', { onclick: () => app.openNotepad() }, h('div.ic', icon('edit')), h('div', h('div.t', 'Notepad'), h('div.d', 'Notepad++-style editor with config highlighting, compare, Find in Files and Send to terminal')))
-        ),
-        h('h3', 'Network tools'),
-        h('div.cards', TOOLS.map((t) => h('div.card', { onclick: () => app.openTool(t.kind) }, h('div.ic', icon(t.icon)), h('div', h('div.t', t.label), h('div.d', t.desc))))),
-        h('h3', 'Keyboard'),
-        h('div.hint', { style: { lineHeight: '1.9' } },
-          'Alt+Q quick connect · Alt+1…9 switch tab · Ctrl+Tab next tab · Ctrl+Shift+W close tab · Ctrl+Shift+C / V copy & paste · Ctrl+Shift+F find · Ctrl+= / Ctrl+- zoom · F12 developer tools')
+        )),
+        this.section('network-tools', h('div.cards', TOOLS.map((t) => h('div.card', { onclick: () => app.openTool(t.kind) }, h('div.ic', icon(t.icon)), h('div', h('div.t', t.label), h('div.d', t.desc)))))),
+        this.section('keyboard', h('div.hint', { style: { lineHeight: '1.9' } },
+          'Alt+Q quick connect · Alt+1…9 switch tab · Ctrl+Tab next tab · Ctrl+Shift+W close tab · Ctrl+Shift+C / V copy & paste · Ctrl+Shift+F find · Ctrl+= / Ctrl+- zoom · F12 developer tools')),
+        this.emptyHome,
       )
     );
     this.renderRecent();
+    this.applyHomeVisibility();
+  }
+
+  section(id, body, action) {
+    const { label } = HOME_SECTIONS.find(section => section.id === id);
+    const close = h('button.btn.sm.welcome-section-close', { type: 'button',
+      'data-action': 'hide-home-section', 'data-section': id,
+      'aria-label': 'Hide ' + label, title: 'Hide ' + label,
+      onclick: () => {
+        // Cancel the launch at intent time, even if persistence is delayed or
+        // fails and the group is still visible. Restoring cannot revive it.
+        if (id === 'quick-connect') this.cancelQuickConnect();
+        void this.app.saveHomeSections(hidden => [...hidden, id]);
+      },
+    }, icon('x'));
+    const section = h('section.welcome-section', { 'data-home-section': id, 'aria-label': label },
+      h('div.welcome-section-head', h('h3', label), action, close), body);
+    this.sections.set(id, section);
+    return section;
+  }
+
+  sectionHidden(id) {
+    return hiddenHomeSections(this.app.settings.homeHiddenSections).includes(id);
+  }
+
+  applyHomeVisibility() {
+    if (this.disposed) return;
+    const hidden = hiddenHomeSections(this.app.settings.homeHiddenSections);
+    for (const [id, section] of this.sections) {
+      const hide = hidden.includes(id);
+      if (hide && !section.classList.contains('hidden')) {
+        if (id === 'quick-connect') this.cancelQuickConnect();
+        if (section.contains(section.ownerDocument.activeElement)) this.customizeButton.focus();
+      }
+      section.classList.toggle('hidden', hide);
+    }
+    this.emptyHome.classList.toggle('hidden', hidden.length !== HOME_SECTIONS.length);
+    this.sectionStatus.textContent = this.app.homeSectionPending ? 'Saving Home…'
+      : hidden.length ? `${hidden.length} ${hidden.length === 1 ? 'section' : 'sections'} hidden` : 'All sections shown';
+    this.sectionError.textContent = this.app.homeSectionError || '';
+    this.sectionError.classList.toggle('hidden', !this.app.homeSectionError);
+  }
+
+  async customizeHome() {
+    if (this.customizing || this.disposed) return;
+    this.customizing = true;
+    try {
+      // Wait for any x clicks already being saved before taking this draft.
+      let pending;
+      do {
+        pending = this.app.settingsSave;
+        await pending?.catch(() => {});
+      } while (pending !== this.app.settingsSave);
+      if (this.disposed) return;
+      const hidden = hiddenHomeSections(this.app.settings.homeHiddenSections);
+      const controls = new Map(HOME_SECTIONS.map(({ id, label }) => [id,
+        h('input', { type: 'checkbox', name: 'homeSection', value: id, checked: !hidden.includes(id), 'aria-label': label })]));
+      const result = await modal({
+        title: 'Customize Home', icon: 'home', width: 460,
+        body: [h('p.hint', 'Choose the sections to show on Home. Hiding a section keeps your sessions and tools available.'),
+          h('div.welcome-section-choices', HOME_SECTIONS.map(({ id, label }) => h('label.check', controls.get(id), label)))],
+        footerLeft: h('button.btn.sm', { type: 'button', 'data-action': 'restore-home-sections',
+          onclick: () => { for (const control of controls.values()) control.checked = true; } }, 'Restore all'),
+        buttons: [{ label: 'Cancel', value: null }, { label: 'Save', value: true, primary: true }],
+      });
+      if (!result || this.disposed) return;
+      const next = HOME_SECTIONS.filter(({ id }) => !controls.get(id).checked).map(({ id }) => id);
+      if (next.includes('quick-connect')) this.cancelQuickConnect();
+      await this.app.saveHomeSections(() => next);
+    } finally { this.customizing = false; }
   }
 
   renderRecent() {
@@ -240,6 +326,7 @@ class WelcomeTab {
   show() {
     this.active = true;
     this.renderRecent();
+    this.applyHomeVisibility();
   }
   hide() {
     this.active = false;
@@ -919,17 +1006,51 @@ class App {
     return true;
   }
 
-  async saveSettings(patch) {
-    const prior = this.settings, next = await api.invoke('settings:set', patch);
-    const changed = Object.keys(next).filter(key => JSON.stringify(prior[key]) !== JSON.stringify(next[key]));
-    this.settings = next;
-    // A structural selection need not reapply terminal/editor colors or fonts.
-    if (changed.some(key => !['uiLayout', 'workspaceGeometry'].includes(key))) {
-      this.applyTheme();
-      for (const t of this.tabs) if (t.applySettings) t.applySettings(this.settings);
-      this.renderButtonBar();
+  refreshHomeSections() {
+    for (const tab of this.tabs) if (tab.kind === 'welcome') tab.applyHomeVisibility();
+  }
+
+  async saveHomeSections(update) {
+    this.homeSectionPending = (this.homeSectionPending || 0) + 1;
+    this.homeSectionError = '';
+    this.refreshHomeSections();
+    try {
+      // Resolve each operation against the last committed settings, not the
+      // Home view that initiated it. Reopening Home cannot create a second queue.
+      await this.saveSettings(settings => ({ homeHiddenSections: hiddenHomeSections(update(hiddenHomeSections(settings.homeHiddenSections))) }));
+      return true;
+    } catch (error) {
+      this.homeSectionError = 'Could not save Home sections: ' + errMsg(error);
+      return false;
+    } finally {
+      this.homeSectionPending--;
+      this.refreshHomeSections();
     }
-    this.workspaceLayout.set(this.settings.uiLayout);
+  }
+
+  async saveSettings(patch) {
+    // Functional updates are internal operations evaluated only when their
+    // turn starts. Ordinary settings dialogs still supply a plain patch.
+    const save = async () => {
+      const resolved = typeof patch === 'function' ? patch(this.settings) : patch;
+      const prior = this.settings, next = await api.invoke('settings:set', resolved);
+      const changed = Object.keys(next).filter(key => JSON.stringify(prior[key]) !== JSON.stringify(next[key]));
+      this.settings = next;
+      if (changed.includes('homeHiddenSections')) this.refreshHomeSections();
+      // Home visibility never rebuilds controls or disturbs terminal/editor
+      // settings, workspace placement, focus targets, or quick-connect drafts.
+      if (changed.some(key => !['uiLayout', 'workspaceGeometry', 'homeHiddenSections'].includes(key))) {
+        this.applyTheme();
+        for (const t of this.tabs) if (t.applySettings) t.applySettings(this.settings);
+        this.renderButtonBar();
+      }
+      if (changed.some(key => key !== 'homeHiddenSections') || Object.keys(resolved).some(key => key !== 'homeHiddenSections')) {
+        this.workspaceLayout.set(this.settings.uiLayout);
+      }
+    };
+    const pending = (this.settingsSave || Promise.resolve()).catch(() => {}).then(save);
+    this.settingsSave = pending;
+    return pending;
   }
 
   // ------------------------------------------------------------ events from main

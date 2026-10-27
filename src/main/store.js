@@ -33,6 +33,7 @@ const DEFAULT_SETTINGS = {
   uiTheme: 'dark',
   uiLayout: 'classic',
   themeAnimations: true,
+  homeHiddenSections: [],
   fontFamily: '"Cascadia Mono", Consolas, "Courier New", monospace',
   fontSize: 14,
   colorScheme: 'app',
@@ -81,8 +82,9 @@ class Store {
   }
 
   setSettings(patch) {
-    Object.assign(this.settings.data, patch);
-    this.settings.save();
+    // Publish settings only after the file replacement succeeds. A failed
+    // preference save must not appear successful to the next reader or retry.
+    this.settings.save({ ...this.settings.data, ...patch });
     return this.settings.data;
   }
 

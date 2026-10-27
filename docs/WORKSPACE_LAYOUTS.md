@@ -61,3 +61,7 @@ All layouts use the selected application theme. KonX 0.30.0 adds **Ion Storm**, 
 Smaller windows stack the panes in a scrollable workspace; expand a pane when its tool needs more room. Context opens as a collapsible overlay in small Workbench and Focus windows. Tab overflow controls keep all open tabs reachable.
 
 The release notes describe executed validation and remaining coverage. Real network equipment and production workflows require field testing.
+
+## Home sections
+
+Home visibility choices apply to every workspace layout. Close any Home section with its × button, then use **Customize Home** to show it again or restore all sections. Hiding a Home group changes only the landing page; saved sessions, tool access, and open work remain available. See [Customize Home](USER_GUIDE.md#customize-home).

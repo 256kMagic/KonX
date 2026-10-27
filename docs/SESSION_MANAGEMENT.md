@@ -2,6 +2,8 @@
 
 KonX 0.15.2 makes credential retention visible beside the login fields in the session editor and adds optional password saving to Home Quick Connect. Home also has a button for clearing recent session history, introduced in 0.15.0.
 
+From 0.31.0, Home sections can be hidden. If **Quick connect** or **Recent sessions** is absent, open **Home → Customize Home**, select the group, and **Save**. Hiding a group keeps saved sessions and history intact. See [Customize Home](USER_GUIDE.md#customize-home).
+
 ## Save a login from Home Quick Connect
 
 1. On **Home → Quick Connect**, select SSH, Telnet, or SFTP and enter the host, port, username, and password. Password entry is masked.
@@ -11,6 +13,8 @@ KonX 0.15.2 makes credential retention visible beside the login fields in the se
 Leave the checkbox unchecked to connect once without creating a saved session or saving the password. The compact toolbar quick-connect field continues to open one-time connections. Raw TCP and serial do not offer login retention.
 
 Quick Connect creates a new saved session; it does not replace an existing session with the same host. If saving fails, KonX shows the error and keeps the populated form for retry without opening a connection. Repeat clicks while saving do not create duplicate sessions. Closing Home while a save is in progress does not undo that requested save, but prevents a late connection from opening.
+
+Hiding the **Quick connect** section also prevents a pending save from opening a connection and clears the form's entered password. An already requested session save may still finish; reopen it from the Sessions sidebar when needed.
 
 ## Save a username and password
 
